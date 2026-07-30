@@ -1,0 +1,252 @@
+/* WalletQuantso — design system derived from the Quantso logo.
+   Monochrome, premium dark UI: near-black surfaces, white primary actions,
+   graphite panels, restrained semantic colors. */
+
+:root {
+  --bg: #0a0b0d;
+  --surface: #121317;
+  --surface-2: #181a1f;
+  --surface-3: #1f2228;
+  --border: #2a2d34;
+  --border-soft: #202329;
+  --text: #f4f5f7;
+  --text-dim: #c7cad1;
+  --muted: #8a8f99;
+  --accent: #ffffff;          /* primary action = white (from the logo) */
+  --accent-ink: #0a0b0d;      /* text on primary */
+  --focus: #6ea8fe;           /* focus ring / links only */
+  --ok: #37d399;
+  --ok-dim: rgba(55, 211, 153, 0.14);
+  --warn: #f2c14e;
+  --warn-dim: rgba(242, 193, 78, 0.14);
+  --err: #ff6b6b;
+  --err-dim: rgba(255, 107, 107, 0.14);
+  --sidebar-w: 248px;
+  --sidebar-w-collapsed: 68px;
+  --header-h: 60px;
+  --radius: 12px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--focus); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+h1 { font-size: 1.5rem; margin: 0 0 1rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.15rem; margin: 0 0 0.75rem; }
+h3 { font-size: 1rem; margin: 1rem 0 0.5rem; }
+
+/* ---------- Layout shell ---------- */
+.shell { display: flex; min-height: 100vh; }
+
+.sidebar {
+  width: var(--sidebar-w);
+  flex: 0 0 var(--sidebar-w);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  transition: width 0.18s ease, flex-basis 0.18s ease;
+  overflow: hidden;
+}
+.sidebar.collapsed { width: var(--sidebar-w-collapsed); flex-basis: var(--sidebar-w-collapsed); }
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  height: var(--header-h);
+  padding: 0 0.9rem;
+  border-bottom: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+.sidebar-brand img { width: 34px; height: 34px; border-radius: 8px; flex: 0 0 auto; }
+.sidebar-brand .word { font-weight: 700; font-size: 1.1rem; letter-spacing: -0.02em; }
+
+.nav { padding: 0.5rem; overflow-y: auto; flex: 1; }
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 9px;
+  color: var(--text-dim);
+  font-size: 0.92rem;
+  white-space: nowrap;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+.nav-item:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+.nav-item.active {
+  background: var(--surface-3);
+  color: var(--text);
+  border-left-color: var(--accent);
+  font-weight: 600;
+}
+.nav-item .ic { width: 20px; text-align: center; flex: 0 0 20px; font-size: 1rem; }
+.sidebar.collapsed .nav-item .label,
+.sidebar.collapsed .sidebar-brand .word { display: none; }
+
+.main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+.topbar {
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  backdrop-filter: blur(6px);
+}
+.topbar .spacer { flex: 1; }
+.icon-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  width: 38px; height: 38px;
+  border-radius: 9px;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0;
+  font-size: 1.1rem;
+}
+.icon-btn:hover { background: var(--surface-2); color: var(--text); }
+
+.content { padding: 1.5rem 1.5rem 4rem; width: 100%; max-width: 1180px; margin: 0 auto; }
+/* keep the old container name working inside the shell */
+.container { padding: 1.5rem 1.5rem 4rem; width: 100%; max-width: 1180px; margin: 0 auto; }
+
+/* Mobile drawer */
+.scrim { display: none; }
+@media (max-width: 860px) {
+  .sidebar {
+    position: fixed; z-index: 50; left: 0; top: 0;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    width: var(--sidebar-w); flex-basis: var(--sidebar-w);
+  }
+  .sidebar.mobile-open { transform: translateX(0); }
+  .sidebar.collapsed { width: var(--sidebar-w); flex-basis: var(--sidebar-w); }
+  .sidebar.collapsed .nav-item .label,
+  .sidebar.collapsed .sidebar-brand .word { display: inline; }
+  .scrim.show { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 40; }
+  .content, .container { padding: 1rem 1rem 4rem; }
+}
+
+/* ---------- Panels & cards ---------- */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin: 1rem 0;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+}
+.card.clickable { cursor: pointer; transition: border-color 0.15s, transform 0.1s; }
+.card.clickable:hover { border-color: #3a3f49; transform: translateY(-1px); }
+
+/* ---------- Buttons ----------
+   Base button is graphite with light text so it stays readable everywhere,
+   including the existing screens that override only the background inline.
+   Use .btn-primary for the white, high-emphasis call-to-action. */
+button, .btn {
+  font: inherit;
+  background: var(--surface-3);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 0.55rem 1rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: opacity 0.15s, background 0.15s, filter 0.15s;
+}
+button:hover, .btn:hover { background: #262a31; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: var(--accent-ink); border: 0; }
+.btn-primary:hover { background: var(--accent); filter: brightness(0.92); }
+.btn-secondary, button.secondary {
+  background: var(--surface-3);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-weight: 500;
+}
+.btn-danger { background: var(--err); color: #240404; border: 0; }
+.btn-danger:hover { background: var(--err); filter: brightness(0.95); }
+.btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); font-weight: 500; }
+
+/* ---------- Tables ---------- */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th, td {
+  text-align: left;
+  padding: 0.55rem 0.7rem;
+  border-bottom: 1px solid var(--border-soft);
+  vertical-align: top;
+}
+th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
+tbody tr:hover { background: var(--surface-2); }
+
+/* ---------- Forms ---------- */
+input, select, textarea {
+  font: inherit;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px rgba(110, 168, 254, 0.2);
+}
+label { font-size: 0.9rem; }
+
+/* ---------- Badges / status ---------- */
+.badge { display: inline-block; border-radius: 999px; padding: 0.15rem 0.6rem; font-size: 0.78rem; font-weight: 600; }
+.badge.ok { background: var(--ok-dim); color: var(--ok); }
+.badge.warn { background: var(--warn-dim); color: var(--warn); }
+.badge.err { background: var(--err-dim); color: var(--err); }
+.badge.neutral { background: var(--surface-3); color: var(--text-dim); }
+
+.muted { color: var(--muted); }
+
+/* ---------- Stat cards ---------- */
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.9rem; }
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+}
+.stat .n { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.01em; }
+
+/* ---------- Bars (reports) ---------- */
+.bar-track { background: var(--surface-3); border-radius: 6px; height: 14px; overflow: hidden; border: 1px solid var(--border-soft); }
+.bar-fill { height: 100%; border-radius: 6px 0 0 6px; transition: width 0.2s; }
+
+/* Placeholder / coming-soon */
+.soon { text-align: center; padding: 3rem 1rem; color: var(--muted); }
+.soon .chip { display: inline-block; margin-top: 0.75rem; padding: 0.25rem 0.75rem; border: 1px solid var(--border); border-radius: 999px; font-size: 0.8rem; }
