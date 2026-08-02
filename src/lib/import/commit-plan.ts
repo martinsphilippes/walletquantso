@@ -19,6 +19,10 @@ export interface CommitPlan {
   newAccountNames: string[];
   /** Distinct category names (original casing) that must be created. */
   newCategoryNames: string[];
+  /** Distinct cost center names (original casing) that must be created. */
+  newCostCenterNames: string[];
+  /** Distinct contact names (original casing) that must be created. */
+  newContactNames: string[];
 }
 
 /**
@@ -34,6 +38,8 @@ export function planCommit(
   existingHashes: Set<string>,
   existingAccounts: Set<string>,
   existingCategories: Set<string>,
+  existingCostCenters: Set<string> = new Set(),
+  existingContacts: Set<string> = new Set(),
 ): CommitPlan {
   const toCreate: NormalizedRow[] = [];
   const skippedExistingDb: NormalizedRow[] = [];
@@ -42,6 +48,8 @@ export function planCommit(
   const seenInFile = new Set<string>();
   const newAccounts = new Map<string, string>(); // normalized -> original
   const newCategories = new Map<string, string>();
+  const newCostCenters = new Map<string, string>();
+  const newContacts = new Map<string, string>();
 
   for (const row of importable) {
     const t = row.transaction!;
@@ -72,6 +80,20 @@ export function planCommit(
         newCategories.set(norm, catName);
       }
     }
+    const ccName = t.costCenterId?.trim();
+    if (ccName) {
+      const norm = normalizeHeader(ccName);
+      if (!existingCostCenters.has(norm) && !newCostCenters.has(norm)) {
+        newCostCenters.set(norm, ccName);
+      }
+    }
+    const contactName = t.contactId?.trim();
+    if (contactName) {
+      const norm = normalizeHeader(contactName);
+      if (!existingContacts.has(norm) && !newContacts.has(norm)) {
+        newContacts.set(norm, contactName);
+      }
+    }
   }
 
   return {
@@ -80,5 +102,7 @@ export function planCommit(
     skippedInFile,
     newAccountNames: [...newAccounts.values()],
     newCategoryNames: [...newCategories.values()],
+    newCostCenterNames: [...newCostCenters.values()],
+    newContactNames: [...newContacts.values()],
   };
 }

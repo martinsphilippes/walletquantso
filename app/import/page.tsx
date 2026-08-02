@@ -29,6 +29,7 @@ const FIELD_LABELS: Record<CanonicalField, string> = {
   category: "Categoria",
   subcategory: "Subcategoria",
   costCenter: "Centro de custo",
+  contact: "Contato (fornecedor/cliente)",
   notes: "Observações",
   installment: "Parcela",
   tags: "Tags",

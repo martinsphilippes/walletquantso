@@ -31,6 +31,7 @@ const FIELD_KEYWORDS: Record<CanonicalField, string[]> = {
   category: ["categoria", "category"],
   subcategory: ["subcategoria", "sub-categoria", "subcategory"],
   costCenter: ["centro de custo", "centro", "projeto", "cost center"],
+  contact: ["contato", "contact", "fornecedor", "cliente", "favorecido", "pessoa"],
   notes: ["observacoes", "observações", "observacao", "observação", "obs", "notas", "nota", "comentario", "comentário"],
   installment: ["parcela", "parcelamento", "installment"],
   tags: ["tag", "tags", "etiqueta", "etiquetas"],
@@ -212,6 +213,12 @@ export function normalizeRow(row: RawRow, mapping: ColumnMapping, rowNumber: num
     ? tagsText.split(/[;,]/).map((t) => t.trim()).filter(Boolean)
     : undefined;
 
+  // Meu Dinheiro fills empty relations with placeholders like "Sem contato" /
+  // "Sem centro" / "Sem projeto" — treat those as no value so we don't create
+  // junk categories/centers/contacts on import.
+  const NONE = /^sem (contato|categoria|subcategoria|centro|projeto|conta)$/;
+  const clean = (v: string | undefined) => (v && NONE.test(normalizeHeader(v)) ? undefined : v);
+
   return {
     rowNumber,
     transaction: {
@@ -221,8 +228,9 @@ export function normalizeRow(row: RawRow, mapping: ColumnMapping, rowNumber: num
       description,
       notes: get("notes") || undefined,
       accountId: account, // resolved to a real id later, in the service layer
-      categoryId: get("category") || null,
-      costCenterId: get("costCenter") || null,
+      categoryId: clean(get("category")) || null,
+      costCenterId: clean(get("costCenter")) || null,
+      contactId: clean(get("contact")) || null,
       transferAccountId: transferAccount || null,
       installment,
       tags,

@@ -173,6 +173,7 @@ export type CanonicalField =
   | "category"
   | "subcategory"
   | "costCenter"
+  | "contact"
   | "notes"
   | "installment"
   | "tags"

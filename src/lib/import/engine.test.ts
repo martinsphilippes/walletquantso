@@ -48,8 +48,8 @@ describe("detectColumns", () => {
     expect(m["Centro"]).toBe("costCenter");
     expect(m["Observações"]).toBe("notes");
     expect(m["Tags"]).toBe("tags");
+    expect(m["Contato"]).toBe("contact");
     // Fields with no home in the model stay unmapped.
-    expect(m["Contato"]).toBeNull();
     expect(m["Projeto"]).toBeNull();
     expect(m["Data Competência"]).toBeNull();
     expect(m["N. Documento"]).toBeNull();
@@ -187,6 +187,34 @@ describe("Meu Dinheiro sample data end-to-end", () => {
       costCenterId: "Pessoal",
     });
     expect(r.transaction?.tags).toEqual(["tag1", "tag2", "tag3"]);
+  });
+
+  it("captures the contact and ignores 'Sem ...' placeholders", () => {
+    const row: RawRow = {
+      Data: "28/08/2019",
+      Valor: "-10",
+      Descrição: "Compra",
+      Conta: "Nubank",
+      Categoria: "Sem categoria",
+      Centro: "Sem centro",
+      Contato: "Fornecedor X",
+    };
+    const r = normalizeRow(row, mapping, 1);
+    expect(r.transaction?.contactId).toBe("Fornecedor X");
+    expect(r.transaction?.categoryId).toBeNull();
+    expect(r.transaction?.costCenterId).toBeNull();
+  });
+
+  it("treats 'Sem contato' as no contact", () => {
+    const row: RawRow = {
+      Data: "28/08/2019",
+      Valor: "-10",
+      Descrição: "Compra",
+      Conta: "Nubank",
+      Contato: "Sem contato",
+    };
+    const r = normalizeRow(row, mapping, 1);
+    expect(r.transaction?.contactId).toBeNull();
   });
 
   it("treats a filled Conta Transferência as a transfer", () => {

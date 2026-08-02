@@ -19,6 +19,8 @@ import { normalizeHeader, type NormalizedRow } from "@/lib/import/engine";
 import type {
   Account,
   Category,
+  Contact,
+  CostCenter,
   ColumnMapping,
   ImportBatch,
   Transaction,
@@ -34,12 +36,16 @@ export interface CommitReport {
   skippedInFile: number;
   createdAccounts: string[];
   createdCategories: string[];
+  createdCostCenters: string[];
+  createdContacts: string[];
 }
 
 async function fetchOwnerData(ownerId: string) {
-  const [accSnap, catSnap, txSnap] = await Promise.all([
+  const [accSnap, catSnap, ccSnap, ctSnap, txSnap] = await Promise.all([
     getDocs(query(collection(db, COLLECTIONS.accounts), where("ownerId", "==", ownerId))),
     getDocs(query(collection(db, COLLECTIONS.categories), where("ownerId", "==", ownerId))),
+    getDocs(query(collection(db, COLLECTIONS.costCenters), where("ownerId", "==", ownerId))),
+    getDocs(query(collection(db, COLLECTIONS.contacts), where("ownerId", "==", ownerId))),
     getDocs(query(collection(db, COLLECTIONS.transactions), where("ownerId", "==", ownerId))),
   ]);
 
@@ -55,13 +61,25 @@ async function fetchOwnerData(ownerId: string) {
     categoriesByName.set(normalizeHeader(c.name), d.id);
   });
 
+  const costCentersByName = new Map<string, string>();
+  ccSnap.forEach((d) => {
+    const c = d.data() as CostCenter;
+    costCentersByName.set(normalizeHeader(c.name), d.id);
+  });
+
+  const contactsByName = new Map<string, string>();
+  ctSnap.forEach((d) => {
+    const c = d.data() as Contact;
+    contactsByName.set(normalizeHeader(c.name), d.id);
+  });
+
   const existingHashes = new Set<string>();
   txSnap.forEach((d) => {
     const t = d.data() as Transaction;
     if (t.dedupHash) existingHashes.add(t.dedupHash);
   });
 
-  return { accountsByName, categoriesByName, existingHashes };
+  return { accountsByName, categoriesByName, costCentersByName, contactsByName, existingHashes };
 }
 
 /**
@@ -77,13 +95,16 @@ export async function commitImport(params: {
   const { ownerId, fileName, mapping, importable } = params;
   const now = Date.now();
 
-  const { accountsByName, categoriesByName, existingHashes } = await fetchOwnerData(ownerId);
+  const { accountsByName, categoriesByName, costCentersByName, contactsByName, existingHashes } =
+    await fetchOwnerData(ownerId);
 
   const plan = planCommit(
     importable,
     existingHashes,
     new Set(accountsByName.keys()),
     new Set(categoriesByName.keys()),
+    new Set(costCentersByName.keys()),
+    new Set(contactsByName.keys()),
   );
 
   // Pre-generate the batch id so every transaction can reference it.
@@ -118,6 +139,18 @@ export async function commitImport(params: {
     setupBatch.set(ref, category);
     categoriesByName.set(normalizeHeader(name), ref.id);
   }
+  for (const name of plan.newCostCenterNames) {
+    const ref = doc(collection(db, COLLECTIONS.costCenters));
+    const cc: CostCenter = { ownerId, name, createdAt: now };
+    setupBatch.set(ref, cc);
+    costCentersByName.set(normalizeHeader(name), ref.id);
+  }
+  for (const name of plan.newContactNames) {
+    const ref = doc(collection(db, COLLECTIONS.contacts));
+    const contact: Contact = { ownerId, name, kind: "other", createdAt: now };
+    setupBatch.set(ref, contact);
+    contactsByName.set(normalizeHeader(name), ref.id);
+  }
   await setupBatch.commit();
 
   // Write transactions in chunks, each tagged with the batch id.
@@ -134,6 +167,12 @@ export async function commitImport(params: {
       const transferId = t.transferAccountId
         ? (accountsByName.get(normalizeHeader(t.transferAccountId)) ?? t.transferAccountId)
         : null;
+      const ccId = t.costCenterId
+        ? (costCentersByName.get(normalizeHeader(t.costCenterId)) ?? null)
+        : null;
+      const contactId = t.contactId
+        ? (contactsByName.get(normalizeHeader(t.contactId)) ?? null)
+        : null;
       const transaction: Transaction = {
         ownerId,
         date: t.date,
@@ -143,7 +182,8 @@ export async function commitImport(params: {
         notes: t.notes,
         accountId: accId ?? t.accountId,
         categoryId: catId,
-        costCenterId: t.costCenterId ?? null,
+        costCenterId: ccId,
+        contactId,
         transferAccountId: transferId,
         installment: t.installment ?? null,
         installmentGroupId: t.installmentGroupId ?? null,
@@ -186,6 +226,8 @@ export async function commitImport(params: {
       skippedInFile: plan.skippedInFile.length,
       createdAccounts: plan.newAccountNames,
       createdCategories: plan.newCategoryNames,
+      createdCostCenters: plan.newCostCenterNames,
+      createdContacts: plan.newContactNames,
     },
     at: now,
   });
@@ -198,6 +240,8 @@ export async function commitImport(params: {
     skippedInFile: plan.skippedInFile.length,
     createdAccounts: plan.newAccountNames,
     createdCategories: plan.newCategoryNames,
+    createdCostCenters: plan.newCostCenterNames,
+    createdContacts: plan.newContactNames,
   };
 }
 
