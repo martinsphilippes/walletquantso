@@ -22,6 +22,8 @@ import { transactionsToCsv } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
 import { filterTransactions, type DashboardFilters } from "@/lib/dashboard/filter";
 import { computeOverview } from "@/lib/dashboard/overview";
+import { computeCashBalances, monthResult } from "@/lib/dashboard/cash";
+import { BarChart } from "@/components/charts";
 import { remaining, billStatus, STATUS_LABELS, sortByDueDate } from "@/lib/bills/status";
 import type {
   Account,
@@ -116,6 +118,18 @@ function Dashboard() {
     () => sortByDueDate([...payables, ...receivables].filter((b) => remaining(b) > 0)),
     [payables, receivables],
   );
+
+  const cash = useMemo(
+    () => computeCashBalances(accounts, txs ?? [], payables, receivables),
+    [accounts, txs, payables, receivables],
+  );
+
+  const month = useMemo(
+    () => monthResult(txs ?? [], payables, receivables),
+    [txs, payables, receivables],
+  );
+
+  const recentTxs = useMemo(() => (txs ?? []).slice(0, 5), [txs]);
 
   const filtered = useMemo(
     () => (txs ? filterTransactions(txs, filters) : []),
@@ -228,6 +242,138 @@ function Dashboard() {
           </p>
         </div>
       )}
+
+      {/* Resultado do mês + Saldos de caixa */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+          gap: "1rem",
+        }}
+      >
+        <div className="panel">
+          <h2 style={{ marginBottom: 0 }}>Resultado do mês</h2>
+          <p className="muted" style={{ marginTop: 2 }}>Situação projetada</p>
+          <BarChart
+            items={[
+              { label: "Receitas", value: month.income, color: "var(--ok)" },
+              { label: "Despesas", value: month.expense, color: "var(--err)" },
+            ]}
+          />
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              borderTop: "1px solid var(--border)",
+              paddingTop: "0.6rem",
+              marginTop: "0.6rem",
+            }}
+          >
+            <strong>Resultado</strong>
+            <strong style={{ color: month.result >= 0 ? "var(--ok)" : "var(--err)" }}>
+              {brl(month.result)}
+            </strong>
+          </div>
+        </div>
+
+        <div className="panel">
+          <h2>Saldos de caixa</h2>
+          {cash.rows.length === 0 ? (
+            <p className="muted">Nenhuma conta cadastrada ainda.</p>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Conta</th>
+                    <th style={{ textAlign: "right" }}>Confirmado</th>
+                    <th style={{ textAlign: "right" }}>Projetado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cash.rows.map((r) => (
+                    <tr key={r.accountId ?? "none"}>
+                      <td>{r.name}</td>
+                      <td
+                        style={{
+                          textAlign: "right",
+                          whiteSpace: "nowrap",
+                          color: r.confirmed >= 0 ? "var(--ok)" : "var(--err)",
+                        }}
+                      >
+                        {brl(r.confirmed)}
+                      </td>
+                      <td
+                        style={{
+                          textAlign: "right",
+                          whiteSpace: "nowrap",
+                          color: r.projected >= 0 ? "var(--ok)" : "var(--err)",
+                        }}
+                      >
+                        {brl(r.projected)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td><strong>Total</strong></td>
+                    <td style={{ textAlign: "right" }}><strong>{brl(cash.totalConfirmed)}</strong></td>
+                    <td style={{ textAlign: "right" }}><strong>{brl(cash.totalProjected)}</strong></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Últimos lançamentos */}
+      <div className="panel">
+        <h2>Últimos lançamentos</h2>
+        {recentTxs.length === 0 ? (
+          <p className="muted">
+            Nenhum lançamento feito ainda. Lançamentos são registros das suas receitas e despesas.
+          </p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Descrição</th>
+                  <th>Tipo</th>
+                  <th style={{ textAlign: "right" }}>Valor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentTxs.map((t) => (
+                  <tr key={t.id}>
+                    <td>{brDate(t.date)}</td>
+                    <td>{t.description}</td>
+                    <td>{TYPE_LABELS[t.type]}</td>
+                    <td
+                      style={{
+                        textAlign: "right",
+                        whiteSpace: "nowrap",
+                        color:
+                          t.type === "income"
+                            ? "var(--ok)"
+                            : t.type === "expense"
+                              ? "var(--err)"
+                              : "var(--text)",
+                      }}
+                    >
+                      {t.type === "expense" ? "-" : t.type === "income" ? "+" : ""}
+                      {brl(t.amount)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {form ? (
         <TransactionForm

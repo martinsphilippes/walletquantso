@@ -120,3 +120,54 @@ export function CumulativeChart({ months, width = 640, height = 180 }: {
     </div>
   );
 }
+
+export interface BarItem {
+  label: string;
+  value: number;
+  color: string;
+}
+
+/** Simple vertical bar comparison (e.g. Receitas × Despesas). */
+export function BarChart({ items, height = 160 }: { items: BarItem[]; height?: number }) {
+  const max = Math.max(1, ...items.map((i) => Math.abs(i.value)));
+  return (
+    <div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "space-around",
+          gap: "1rem",
+          height,
+          padding: "0.5rem 0",
+        }}
+      >
+        {items.map((it, i) => (
+          <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1, height: "100%", justifyContent: "flex-end" }}>
+            <span className="muted" style={{ fontSize: "0.8rem", marginBottom: 4 }}>{brl(it.value)}</span>
+            <div
+              style={{
+                width: "60%",
+                maxWidth: 90,
+                height: `${(Math.abs(it.value) / max) * 100}%`,
+                minHeight: 2,
+                background: it.color,
+                borderRadius: "4px 4px 0 0",
+              }}
+            />
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-around", gap: "1rem" }}>
+        {items.map((it, i) => (
+          <div key={i} style={{ flex: 1, textAlign: "center" }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.85rem" }}>
+              <span style={{ width: 10, height: 10, borderRadius: 3, background: it.color, display: "inline-block" }} />
+              {it.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
