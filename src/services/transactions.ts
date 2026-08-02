@@ -18,6 +18,8 @@ export interface TransactionInput {
   accountId: string;
   transferAccountId?: string | null;
   categoryId?: string | null;
+  costCenterId?: string | null;
+  contactId?: string | null;
   notes?: string;
 }
 
@@ -31,7 +33,8 @@ function buildRecord(ownerId: string, input: TransactionInput, createdAt: number
     accountId: input.accountId,
     categoryId: input.categoryId ?? null,
     transferAccountId: input.type === "transfer" ? (input.transferAccountId ?? null) : null,
-    costCenterId: null,
+    costCenterId: input.costCenterId ?? null,
+    contactId: input.contactId ?? null,
     installment: null,
     installmentGroupId: null,
     importBatchId: null,

@@ -49,6 +49,29 @@ export interface CostCenter {
   createdAt: number;
 }
 
+/** Kind of contact / counterpart. */
+export type ContactKind =
+  | "person" // pessoa física
+  | "supplier" // fornecedor
+  | "customer" // cliente
+  | "company" // empresa (genérica)
+  | "other";
+
+/**
+ * A person or company involved in a transaction (contato / fornecedor).
+ * Maps to the "Contato" column of Meu Dinheiro Web.
+ */
+export interface Contact {
+  id?: string;
+  ownerId: string;
+  name: string;
+  kind: ContactKind;
+  /** CPF/CNPJ or other identifier (optional, free text). */
+  document?: string | null;
+  notes?: string | null;
+  createdAt: number;
+}
+
 /** Installment metadata for a transaction that is part of a series. */
 export interface Installment {
   /** 1-based position, e.g. 3. */
@@ -71,6 +94,8 @@ export interface Transaction {
   accountId: string;
   categoryId?: string | null;
   costCenterId?: string | null;
+  /** The person/company involved (contato / fornecedor). */
+  contactId?: string | null;
   /** For transfers: the destination account. */
   transferAccountId?: string | null;
   installment?: Installment | null;

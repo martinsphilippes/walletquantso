@@ -24,6 +24,7 @@ import type {
   Account,
   AuditEntry,
   Category,
+  Contact,
   CostCenter,
   ImportBatch,
   Transaction,
@@ -33,6 +34,7 @@ export const COLLECTIONS = {
   accounts: "accounts",
   categories: "categories",
   costCenters: "costCenters",
+  contacts: "contacts",
   transactions: "transactions",
   importBatches: "importBatches",
   auditLog: "auditLog",
@@ -71,6 +73,12 @@ export async function listCategories(ownerId: string): Promise<Category[]> {
 export async function listCostCenters(ownerId: string): Promise<CostCenter[]> {
   const q = query(collection(db, COLLECTIONS.costCenters), where("ownerId", "==", ownerId));
   return mapDocs<CostCenter>(await getDocs(q));
+}
+
+/** List the contacts owned by a user. */
+export async function listContacts(ownerId: string): Promise<Contact[]> {
+  const q = query(collection(db, COLLECTIONS.contacts), where("ownerId", "==", ownerId));
+  return mapDocs<Contact>(await getDocs(q));
 }
 
 /** List a user's transactions, newest first. */

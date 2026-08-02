@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { parseBrCurrency } from "@/lib/br/parse";
-import type { Account, Category, TransactionType } from "@/types";
+import type { Account, Category, Contact, CostCenter, TransactionType } from "@/types";
 import type { TransactionInput } from "@/services/transactions";
 
 interface Props {
   accounts: Account[];
   categories: Category[];
+  costCenters?: CostCenter[];
+  contacts?: Contact[];
   initial?: Partial<TransactionInput>;
   submitLabel: string;
   busy?: boolean;
@@ -20,6 +22,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 export function TransactionForm({
   accounts,
   categories,
+  costCenters = [],
+  contacts = [],
   initial,
   submitLabel,
   busy,
@@ -35,6 +39,8 @@ export function TransactionForm({
   const [accountId, setAccountId] = useState(initial?.accountId ?? "");
   const [transferAccountId, setTransferAccountId] = useState(initial?.transferAccountId ?? "");
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? "");
+  const [costCenterId, setCostCenterId] = useState(initial?.costCenterId ?? "");
+  const [contactId, setContactId] = useState(initial?.contactId ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [error, setError] = useState("");
 
@@ -58,6 +64,8 @@ export function TransactionForm({
       accountId,
       transferAccountId: type === "transfer" ? transferAccountId : null,
       categoryId: categoryId || null,
+      costCenterId: costCenterId || null,
+      contactId: contactId || null,
       notes: notes.trim() || undefined,
     });
   }
@@ -142,6 +150,35 @@ export function TransactionForm({
             </select>
           </label>
         )}
+        {costCenters.length > 0 && (
+          <label style={col}>
+            <span className="muted">Centro de custo</span>
+            <select value={costCenterId ?? ""} onChange={(e) => setCostCenterId(e.target.value)}>
+              <option value="">— nenhum —</option>
+              {costCenters.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {contacts.length > 0 && (
+          <label style={col}>
+            <span className="muted">Pessoa/contato</span>
+            <select value={contactId ?? ""} onChange={(e) => setContactId(e.target.value)}>
+              <option value="">— nenhum —</option>
+              {contacts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+
+      <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginTop: "0.75rem" }}>
         <label style={{ ...col, flex: "2 1 260px" }}>
           <span className="muted">Observações</span>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} style={f} />

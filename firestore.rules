@@ -42,6 +42,12 @@ service cloud.firestore {
       allow update: if ownsExisting() && ownsIncoming();
     }
 
+    match /contacts/{id} {
+      allow read, delete: if ownsExisting();
+      allow create: if ownsIncoming();
+      allow update: if ownsExisting() && ownsIncoming();
+    }
+
     match /transactions/{id} {
       allow read, delete: if ownsExisting();
       allow create: if ownsIncoming();

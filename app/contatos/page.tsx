@@ -3,47 +3,65 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
-import { listCostCenters, listTransactions } from "@/services/firestore";
+import { listContacts, listTransactions } from "@/services/firestore";
 import {
-  createCostCenter,
-  updateCostCenter,
-  removeCostCenter,
-  mergeCostCenters,
-} from "@/services/cost-centers";
+  createContact,
+  updateContact,
+  removeContact,
+  mergeContacts,
+} from "@/services/contacts";
 import { countReferences } from "@/lib/references/usage";
-import type { CostCenter, Transaction } from "@/types";
+import type { Contact, ContactKind, Transaction } from "@/types";
 
-export default function CostCentersPage() {
+const KIND_LABELS: Record<ContactKind, string> = {
+  person: "Pessoa",
+  supplier: "Fornecedor",
+  customer: "Cliente",
+  company: "Empresa",
+  other: "Outro",
+};
+const KINDS = Object.keys(KIND_LABELS) as ContactKind[];
+
+export default function ContactsPage() {
   return (
     <>
-      <h1>Centros de custo</h1>
+      <h1>Pessoas e contatos</h1>
       <LoginGate>
-        <CostCenters />
+        <Contacts />
       </LoginGate>
     </>
   );
 }
 
-function CostCenters() {
+interface Draft {
+  name: string;
+  kind: ContactKind;
+  document: string;
+  notes: string;
+}
+
+const emptyDraft: Draft = { name: "", kind: "person", document: "", notes: "" };
+
+function Contacts() {
   const { user } = useAuth();
-  const [items, setItems] = useState<CostCenter[]>([]);
+  const [items, setItems] = useState<Contact[]>([]);
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draftName, setDraftName] = useState("");
+  const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [mergingId, setMergingId] = useState<string | null>(null);
   const [mergeTarget, setMergeTarget] = useState("");
-  const [newName, setNewName] = useState("");
+  const [creating, setCreating] = useState<Draft>(emptyDraft);
 
   const load = useCallback(async () => {
     if (!user) return;
     setError("");
     setLoading(true);
     try {
-      const [c, t] = await Promise.all([listCostCenters(user.uid), listTransactions(user.uid)]);
+      const [c, t] = await Promise.all([listContacts(user.uid), listTransactions(user.uid)]);
       c.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
       setItems(c);
       setTxs(t);
@@ -58,20 +76,30 @@ function CostCenters() {
     load();
   }, [load]);
 
-  const usage = useMemo(() => countReferences(txs, "costCenterId"), [txs]);
+  const usage = useMemo(() => countReferences(txs, "contactId"), [txs]);
 
-  function startEdit(c: CostCenter) {
+  function startEdit(c: Contact) {
     setMergingId(null);
     setEditingId(c.id!);
-    setDraftName(c.name);
+    setDraft({
+      name: c.name,
+      kind: c.kind,
+      document: c.document ?? "",
+      notes: c.notes ?? "",
+    });
   }
 
   async function saveEdit(id: string) {
-    if (!draftName.trim()) return;
+    if (!draft.name.trim()) return;
     setBusy(true);
     setError("");
     try {
-      await updateCostCenter(id, { name: draftName.trim() });
+      await updateContact(id, {
+        name: draft.name.trim(),
+        kind: draft.kind,
+        document: draft.document.trim() || null,
+        notes: draft.notes.trim() || null,
+      });
       setEditingId(null);
       await load();
     } catch (err) {
@@ -81,7 +109,7 @@ function CostCenters() {
     }
   }
 
-  async function del(c: CostCenter) {
+  async function del(c: Contact) {
     const used = usage.get(c.id!) ?? 0;
     if (used > 0) {
       setError(
@@ -89,11 +117,11 @@ function CostCenters() {
       );
       return;
     }
-    if (!confirm(`Excluir o centro de custo "${c.name}"?`)) return;
+    if (!confirm(`Excluir o contato "${c.name}"?`)) return;
     setBusy(true);
     setError("");
     try {
-      await removeCostCenter(c.id!);
+      await removeContact(c.id!);
       await load();
     } catch (err) {
       setError(`Falha ao excluir: ${(err as Error).message}`);
@@ -107,7 +135,7 @@ function CostCenters() {
     setBusy(true);
     setError("");
     try {
-      const moved = await mergeCostCenters(user.uid, sourceId, mergeTarget);
+      const moved = await mergeContacts(user.uid, sourceId, mergeTarget);
       setMergingId(null);
       setMergeTarget("");
       await load();
@@ -121,16 +149,19 @@ function CostCenters() {
 
   async function createNew(e: React.FormEvent) {
     e.preventDefault();
-    if (!user || !newName.trim()) return;
+    if (!user || !creating.name.trim()) return;
     setBusy(true);
     setError("");
     try {
-      await createCostCenter({
+      await createContact({
         ownerId: user.uid,
-        name: newName.trim(),
+        name: creating.name.trim(),
+        kind: creating.kind,
+        document: creating.document.trim() || null,
+        notes: creating.notes.trim() || null,
         createdAt: Date.now(),
       });
-      setNewName("");
+      setCreating(emptyDraft);
       await load();
     } catch (err) {
       setError(`Falha ao criar: ${(err as Error).message}`);
@@ -154,14 +185,16 @@ function CostCenters() {
       <div className="panel">
         {items.length === 0 ? (
           <p className="muted">
-            Nenhum centro de custo ainda. Centros de custo ajudam a agrupar
-            lançamentos por projeto, obra, filial ou finalidade. Crie o primeiro abaixo.
+            Nenhum contato ainda. Cadastre as pessoas e empresas com quem você
+            movimenta dinheiro (fornecedores, clientes, prestadores). Crie o primeiro abaixo.
           </p>
         ) : (
           <table>
             <thead>
               <tr>
-                <th>Centro de custo</th>
+                <th>Nome</th>
+                <th>Tipo</th>
+                <th>Documento</th>
                 <th style={{ textAlign: "right" }}>Uso</th>
                 <th></th>
               </tr>
@@ -177,9 +210,31 @@ function CostCenters() {
                       <>
                         <td>
                           <input
-                            value={draftName}
-                            onChange={(e) => setDraftName(e.target.value)}
+                            value={draft.name}
+                            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                             style={fieldStyle}
+                          />
+                        </td>
+                        <td>
+                          <select
+                            value={draft.kind}
+                            onChange={(e) =>
+                              setDraft({ ...draft, kind: e.target.value as ContactKind })
+                            }
+                          >
+                            {KINDS.map((k) => (
+                              <option key={k} value={k}>
+                                {KIND_LABELS[k]}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          <input
+                            value={draft.document}
+                            onChange={(e) => setDraft({ ...draft, document: e.target.value })}
+                            placeholder="CPF/CNPJ"
+                            style={{ ...fieldStyle, width: 150 }}
                           />
                         </td>
                         <td style={{ textAlign: "right" }} className="muted">
@@ -200,6 +255,8 @@ function CostCenters() {
                     ) : (
                       <>
                         <td>{c.name}</td>
+                        <td>{KIND_LABELS[c.kind]}</td>
+                        <td>{c.document || "—"}</td>
                         <td style={{ textAlign: "right" }}>{usage.get(c.id!) ?? 0}</td>
                         <td style={{ whiteSpace: "nowrap" }}>
                           {merging ? (
@@ -267,14 +324,36 @@ function CostCenters() {
       </div>
 
       <div className="panel">
-        <h2>Novo centro de custo</h2>
+        <h2>Novo contato</h2>
         <form onSubmit={createNew} style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
           <input
-            placeholder="Nome (ex.: Casa, Empresa, Projeto X)"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Nome"
+            value={creating.name}
+            onChange={(e) => setCreating({ ...creating, name: e.target.value })}
             required
-            style={{ ...fieldStyle, minWidth: 260 }}
+            style={{ ...fieldStyle, minWidth: 220 }}
+          />
+          <select
+            value={creating.kind}
+            onChange={(e) => setCreating({ ...creating, kind: e.target.value as ContactKind })}
+          >
+            {KINDS.map((k) => (
+              <option key={k} value={k}>
+                {KIND_LABELS[k]}
+              </option>
+            ))}
+          </select>
+          <input
+            placeholder="CPF/CNPJ (opcional)"
+            value={creating.document}
+            onChange={(e) => setCreating({ ...creating, document: e.target.value })}
+            style={{ ...fieldStyle, width: 170 }}
+          />
+          <input
+            placeholder="Observações (opcional)"
+            value={creating.notes}
+            onChange={(e) => setCreating({ ...creating, notes: e.target.value })}
+            style={{ ...fieldStyle, minWidth: 220 }}
           />
           <button type="submit" disabled={busy}>
             Adicionar

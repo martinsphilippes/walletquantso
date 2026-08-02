@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
-import { listAccounts, listCategories, listTransactions } from "@/services/firestore";
+import {
+  listAccounts,
+  listCategories,
+  listContacts,
+  listCostCenters,
+  listTransactions,
+} from "@/services/firestore";
 import {
   createTransaction,
   updateTransaction,
@@ -18,7 +24,14 @@ import {
   summarize,
   type DashboardFilters,
 } from "@/lib/dashboard/filter";
-import type { Account, Category, Transaction, TransactionType } from "@/types";
+import type {
+  Account,
+  Category,
+  Contact,
+  CostCenter,
+  Transaction,
+  TransactionType,
+} from "@/types";
 
 const TYPE_LABELS: Record<TransactionType, string> = {
   income: "Receita",
@@ -45,6 +58,8 @@ function Dashboard() {
   const [txs, setTxs] = useState<Transaction[] | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [accountName, setAccountName] = useState<Map<string, string>>(new Map());
   const [categoryName, setCategoryName] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState("");
@@ -58,14 +73,20 @@ function Dashboard() {
     if (!user) return;
     setError("");
     try {
-      const [t, a, c] = await Promise.all([
+      const [t, a, c, cc, ct] = await Promise.all([
         listTransactions(user.uid),
         listAccounts(user.uid),
         listCategories(user.uid),
+        listCostCenters(user.uid),
+        listContacts(user.uid),
       ]);
       setTxs(t);
       setAccounts(a);
       setCategories(c);
+      cc.sort((x, y) => x.name.localeCompare(y.name, "pt-BR"));
+      ct.sort((x, y) => x.name.localeCompare(y.name, "pt-BR"));
+      setCostCenters(cc);
+      setContacts(ct);
       setAccountName(new Map(a.map((x) => [x.id!, x.name])));
       setCategoryName(new Map(c.map((x) => [x.id!, x.name])));
     } catch (err) {
@@ -134,6 +155,8 @@ function Dashboard() {
     accountId: t.accountId,
     transferAccountId: t.transferAccountId,
     categoryId: t.categoryId,
+    costCenterId: t.costCenterId,
+    contactId: t.contactId,
     notes: t.notes,
   });
 
@@ -164,6 +187,8 @@ function Dashboard() {
         <TransactionForm
           accounts={accounts}
           categories={categories}
+          costCenters={costCenters}
+          contacts={contacts}
           initial={form.mode === "edit" ? txToInput(form.tx) : undefined}
           submitLabel={form.mode === "edit" ? "Salvar alterações" : "Adicionar lançamento"}
           busy={saving}

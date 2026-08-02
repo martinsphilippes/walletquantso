@@ -27,6 +27,7 @@ const NAV: NavEntry[] = [
   { label: "Cartões de crédito", href: "/cartoes", icon: "▭" },
   { label: "Categorias", href: "/categories", icon: "◪" },
   { label: "Centros de custo", href: "/centros-de-custo", icon: "◈" },
+  { label: "Pessoas e contatos", href: "/contatos", icon: "☺" },
   { label: "Relatórios", href: "/reports", icon: "▧" },
   { label: "Importação de dados", href: "/import", icon: "⤓" },
   { label: "Auditoria", href: "/auditoria", icon: "◷" },
