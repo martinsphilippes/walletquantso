@@ -31,7 +31,7 @@ import {
   resultadosPorCentro,
   type Slice,
 } from "@/lib/dashboard/breakdown";
-import { BarChart, DonutChart, LineChart, PALETTE } from "@/components/charts";
+import { ChartSwitcher, LineChart, PALETTE } from "@/components/charts";
 import { projectCashFlow } from "@/lib/cashflow/project";
 import { remaining, billStatus, sortByDueDate } from "@/lib/bills/status";
 import type {
@@ -314,7 +314,8 @@ function Dashboard() {
         <div className="panel">
           <h2 style={{ marginBottom: 0 }}>Resultado do mês</h2>
           <p className="muted" style={{ marginTop: 2 }}>Situação projetada</p>
-          <BarChart
+          <ChartSwitcher
+            kinds={["bar", "donut"]}
             items={[
               { label: "Receitas", value: month.income, color: "var(--ok)" },
               { label: "Despesas", value: month.expense, color: "var(--err)" },
@@ -419,7 +420,8 @@ function Dashboard() {
         <div className="panel">
           <h2 style={{ marginBottom: 0 }}>Resultados de caixa</h2>
           <p className="muted" style={{ marginTop: 2 }}>Movimentado (realizado)</p>
-          <BarChart
+          <ChartSwitcher
+            kinds={["bar", "donut"]}
             items={[
               { label: "Entradas", value: overview.realizedIncome, color: "var(--ok)" },
               { label: "Saídas", value: overview.realizedExpense, color: "var(--err)" },
@@ -534,7 +536,7 @@ function Dashboard() {
             <p className="muted">Sem receitas para exibir.</p>
           ) : (
             <>
-              <DonutChart items={toDonut(receitasCat)} />
+              <ChartSwitcher items={toDonut(receitasCat)} />
               <div
                 style={{
                   display: "flex",
@@ -560,7 +562,7 @@ function Dashboard() {
             <p className="muted">Sem despesas para exibir.</p>
           ) : (
             <>
-              <DonutChart items={toDonut(despesasCat)} />
+              <ChartSwitcher items={toDonut(despesasCat)} />
               <div
                 style={{
                   display: "flex",
@@ -655,7 +657,7 @@ function Dashboard() {
             <p className="muted">Sem receitas para exibir.</p>
           ) : (
             <>
-              <DonutChart items={toDonut(receitasCentro)} />
+              <ChartSwitcher items={toDonut(receitasCentro)} />
               <div style={totalRow}>
                 <strong>Total</strong>
                 <strong style={{ color: "var(--ok)" }}>
@@ -673,7 +675,7 @@ function Dashboard() {
             <p className="muted">Sem despesas para exibir.</p>
           ) : (
             <>
-              <DonutChart items={toDonut(despesasCentro)} />
+              <ChartSwitcher items={toDonut(despesasCentro)} />
               <div style={totalRow}>
                 <strong>Total</strong>
                 <strong style={{ color: "var(--err)" }}>

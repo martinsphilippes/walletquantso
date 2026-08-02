@@ -2,6 +2,7 @@
 
 // Small, dependency-free SVG charts for the reports page.
 
+import { useState } from "react";
 import { donutSegments, cumulativeBalance, type CumulativePoint } from "@/lib/reports/charts";
 import type { MonthTotal } from "@/lib/reports/aggregate";
 
@@ -213,6 +214,87 @@ export function BarChart({ items, height = 160 }: { items: BarItem[]; height?: n
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** Horizontal bars — good for ranking many categories/centers. */
+export function HBarChart({ items }: { items: BarItem[] }) {
+  const max = Math.max(1, ...items.map((i) => Math.abs(i.value)));
+  const total = items.reduce((s, i) => s + Math.abs(i.value), 0);
+  if (items.length === 0) return <p className="muted">Sem dados para o gráfico.</p>;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {items.map((it, i) => (
+        <div key={i}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", marginBottom: 3 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 3, background: it.color, display: "inline-block" }} />
+              {it.label}
+            </span>
+            <span className="muted">
+              {brl(it.value)}
+              {total ? ` (${((Math.abs(it.value) / total) * 100).toFixed(1)}%)` : ""}
+            </span>
+          </div>
+          <div style={{ height: 9, background: "var(--border)", borderRadius: 5, overflow: "hidden" }}>
+            <div style={{ width: `${(Math.abs(it.value) / max) * 100}%`, height: "100%", background: it.color }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export type ChartKind = "donut" | "bar" | "hbar";
+
+const KIND_LABEL: Record<ChartKind, string> = {
+  donut: "Pizza",
+  hbar: "Barras",
+  bar: "Colunas",
+};
+
+/**
+ * Renders a chart for `items` with small toggle buttons (flags) to switch
+ * between visual types. State is local, so each panel remembers its own choice.
+ */
+export function ChartSwitcher({
+  items,
+  kinds = ["donut", "hbar", "bar"],
+  initial,
+}: {
+  items: DonutItem[];
+  kinds?: ChartKind[];
+  initial?: ChartKind;
+}) {
+  const [kind, setKind] = useState<ChartKind>(initial ?? kinds[0]);
+  const active = kinds.includes(kind) ? kind : kinds[0];
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+        {kinds.map((k) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setKind(k)}
+            style={{
+              padding: "0.2rem 0.6rem",
+              fontSize: "0.78rem",
+              borderRadius: 6,
+              border: "1px solid var(--border)",
+              background: k === active ? "var(--accent)" : "transparent",
+              color: k === active ? "#fff" : "var(--muted)",
+              cursor: "pointer",
+            }}
+            aria-pressed={k === active}
+          >
+            {KIND_LABEL[k]}
+          </button>
+        ))}
+      </div>
+      {active === "donut" && <DonutChart items={items} />}
+      {active === "bar" && <BarChart items={items} />}
+      {active === "hbar" && <HBarChart items={items} />}
     </div>
   );
 }
