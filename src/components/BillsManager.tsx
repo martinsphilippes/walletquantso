@@ -21,6 +21,7 @@ import {
   removePayment,
 } from "@/services/bills";
 import { parseBrCurrency } from "@/lib/br/parse";
+import { expandRepeat, type RepeatMode } from "@/lib/bills/repeat";
 import {
   billStatus,
   remaining,
@@ -52,22 +53,30 @@ interface Draft {
   description: string;
   amount: string;
   dueDate: string;
+  competenceDate: string;
+  documentNumber: string;
   contactId: string;
   categoryId: string;
   costCenterId: string;
   accountId: string;
   notes: string;
+  repeatMode: RepeatMode;
+  repeatCount: string;
 }
 
 const emptyDraft = (): Draft => ({
   description: "",
   amount: "",
   dueDate: today(),
+  competenceDate: today(),
+  documentNumber: "",
   contactId: "",
   categoryId: "",
   costCenterId: "",
   accountId: "",
   notes: "",
+  repeatMode: "single",
+  repeatCount: "2",
 });
 
 export function BillsManager({ kind }: { kind: BillKind }) {
@@ -150,6 +159,8 @@ export function BillsManager({ kind }: { kind: BillKind }) {
       description: d.description.trim(),
       amount,
       dueDate: d.dueDate,
+      competenceDate: d.competenceDate || d.dueDate,
+      documentNumber: d.documentNumber.trim() || null,
       contactId: d.contactId || null,
       categoryId: d.categoryId || null,
       costCenterId: d.costCenterId || null,
@@ -163,10 +174,45 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     if (!user) return;
     const fields = draftToBill(creating);
     if (!fields) return;
+
+    const mode = creating.repeatMode;
+    let count = 1;
+    if (mode !== "single") {
+      count = Math.floor(Number(creating.repeatCount));
+      if (!Number.isFinite(count) || count < 2) {
+        setError(mode === "installments" ? "Informe pelo menos 2 parcelas." : "Informe pelo menos 2 repetições.");
+        return;
+      }
+    }
+
     setBusy(true);
     setError("");
     try {
-      await createBill({ ownerId: user.uid, kind, payments: [], createdAt: Date.now(), ...fields });
+      const expanded = expandRepeat(
+        { amount: fields.amount, dueDate: fields.dueDate, competenceDate: fields.competenceDate },
+        mode,
+        count,
+      );
+      const groupId = mode === "single" ? null : rid();
+      const now = Date.now();
+      for (const it of expanded) {
+        const description = it.installment
+          ? `${fields.description} (${it.installment.number}/${it.installment.total})`
+          : fields.description;
+        await createBill({
+          ownerId: user.uid,
+          kind,
+          payments: [],
+          createdAt: now,
+          ...fields,
+          description,
+          amount: it.amount,
+          dueDate: it.dueDate,
+          competenceDate: it.competenceDate,
+          installment: it.installment,
+          installmentGroupId: groupId,
+        });
+      }
       setCreating(emptyDraft());
       await load();
     } catch (err) {
@@ -183,11 +229,15 @@ export function BillsManager({ kind }: { kind: BillKind }) {
       description: b.description,
       amount: String(b.amount).replace(".", ","),
       dueDate: b.dueDate,
+      competenceDate: b.competenceDate ?? b.dueDate,
+      documentNumber: b.documentNumber ?? "",
       contactId: b.contactId ?? "",
       categoryId: b.categoryId ?? "",
       costCenterId: b.costCenterId ?? "",
       accountId: b.accountId ?? "",
       notes: b.notes ?? "",
+      repeatMode: "single",
+      repeatCount: "2",
     });
   }
 
@@ -287,55 +337,139 @@ export function BillsManager({ kind }: { kind: BillKind }) {
 
       <div className="panel">
         <h2>Novo título</h2>
-        <form onSubmit={createNew} style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-          <input
-            placeholder="Descrição"
-            value={creating.description}
-            onChange={(e) => setCreating({ ...creating, description: e.target.value })}
-            required
-            style={{ ...fieldStyle, minWidth: 200 }}
-          />
-          <input
-            placeholder="Valor (R$)"
-            value={creating.amount}
-            onChange={(e) => setCreating({ ...creating, amount: e.target.value })}
-            style={{ ...fieldStyle, width: 120, textAlign: "right" }}
-          />
-          <label style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }}>
-            <span className="muted" style={{ fontSize: "0.75rem" }}>Vencimento</span>
+        <form
+          onSubmit={createNew}
+          style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}
+        >
+          <Field label={creating.repeatMode === "installments" ? "Valor total (R$)" : "Valor (R$)"}>
+            <input
+              placeholder="0,00"
+              value={creating.amount}
+              onChange={(e) => setCreating({ ...creating, amount: e.target.value })}
+              style={{ ...fieldStyle, width: 130, textAlign: "right" }}
+            />
+          </Field>
+          <Field label="Vencimento">
             <input
               type="date"
               value={creating.dueDate}
               onChange={(e) => setCreating({ ...creating, dueDate: e.target.value })}
               style={fieldStyle}
             />
-          </label>
-          <select
-            value={creating.contactId}
-            onChange={(e) => setCreating({ ...creating, contactId: e.target.value })}
-          >
-            <option value="">{contactLabel}…</option>
-            {contacts.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={creating.categoryId}
-            onChange={(e) => setCreating({ ...creating, categoryId: e.target.value })}
-          >
-            <option value="">Categoria…</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          </Field>
+          <Field label="Competência">
+            <input
+              type="date"
+              value={creating.competenceDate}
+              onChange={(e) => setCreating({ ...creating, competenceDate: e.target.value })}
+              style={fieldStyle}
+            />
+          </Field>
+          <Field label="Repetição">
+            <select
+              value={creating.repeatMode}
+              onChange={(e) => setCreating({ ...creating, repeatMode: e.target.value as RepeatMode })}
+            >
+              <option value="single">Única</option>
+              <option value="fixed">Fixa</option>
+              <option value="installments">Parcelado</option>
+            </select>
+          </Field>
+          {creating.repeatMode !== "single" && (
+            <Field label={creating.repeatMode === "installments" ? "Parcelas" : "Repetições"}>
+              <input
+                type="number"
+                min={2}
+                value={creating.repeatCount}
+                onChange={(e) => setCreating({ ...creating, repeatCount: e.target.value })}
+                style={{ ...fieldStyle, width: 90 }}
+              />
+            </Field>
+          )}
+          <Field label="Descrição">
+            <input
+              placeholder="Descrição"
+              value={creating.description}
+              onChange={(e) => setCreating({ ...creating, description: e.target.value })}
+              required
+              style={{ ...fieldStyle, minWidth: 200 }}
+            />
+          </Field>
+          <Field label="Conta">
+            <select
+              value={creating.accountId}
+              onChange={(e) => setCreating({ ...creating, accountId: e.target.value })}
+            >
+              <option value="">Conta…</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Categoria">
+            <select
+              value={creating.categoryId}
+              onChange={(e) => setCreating({ ...creating, categoryId: e.target.value })}
+            >
+              <option value="">Categoria…</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label={contactLabel}>
+            <select
+              value={creating.contactId}
+              onChange={(e) => setCreating({ ...creating, contactId: e.target.value })}
+            >
+              <option value="">{contactLabel}…</option>
+              {contacts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Centro">
+            <select
+              value={creating.costCenterId}
+              onChange={(e) => setCreating({ ...creating, costCenterId: e.target.value })}
+            >
+              <option value="">Centro…</option>
+              {costCenters.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Nº documento">
+            <input
+              value={creating.documentNumber}
+              onChange={(e) => setCreating({ ...creating, documentNumber: e.target.value })}
+              style={{ ...fieldStyle, width: 140 }}
+            />
+          </Field>
+          <Field label="Observações">
+            <input
+              value={creating.notes}
+              onChange={(e) => setCreating({ ...creating, notes: e.target.value })}
+              style={{ ...fieldStyle, minWidth: 180 }}
+            />
+          </Field>
           <button type="submit" disabled={busy}>
             Adicionar
           </button>
         </form>
+        <p className="muted" style={{ marginTop: "0.6rem", fontSize: "0.85rem" }}>
+          <strong>Repetição:</strong> <em>Única</em> cria um título só. <em>Fixa</em> repete o
+          mesmo valor todo mês, na mesma data, pela quantidade de repetições. <em>Parcelado</em>{" "}
+          divide o valor total automaticamente na quantidade de parcelas (mensais).
+        </p>
       </div>
 
       <div className="panel">

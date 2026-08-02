@@ -100,6 +100,10 @@ export interface Bill {
   amount: number;
   /** Due date as an ISO date string (YYYY-MM-DD). */
   dueDate: string;
+  /** Accrual / competence date (YYYY-MM-DD); defaults to the due date. */
+  competenceDate?: string | null;
+  /** Free-text document number (nota, boleto, etc.). */
+  documentNumber?: string | null;
   categoryId?: string | null;
   costCenterId?: string | null;
   contactId?: string | null;
