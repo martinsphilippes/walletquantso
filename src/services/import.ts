@@ -208,15 +208,14 @@ export async function commitImport(params: {
  */
 export async function revertImport(ownerId: string, batchId: string): Promise<number> {
   const now = Date.now();
+  // Owner-only query + in-memory match on importBatchId (avoids a composite index).
   const snap = await getDocs(
-    query(
-      collection(db, COLLECTIONS.transactions),
-      where("ownerId", "==", ownerId),
-      where("importBatchId", "==", batchId),
-    ),
+    query(collection(db, COLLECTIONS.transactions), where("ownerId", "==", ownerId)),
   );
 
-  const ids = snap.docs.map((d) => d.id);
+  const ids = snap.docs
+    .filter((d) => (d.data() as { importBatchId?: string | null }).importBatchId === batchId)
+    .map((d) => d.id);
   for (let i = 0; i < ids.length; i += BATCH_LIMIT) {
     const chunk = ids.slice(i, i + BATCH_LIMIT);
     const batch = writeBatch(db);

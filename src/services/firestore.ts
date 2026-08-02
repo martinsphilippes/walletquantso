@@ -15,7 +15,6 @@ import {
   deleteDoc,
   query,
   where,
-  orderBy,
   type DocumentData,
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
@@ -45,6 +44,28 @@ function mapDocs<T>(snap: {
   docs: QueryDocumentSnapshot<DocumentData>[];
 }): T[] {
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as T);
+}
+
+/** Sort transactions newest-first by ISO date, tie-broken by creation time. */
+function byDateDesc(a: Transaction, b: Transaction): number {
+  if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+  return (b.createdAt ?? 0) - (a.createdAt ?? 0);
+}
+
+/**
+ * Fetch every document in a collection owned by `ownerId` using ONLY the
+ * single-field `ownerId` equality filter — never combined with a second
+ * `where`/`orderBy` in the query itself. That combination would require a
+ * composite Firestore index to be provisioned before any read could succeed;
+ * without it Firestore rejects the query with FAILED_PRECONDITION, which is
+ * exactly what made saved records invisible in the list and dashboard. The
+ * `ownerId`-only filter uses an automatic single-field index, so reads always
+ * work; any additional filtering or ordering is done in memory (per-user
+ * datasets are small).
+ */
+async function docsOwnedBy<T>(collectionName: string, ownerId: string): Promise<T[]> {
+  const q = query(collection(db, collectionName), where("ownerId", "==", ownerId));
+  return mapDocs<T>(await getDocs(q));
 }
 
 /** List the accounts owned by a user. */
@@ -82,14 +103,10 @@ export async function listContacts(ownerId: string): Promise<Contact[]> {
   return mapDocs<Contact>(await getDocs(q));
 }
 
-/** List a user's transactions, newest first. */
+/** List a user's transactions, newest first (ordered in memory, index-free). */
 export async function listTransactions(ownerId: string): Promise<Transaction[]> {
-  const q = query(
-    collection(db, COLLECTIONS.transactions),
-    where("ownerId", "==", ownerId),
-    orderBy("date", "desc"),
-  );
-  return mapDocs<Transaction>(await getDocs(q));
+  const rows = await docsOwnedBy<Transaction>(COLLECTIONS.transactions, ownerId);
+  return rows.sort(byDateDesc);
 }
 
 /** List transactions created by a given import batch (used for undo). */
@@ -97,12 +114,8 @@ export async function listTransactionsByBatch(
   ownerId: string,
   importBatchId: string,
 ): Promise<Transaction[]> {
-  const q = query(
-    collection(db, COLLECTIONS.transactions),
-    where("ownerId", "==", ownerId),
-    where("importBatchId", "==", importBatchId),
-  );
-  return mapDocs<Transaction>(await getDocs(q));
+  const rows = await docsOwnedBy<Transaction>(COLLECTIONS.transactions, ownerId);
+  return rows.filter((t) => t.importBatchId === importBatchId);
 }
 
 /** Create an import batch (starts in `preview`). Returns its id. */
@@ -119,12 +132,8 @@ export async function getImportBatch(id: string): Promise<ImportBatch | null> {
 
 /** List a user's import batches, newest first. */
 export async function listImportBatches(ownerId: string): Promise<ImportBatch[]> {
-  const q = query(
-    collection(db, COLLECTIONS.importBatches),
-    where("ownerId", "==", ownerId),
-    orderBy("createdAt", "desc"),
-  );
-  return mapDocs<ImportBatch>(await getDocs(q));
+  const rows = await docsOwnedBy<ImportBatch>(COLLECTIONS.importBatches, ownerId);
+  return rows.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
 }
 
 /** Append an audit entry (append-only per security rules). */

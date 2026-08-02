@@ -50,14 +50,14 @@ export async function mergeContacts(
 ): Promise<number> {
   if (sourceId === targetId) return 0;
 
+  // Owner-only query (single-field index) + in-memory match on contactId, to
+  // avoid requiring a composite index.
   const snap = await getDocs(
-    query(
-      collection(db, COLLECTIONS.transactions),
-      where("ownerId", "==", ownerId),
-      where("contactId", "==", sourceId),
-    ),
+    query(collection(db, COLLECTIONS.transactions), where("ownerId", "==", ownerId)),
   );
-  const ids = snap.docs.map((d) => d.id);
+  const ids = snap.docs
+    .filter((d) => (d.data() as { contactId?: string | null }).contactId === sourceId)
+    .map((d) => d.id);
   for (let i = 0; i < ids.length; i += BATCH_LIMIT) {
     const batch = writeBatch(db);
     for (const id of ids.slice(i, i + BATCH_LIMIT)) {

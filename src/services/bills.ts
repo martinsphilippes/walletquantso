@@ -30,12 +30,12 @@ function mapDocs<T>(snap: {
 
 /** List a user's bills of a given kind. */
 export async function listBills(ownerId: string, kind: BillKind): Promise<Bill[]> {
-  const q = query(
-    collection(db, COLLECTIONS.bills),
-    where("ownerId", "==", ownerId),
-    where("kind", "==", kind),
-  );
-  return mapDocs<Bill>(await getDocs(q));
+  // Filter by ownerId only (single-field, auto-provisioned index) and match the
+  // `kind` in memory. Combining both equality filters in the query would need a
+  // composite index to exist first, otherwise the payables/receivables screens
+  // fail to load with FAILED_PRECONDITION.
+  const q = query(collection(db, COLLECTIONS.bills), where("ownerId", "==", ownerId));
+  return mapDocs<Bill>(await getDocs(q)).filter((b) => b.kind === kind);
 }
 
 /** Create a bill. Returns its id. */

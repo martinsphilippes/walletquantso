@@ -43,14 +43,13 @@ async function reparentChildren(
   parentId: string,
   newParentId: string | null,
 ): Promise<void> {
+  // Owner-only query + in-memory match on parentId (avoids a composite index).
   const snap = await getDocs(
-    query(
-      collection(db, COLLECTIONS.categories),
-      where("ownerId", "==", ownerId),
-      where("parentId", "==", parentId),
-    ),
+    query(collection(db, COLLECTIONS.categories), where("ownerId", "==", ownerId)),
   );
-  const ids = snap.docs.map((d) => d.id);
+  const ids = snap.docs
+    .filter((d) => (d.data() as { parentId?: string | null }).parentId === parentId)
+    .map((d) => d.id);
   for (let i = 0; i < ids.length; i += BATCH_LIMIT) {
     const batch = writeBatch(db);
     for (const id of ids.slice(i, i + BATCH_LIMIT)) {
@@ -72,14 +71,13 @@ export async function mergeCategories(
 ): Promise<number> {
   if (sourceId === targetId) return 0;
 
+  // Owner-only query + in-memory match on categoryId (avoids a composite index).
   const snap = await getDocs(
-    query(
-      collection(db, COLLECTIONS.transactions),
-      where("ownerId", "==", ownerId),
-      where("categoryId", "==", sourceId),
-    ),
+    query(collection(db, COLLECTIONS.transactions), where("ownerId", "==", ownerId)),
   );
-  const ids = snap.docs.map((d) => d.id);
+  const ids = snap.docs
+    .filter((d) => (d.data() as { categoryId?: string | null }).categoryId === sourceId)
+    .map((d) => d.id);
   for (let i = 0; i < ids.length; i += BATCH_LIMIT) {
     const batch = writeBatch(db);
     for (const id of ids.slice(i, i + BATCH_LIMIT)) {
