@@ -504,6 +504,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                 <tr>
                   <th>Vencimento</th>
                   <th>Descrição</th>
+                  <th>Parcela</th>
                   <th>{contactLabel}</th>
                   <th>Status</th>
                   <th style={{ textAlign: "right" }}>Valor</th>
@@ -523,6 +524,18 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                       <tr>
                         <td style={{ whiteSpace: "nowrap" }}>{brDate(b.dueDate)}</td>
                         <td>{b.description}</td>
+                        <td style={{ whiteSpace: "nowrap" }}>
+                          {b.installment ? (
+                            <span
+                              className="badge"
+                              style={{ background: "var(--border)", color: "var(--text)" }}
+                            >
+                              {b.installment.number}/{b.installment.total}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
                         <td>{b.contactId ? (contactName.get(b.contactId) ?? "—") : "—"}</td>
                         <td>
                           <span style={{ color: STATUS_COLOR[status], fontWeight: 600 }}>
@@ -565,7 +578,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
 
                       {paying && (
                         <tr key={`${b.id}-pay`}>
-                          <td colSpan={7} style={subRowStyle}>
+                          <td colSpan={8} style={subRowStyle}>
                             <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
                               <strong>{settleLabel}:</strong>
                               <input
@@ -603,7 +616,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
 
                       {editing && (
                         <tr key={`${b.id}-edit`}>
-                          <td colSpan={7} style={subRowStyle}>
+                          <td colSpan={8} style={subRowStyle}>
                             <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "flex-end" }}>
                               <Field label="Descrição">
                                 <input
@@ -671,7 +684,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
 
                       {paid > 0 && (
                         <tr key={`${b.id}-hist`}>
-                          <td colSpan={7} style={{ ...subRowStyle, paddingTop: 0 }}>
+                          <td colSpan={8} style={{ ...subRowStyle, paddingTop: 0 }}>
                             <span className="muted" style={{ fontSize: "0.8rem" }}>
                               Baixas:{" "}
                               {b.payments.map((p) => (
