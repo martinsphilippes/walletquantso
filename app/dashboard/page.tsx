@@ -26,12 +26,14 @@ import { computeCashBalances, monthResult } from "@/lib/dashboard/cash";
 import {
   receitasPorCategoria,
   despesasPorCategoria,
+  receitasPorCentro,
+  despesasPorCentro,
   resultadosPorCentro,
   type Slice,
 } from "@/lib/dashboard/breakdown";
 import { BarChart, DonutChart, LineChart, PALETTE } from "@/components/charts";
 import { projectCashFlow } from "@/lib/cashflow/project";
-import { remaining, billStatus, STATUS_LABELS, sortByDueDate } from "@/lib/bills/status";
+import { remaining, billStatus, sortByDueDate } from "@/lib/bills/status";
 import type {
   Account,
   Bill,
@@ -127,11 +129,6 @@ function Dashboard() {
     [accounts, txs, payables, receivables],
   );
 
-  const openBills = useMemo(
-    () => sortByDueDate([...payables, ...receivables].filter((b) => remaining(b) > 0)),
-    [payables, receivables],
-  );
-
   const cash = useMemo(
     () => computeCashBalances(accounts, txs ?? [], payables, receivables),
     [accounts, txs, payables, receivables],
@@ -152,9 +149,21 @@ function Dashboard() {
     () => despesasPorCategoria(txs ?? [], payables, categories),
     [txs, payables, categories],
   );
+  const receitasCentro = useMemo(
+    () => receitasPorCentro(txs ?? [], receivables, costCenters),
+    [txs, receivables, costCenters],
+  );
+  const despesasCentro = useMemo(
+    () => despesasPorCentro(txs ?? [], payables, costCenters),
+    [txs, payables, costCenters],
+  );
   const centros = useMemo(
     () => resultadosPorCentro(txs ?? [], payables, receivables, costCenters),
     [txs, payables, receivables, costCenters],
+  );
+  const costCenterName = useMemo(
+    () => new Map(costCenters.map((c) => [c.id!, c.name])),
+    [costCenters],
   );
   const centrosTotal = useMemo(
     () =>
@@ -631,45 +640,73 @@ function Dashboard() {
         )}
       </div>
 
-      {/* Contas a pagar / receber em aberto */}
-      <div className="panel">
-        <h2>Contas em aberto</h2>
-        {openBills.length === 0 ? (
-          <p className="muted">Nenhuma conta a pagar ou receber em aberto.</p>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Vencimento</th>
-                  <th>Descrição</th>
-                  <th>Tipo</th>
-                  <th>Situação</th>
-                  <th style={{ textAlign: "right" }}>Em aberto</th>
-                </tr>
-              </thead>
-              <tbody>
-                {openBills.map((b) => (
-                  <tr key={b.id}>
-                    <td>{brDate(b.dueDate)}</td>
-                    <td>{b.description}</td>
-                    <td>{b.kind === "payable" ? "A pagar" : "A receber"}</td>
-                    <td>{STATUS_LABELS[billStatus(b)]}</td>
-                    <td
-                      style={{
-                        textAlign: "right",
-                        whiteSpace: "nowrap",
-                        color: b.kind === "payable" ? "var(--err)" : "var(--ok)",
-                      }}
-                    >
-                      {brl(remaining(b))}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+      {/* Receitas e Despesas por centro (situação projetada) */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+          gap: "1rem",
+        }}
+      >
+        <div className="panel">
+          <h2 style={{ marginBottom: 0 }}>Receitas por centro</h2>
+          <p className="muted" style={{ marginTop: 2 }}>Situação projetada</p>
+          {receitasCentro.length === 0 ? (
+            <p className="muted">Sem receitas para exibir.</p>
+          ) : (
+            <>
+              <DonutChart items={toDonut(receitasCentro)} />
+              <div style={totalRow}>
+                <strong>Total</strong>
+                <strong style={{ color: "var(--ok)" }}>
+                  {brl(receitasCentro.reduce((s, x) => s + x.value, 0))}
+                </strong>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="panel">
+          <h2 style={{ marginBottom: 0 }}>Despesas por centro</h2>
+          <p className="muted" style={{ marginTop: 2 }}>Situação projetada</p>
+          {despesasCentro.length === 0 ? (
+            <p className="muted">Sem despesas para exibir.</p>
+          ) : (
+            <>
+              <DonutChart items={toDonut(despesasCentro)} />
+              <div style={totalRow}>
+                <strong>Total</strong>
+                <strong style={{ color: "var(--err)" }}>
+                  {brl(despesasCentro.reduce((s, x) => s + x.value, 0))}
+                </strong>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Contas a pagar / a receber (em aberto) */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+          gap: "1rem",
+        }}
+      >
+        <BillListPanel
+          title="Contas a pagar"
+          kind="payable"
+          bills={payables}
+          accountName={accountName}
+          costCenterName={costCenterName}
+        />
+        <BillListPanel
+          title="Contas a receber"
+          kind="receivable"
+          bills={receivables}
+          accountName={accountName}
+          costCenterName={costCenterName}
+        />
       </div>
 
       {/* Lançamentos (movimentos realizados) */}
@@ -809,6 +846,86 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
     </div>
   );
 }
+
+function BillListPanel({
+  title,
+  kind,
+  bills,
+  accountName,
+  costCenterName,
+}: {
+  title: string;
+  kind: Bill["kind"];
+  bills: Bill[];
+  accountName: Map<string, string>;
+  costCenterName: Map<string, string>;
+}) {
+  const open = sortByDueDate(bills.filter((b) => remaining(b) > 0));
+  const total = open.reduce((s, b) => s + remaining(b), 0);
+  const color = kind === "payable" ? "var(--err)" : "var(--ok)";
+  const sign = kind === "payable" ? "-" : "";
+
+  return (
+    <div className="panel">
+      <h2>{title}</h2>
+      {open.length === 0 ? (
+        <p className="muted">Nenhuma conta em aberto.</p>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Vencimento</th>
+                <th>Descrição</th>
+                <th>Centro</th>
+                <th>Conta</th>
+                <th style={{ textAlign: "right" }}>Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {open.map((b) => (
+                <tr key={b.id}>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    {brDate(b.dueDate)}
+                    {billStatus(b) === "overdue" && (
+                      <span className="badge err" style={{ marginLeft: 6 }}>Vencido</span>
+                    )}
+                  </td>
+                  <td>{b.description}</td>
+                  <td>{b.costCenterId ? (costCenterName.get(b.costCenterId) ?? "—") : "—"}</td>
+                  <td>{b.accountId ? (accountName.get(b.accountId) ?? "—") : "—"}</td>
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap", color }}>
+                    {sign}
+                    {brl(remaining(b))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={4}><strong>Total</strong></td>
+                <td style={{ textAlign: "right" }}>
+                  <strong style={{ color }}>
+                    {sign}
+                    {brl(total)}
+                  </strong>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const totalRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  borderTop: "1px solid var(--border)",
+  paddingTop: "0.6rem",
+  marginTop: "0.6rem",
+};
 
 const fieldStyle: React.CSSProperties = {
   padding: "0.35rem 0.5rem",

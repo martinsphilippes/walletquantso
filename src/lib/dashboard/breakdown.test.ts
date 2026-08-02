@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { receitasPorCategoria, despesasPorCategoria, resultadosPorCentro } from "./breakdown";
+import {
+  receitasPorCategoria,
+  despesasPorCategoria,
+  receitasPorCentro,
+  despesasPorCentro,
+  resultadosPorCentro,
+} from "./breakdown";
 import type { Bill, Category, CostCenter, Transaction } from "@/types";
 
 function cat(id: string, name: string, kind: Category["kind"] = "expense"): Category {
@@ -65,6 +71,29 @@ describe("receitasPorCategoria", () => {
       categories,
     );
     expect(slices).toEqual([{ id: "c1", label: "Vendas", value: 1000 }]);
+  });
+});
+
+describe("por centro (pizzas)", () => {
+  const centers = [center("k1", "Familia"), center("k2", "Loja")];
+
+  it("groups projected despesas by cost center", () => {
+    const slices = despesasPorCentro(
+      [tx("expense", 100, { costCenterId: "k1" })],
+      [bill("payable", 400, { costCenterId: "k2" }), bill("payable", 50, { costCenterId: "k1" })],
+      centers,
+    );
+    expect(slices[0]).toMatchObject({ label: "Loja", value: 400 });
+    expect(slices[1]).toMatchObject({ label: "Familia", value: 150 });
+  });
+
+  it("groups projected receitas by cost center and ignores expenses", () => {
+    const slices = receitasPorCentro(
+      [tx("income", 200, { costCenterId: "k1" }), tx("expense", 999, { costCenterId: "k1" })],
+      [bill("receivable", 300, { costCenterId: "k1" })],
+      centers,
+    );
+    expect(slices).toEqual([{ id: "k1", label: "Familia", value: 500 }]);
   });
 });
 

@@ -68,6 +68,32 @@ export function despesasPorCategoria(
   return group(entries, names, "Sem categoria");
 }
 
+/** Projected receitas grouped by cost center. */
+export function receitasPorCentro(
+  txs: Transaction[],
+  receivables: Bill[],
+  costCenters: CostCenter[],
+): Slice[] {
+  const names = nameMap(costCenters);
+  const entries: Array<{ key: string | null; value: number }> = [];
+  for (const t of txs) if (t.type === "income") entries.push({ key: t.costCenterId ?? null, value: t.amount });
+  for (const b of receivables) entries.push({ key: b.costCenterId ?? null, value: b.amount });
+  return group(entries, names, "Sem centro");
+}
+
+/** Projected despesas grouped by cost center. */
+export function despesasPorCentro(
+  txs: Transaction[],
+  payables: Bill[],
+  costCenters: CostCenter[],
+): Slice[] {
+  const names = nameMap(costCenters);
+  const entries: Array<{ key: string | null; value: number }> = [];
+  for (const t of txs) if (t.type === "expense") entries.push({ key: t.costCenterId ?? null, value: t.amount });
+  for (const b of payables) entries.push({ key: b.costCenterId ?? null, value: b.amount });
+  return group(entries, names, "Sem centro");
+}
+
 export interface CentroResult {
   id: string | null;
   name: string;
