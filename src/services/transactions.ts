@@ -89,6 +89,11 @@ export async function updateTransaction(
   });
 }
 
+/** Toggle the bank-reconciliation (cleared) flag on a transaction. */
+export function setReconciled(id: string, reconciled: boolean): Promise<void> {
+  return updateDoc(doc(db, COLLECTIONS.transactions, id), { reconciled });
+}
+
 /** Delete a transaction. */
 export async function removeTransaction(ownerId: string, id: string): Promise<void> {
   const now = Date.now();

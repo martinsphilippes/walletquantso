@@ -1,5 +1,13 @@
-import { ComingSoon } from "@/components/ComingSoon";
+import { LoginGate } from "@/components/LoginGate";
+import { BillsManager } from "@/components/BillsManager";
 
 export default function Page() {
-  return <ComingSoon title="Contas a receber" note="Etapa 3 — cadastro, vencimentos e recebimento (inclusive parcial)." />;
+  return (
+    <>
+      <h1>Contas a receber</h1>
+      <LoginGate>
+        <BillsManager kind="receivable" />
+      </LoginGate>
+    </>
+  );
 }

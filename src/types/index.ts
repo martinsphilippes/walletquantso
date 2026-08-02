@@ -72,6 +72,47 @@ export interface Contact {
   createdAt: number;
 }
 
+/** Whether a bill is money to pay out or to receive. */
+export type BillKind = "payable" | "receivable";
+
+/** A single (possibly partial) settlement of a bill. */
+export interface BillPayment {
+  /** Client-generated id, unique within the bill. */
+  id: string;
+  /** ISO date the payment happened (YYYY-MM-DD). */
+  date: string;
+  /** Positive amount settled in this payment, in BRL. */
+  amount: number;
+  /** Account the money moved through (optional). */
+  accountId?: string | null;
+}
+
+/**
+ * A payable or receivable (conta a pagar / a receber): a planned obligation
+ * with a due date, settled by one or more (possibly partial) payments.
+ */
+export interface Bill {
+  id?: string;
+  ownerId: string;
+  kind: BillKind;
+  description: string;
+  /** Total planned amount, in BRL. */
+  amount: number;
+  /** Due date as an ISO date string (YYYY-MM-DD). */
+  dueDate: string;
+  categoryId?: string | null;
+  costCenterId?: string | null;
+  contactId?: string | null;
+  /** Expected account for the settlement (optional). */
+  accountId?: string | null;
+  /** Settlements applied so far. */
+  payments: BillPayment[];
+  installment?: Installment | null;
+  installmentGroupId?: string | null;
+  notes?: string | null;
+  createdAt: number;
+}
+
 /** Installment metadata for a transaction that is part of a series. */
 export interface Installment {
   /** 1-based position, e.g. 3. */
@@ -96,6 +137,8 @@ export interface Transaction {
   costCenterId?: string | null;
   /** The person/company involved (contato / fornecedor). */
   contactId?: string | null;
+  /** Bank reconciliation flag: the entry has cleared the bank statement. */
+  reconciled?: boolean;
   /** For transfers: the destination account. */
   transferAccountId?: string | null;
   installment?: Installment | null;

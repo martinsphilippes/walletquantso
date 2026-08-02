@@ -35,6 +35,7 @@ export const COLLECTIONS = {
   categories: "categories",
   costCenters: "costCenters",
   contacts: "contacts",
+  bills: "bills",
   transactions: "transactions",
   importBatches: "importBatches",
   auditLog: "auditLog",
