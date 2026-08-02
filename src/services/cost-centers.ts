@@ -39,6 +39,46 @@ export function removeCostCenter(id: string): Promise<void> {
 }
 
 /**
+ * Delete a cost center even when it is in use: every transaction/bill that
+ * referenced it has its `costCenterId` cleared (kept, but "sem centro") and then
+ * the cost center is removed. No financial record is deleted. Returns how many
+ * records were unassigned.
+ */
+export async function deleteCostCenterDeep(
+  ownerId: string,
+  costCenterId: string,
+): Promise<{ unassigned: number }> {
+  const [txSnap, billSnap] = await Promise.all([
+    getDocs(query(collection(db, COLLECTIONS.transactions), where("ownerId", "==", ownerId))),
+    getDocs(query(collection(db, COLLECTIONS.bills), where("ownerId", "==", ownerId))),
+  ]);
+  const matches = (d: { data: () => unknown }) =>
+    (d.data() as { costCenterId?: string | null }).costCenterId === costCenterId;
+  const txToClear = txSnap.docs.filter(matches);
+  const billToClear = billSnap.docs.filter(matches);
+
+  type Op = { kind: "clearTx" | "clearBill"; id: string };
+  const ops: Op[] = [
+    ...txToClear.map((d) => ({ kind: "clearTx" as const, id: d.id })),
+    ...billToClear.map((d) => ({ kind: "clearBill" as const, id: d.id })),
+  ];
+  for (let i = 0; i < ops.length; i += BATCH_LIMIT) {
+    const batch = writeBatch(db);
+    for (const op of ops.slice(i, i + BATCH_LIMIT)) {
+      if (op.kind === "clearTx") {
+        batch.update(doc(db, COLLECTIONS.transactions, op.id), { costCenterId: null });
+      } else {
+        batch.update(doc(db, COLLECTIONS.bills, op.id), { costCenterId: null });
+      }
+    }
+    await batch.commit();
+  }
+
+  await deleteDoc(doc(db, COLLECTIONS.costCenters, costCenterId));
+  return { unassigned: txToClear.length + billToClear.length };
+}
+
+/**
  * Merge `sourceId` into `targetId`: every transaction using the source cost
  * center is reassigned to the target, then the source is deleted. Returns the
  * number of transactions moved.

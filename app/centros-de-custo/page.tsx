@@ -9,6 +9,7 @@ import {
   createCostCenter,
   updateCostCenter,
   removeCostCenter,
+  deleteCostCenterDeep,
   mergeCostCenters,
 } from "@/services/cost-centers";
 import { countReferences } from "@/lib/references/usage";
@@ -38,6 +39,7 @@ function CostCenters() {
   const [draftName, setDraftName] = useState("");
   const [mergingId, setMergingId] = useState<string | null>(null);
   const [mergeTarget, setMergeTarget] = useState("");
+  const [confirmDelId, setConfirmDelId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
 
   const load = useCallback(async () => {
@@ -89,19 +91,29 @@ function CostCenters() {
     }
   }
 
-  async function del(c: CostCenter) {
+  const isBlocked = (c: CostCenter) => (usage.get(c.id!) ?? 0) > 0;
+
+  function delMessage(c: CostCenter): string {
     const used = usage.get(c.id!) ?? 0;
     if (used > 0) {
-      setError(
-        `"${c.name}" está em uso (${used} lançamento(s)/título(s)). Use "Mesclar" em vez de excluir.`,
-      );
-      return;
+      return `"${c.name}": ${used} lançamento(s)/título(s) ficarão sem centro. Excluir?`;
     }
-    if (!confirm(`Excluir o centro de custo "${c.name}"?`)) return;
+    return `Excluir "${c.name}"?`;
+  }
+
+  // Inline confirmation (no native confirm(), which some mobile browsers suppress).
+  async function doDelete(c: CostCenter) {
+    if (!user) return;
     setBusy(true);
     setError("");
     try {
-      await removeCostCenter(c.id!);
+      if (isBlocked(c)) {
+        const res = await deleteCostCenterDeep(user.uid, c.id!);
+        setError(`Excluído "${c.name}". ${res.unassigned} lançamento(s)/título(s) ficaram sem centro.`);
+      } else {
+        await removeCostCenter(c.id!);
+      }
+      setConfirmDelId(null);
       await load();
     } catch (err) {
       setError(`Falha ao excluir: ${(err as Error).message}`);
@@ -236,6 +248,25 @@ function CostCenters() {
                                 Cancelar
                               </button>
                             </>
+                          ) : confirmDelId === c.id ? (
+                            <>
+                              <span className="muted" style={{ marginRight: "0.5rem" }}>
+                                {delMessage(c)}
+                              </span>
+                              <button
+                                style={{ background: "var(--err)" }}
+                                disabled={busy}
+                                onClick={() => doDelete(c)}
+                              >
+                                {isBlocked(c) ? "Excluir mesmo assim" : "Confirmar exclusão"}
+                              </button>{" "}
+                              <button
+                                style={{ background: "var(--border)" }}
+                                onClick={() => setConfirmDelId(null)}
+                              >
+                                Cancelar
+                              </button>
+                            </>
                           ) : (
                             <>
                               <button
@@ -258,7 +289,14 @@ function CostCenters() {
                                   </button>{" "}
                                 </>
                               )}
-                              <button style={{ background: "var(--err)" }} onClick={() => del(c)}>
+                              <button
+                                style={{ background: "var(--err)" }}
+                                onClick={() => {
+                                  setEditingId(null);
+                                  setMergingId(null);
+                                  setConfirmDelId(c.id!);
+                                }}
+                              >
                                 Excluir
                               </button>
                             </>
