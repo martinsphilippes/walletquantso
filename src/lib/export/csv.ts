@@ -35,15 +35,23 @@ export function brDate(iso: string): string {
 export interface NameLookup {
   account: (id?: string | null) => string;
   category: (id?: string | null) => string;
+  /** Optional cost center name lookup; column is added when provided. */
+  costCenter?: (id?: string | null) => string;
+  /** Optional contact name lookup; column is added when provided. */
+  contact?: (id?: string | null) => string;
 }
 
 /** Build the CSV matrix (header + rows) for a list of transactions. */
 export function transactionsToCsv(txs: Transaction[], names: NameLookup): string {
+  const hasCostCenter = typeof names.costCenter === "function";
+  const hasContact = typeof names.contact === "function";
   const header = [
     "Data",
     "Descrição",
     "Tipo",
     "Categoria",
+    ...(hasCostCenter ? ["Centro de custo"] : []),
+    ...(hasContact ? ["Pessoa/contato"] : []),
     "Conta",
     "Conta destino",
     "Valor",
@@ -54,6 +62,8 @@ export function transactionsToCsv(txs: Transaction[], names: NameLookup): string
     t.description,
     TYPE_LABELS[t.type],
     names.category(t.categoryId),
+    ...(hasCostCenter ? [names.costCenter!(t.costCenterId)] : []),
+    ...(hasContact ? [names.contact!(t.contactId)] : []),
     names.account(t.accountId),
     t.type === "transfer" ? names.account(t.transferAccountId) : "",
     // Signed value: expenses negative, income/transfer positive.

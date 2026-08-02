@@ -54,6 +54,23 @@ describe("filterTransactions", () => {
   it("combines filters", () => {
     expect(filterTransactions(data, { accountId: "acc1", type: "expense" }).length).toBe(1);
   });
+
+  it("filters by category, cost center and contact", () => {
+    const tagged: Transaction[] = [
+      tx({ description: "A", categoryId: "cat1", costCenterId: "cc1", contactId: "p1" }),
+      tx({ description: "B", categoryId: "cat2", costCenterId: "cc1", contactId: "p2" }),
+      tx({ description: "C", categoryId: "cat1", costCenterId: "cc2", contactId: "p1" }),
+    ];
+    expect(filterTransactions(tagged, { categoryId: "cat1" }).length).toBe(2);
+    expect(filterTransactions(tagged, { costCenterId: "cc1" }).length).toBe(2);
+    expect(filterTransactions(tagged, { contactId: "p1" }).length).toBe(2);
+    expect(
+      filterTransactions(tagged, { categoryId: "cat1", contactId: "p1" }).length,
+    ).toBe(2);
+    expect(
+      filterTransactions(tagged, { categoryId: "cat1", costCenterId: "cc2" }).length,
+    ).toBe(1);
+  });
 });
 
 describe("summarize", () => {

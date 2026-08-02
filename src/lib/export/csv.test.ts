@@ -61,4 +61,20 @@ describe("transactionsToCsv", () => {
     );
     expect(csv.split("\r\n")[1]).toBe("05/01/2025;TED;Transferência;;Nubank;Itaú;200,00;");
   });
+
+  it("adds cost center and contact columns when lookups are provided", () => {
+    const csv = transactionsToCsv(
+      [tx({ categoryId: "food", costCenterId: "cc1", contactId: "p1" })],
+      {
+        ...names,
+        costCenter: (id?: string | null) => (id === "cc1" ? "Casa" : ""),
+        contact: (id?: string | null) => (id === "p1" ? "Padaria" : ""),
+      },
+    );
+    const lines = csv.split("\r\n");
+    expect(lines[0]).toBe(
+      "Data;Descrição;Tipo;Categoria;Centro de custo;Pessoa/contato;Conta;Conta destino;Valor;Observações",
+    );
+    expect(lines[1]).toBe("05/01/2025;Mercado;Despesa;Alimentação;Casa;Padaria;Nubank;;-50,00;");
+  });
 });

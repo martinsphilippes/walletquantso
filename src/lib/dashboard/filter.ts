@@ -12,6 +12,12 @@ export interface DashboardFilters {
   accountId?: string;
   /** Restrict to a single transaction type. */
   type?: TransactionType | "";
+  /** Restrict to a single category. */
+  categoryId?: string;
+  /** Restrict to a single cost center. */
+  costCenterId?: string;
+  /** Restrict to a single contact. */
+  contactId?: string;
   /** Inclusive ISO date lower bound (YYYY-MM-DD). */
   from?: string;
   /** Inclusive ISO date upper bound (YYYY-MM-DD). */
@@ -37,6 +43,9 @@ export function filterTransactions(
     if (f.accountId && t.accountId !== f.accountId && t.transferAccountId !== f.accountId)
       return false;
     if (f.type && t.type !== f.type) return false;
+    if (f.categoryId && t.categoryId !== f.categoryId) return false;
+    if (f.costCenterId && t.costCenterId !== f.costCenterId) return false;
+    if (f.contactId && t.contactId !== f.contactId) return false;
     if (f.from && t.date < f.from) return false;
     if (f.to && t.date > f.to) return false;
     return true;
