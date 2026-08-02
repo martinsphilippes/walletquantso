@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
 import { listCostCenters, listTransactions } from "@/services/firestore";
+import { listBills } from "@/services/bills";
 import {
   createCostCenter,
   updateCostCenter,
@@ -11,7 +12,7 @@ import {
   mergeCostCenters,
 } from "@/services/cost-centers";
 import { countReferences } from "@/lib/references/usage";
-import type { CostCenter, Transaction } from "@/types";
+import type { Bill, CostCenter, Transaction } from "@/types";
 
 export default function CostCentersPage() {
   return (
@@ -28,6 +29,7 @@ function CostCenters() {
   const { user } = useAuth();
   const [items, setItems] = useState<CostCenter[]>([]);
   const [txs, setTxs] = useState<Transaction[]>([]);
+  const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -43,10 +45,16 @@ function CostCenters() {
     setError("");
     setLoading(true);
     try {
-      const [c, t] = await Promise.all([listCostCenters(user.uid), listTransactions(user.uid)]);
+      const [c, t, pay, rec] = await Promise.all([
+        listCostCenters(user.uid),
+        listTransactions(user.uid),
+        listBills(user.uid, "payable"),
+        listBills(user.uid, "receivable"),
+      ]);
       c.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
       setItems(c);
       setTxs(t);
+      setBills([...pay, ...rec]);
     } catch (err) {
       setError(`Falha ao carregar: ${(err as Error).message}`);
     } finally {
@@ -58,7 +66,7 @@ function CostCenters() {
     load();
   }, [load]);
 
-  const usage = useMemo(() => countReferences(txs, "costCenterId"), [txs]);
+  const usage = useMemo(() => countReferences([...txs, ...bills], "costCenterId"), [txs, bills]);
 
   function startEdit(c: CostCenter) {
     setMergingId(null);
@@ -85,7 +93,7 @@ function CostCenters() {
     const used = usage.get(c.id!) ?? 0;
     if (used > 0) {
       setError(
-        `"${c.name}" está em uso (${used} lançamento(s)). Use "Mesclar" em vez de excluir.`,
+        `"${c.name}" está em uso (${used} lançamento(s)/título(s)). Use "Mesclar" em vez de excluir.`,
       );
       return;
     }

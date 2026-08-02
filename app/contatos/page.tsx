@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
 import { listContacts, listTransactions } from "@/services/firestore";
+import { listBills } from "@/services/bills";
 import {
   createContact,
   updateContact,
@@ -11,7 +12,7 @@ import {
   mergeContacts,
 } from "@/services/contacts";
 import { countReferences } from "@/lib/references/usage";
-import type { Contact, ContactKind, Transaction } from "@/types";
+import type { Bill, Contact, ContactKind, Transaction } from "@/types";
 
 const KIND_LABELS: Record<ContactKind, string> = {
   person: "Pessoa",
@@ -46,6 +47,7 @@ function Contacts() {
   const { user } = useAuth();
   const [items, setItems] = useState<Contact[]>([]);
   const [txs, setTxs] = useState<Transaction[]>([]);
+  const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -61,10 +63,16 @@ function Contacts() {
     setError("");
     setLoading(true);
     try {
-      const [c, t] = await Promise.all([listContacts(user.uid), listTransactions(user.uid)]);
+      const [c, t, pay, rec] = await Promise.all([
+        listContacts(user.uid),
+        listTransactions(user.uid),
+        listBills(user.uid, "payable"),
+        listBills(user.uid, "receivable"),
+      ]);
       c.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
       setItems(c);
       setTxs(t);
+      setBills([...pay, ...rec]);
     } catch (err) {
       setError(`Falha ao carregar: ${(err as Error).message}`);
     } finally {
@@ -76,7 +84,7 @@ function Contacts() {
     load();
   }, [load]);
 
-  const usage = useMemo(() => countReferences(txs, "contactId"), [txs]);
+  const usage = useMemo(() => countReferences([...txs, ...bills], "contactId"), [txs, bills]);
 
   function startEdit(c: Contact) {
     setMergingId(null);
@@ -113,7 +121,7 @@ function Contacts() {
     const used = usage.get(c.id!) ?? 0;
     if (used > 0) {
       setError(
-        `"${c.name}" está em uso (${used} lançamento(s)). Use "Mesclar" em vez de excluir.`,
+        `"${c.name}" está em uso (${used} lançamento(s)/título(s)). Use "Mesclar" em vez de excluir.`,
       );
       return;
     }

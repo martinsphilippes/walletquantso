@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
 import { listCategories, listTransactions } from "@/services/firestore";
+import { listBills } from "@/services/bills";
 import {
   createCategory,
   updateCategory,
@@ -11,7 +12,7 @@ import {
   mergeCategories,
 } from "@/services/categories";
 import { computeCategoryUsage } from "@/lib/categories/usage";
-import type { Category, Transaction, TransactionType } from "@/types";
+import type { Bill, Category, Transaction, TransactionType } from "@/types";
 
 const KIND_LABELS: Record<TransactionType, string> = {
   income: "Receita",
@@ -41,6 +42,7 @@ function Categories() {
   const { user } = useAuth();
   const [cats, setCats] = useState<Category[]>([]);
   const [txs, setTxs] = useState<Transaction[]>([]);
+  const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -56,9 +58,15 @@ function Categories() {
     setError("");
     setLoading(true);
     try {
-      const [c, t] = await Promise.all([listCategories(user.uid), listTransactions(user.uid)]);
+      const [c, t, pay, rec] = await Promise.all([
+        listCategories(user.uid),
+        listTransactions(user.uid),
+        listBills(user.uid, "payable"),
+        listBills(user.uid, "receivable"),
+      ]);
       setCats(c);
       setTxs(t);
+      setBills([...pay, ...rec]);
     } catch (err) {
       setError(`Falha ao carregar: ${(err as Error).message}`);
     } finally {
@@ -70,7 +78,7 @@ function Categories() {
     load();
   }, [load]);
 
-  const usage = useMemo(() => computeCategoryUsage(txs), [txs]);
+  const usage = useMemo(() => computeCategoryUsage([...txs, ...bills]), [txs, bills]);
   const nameById = useMemo(() => new Map(cats.map((c) => [c.id!, c.name])), [cats]);
   const childCount = useMemo(() => {
     const m = new Map<string, number>();
@@ -107,7 +115,7 @@ function Categories() {
     const kids = childCount.get(c.id!) ?? 0;
     if (used > 0 || kids > 0) {
       setError(
-        `"${c.name}" está em uso (${used} lançamento(s), ${kids} subcategoria(s)). Use "Mesclar" em vez de excluir.`,
+        `"${c.name}" está em uso (${used} lançamento(s)/título(s), ${kids} subcategoria(s)). Use "Mesclar" em vez de excluir.`,
       );
       return;
     }
