@@ -57,16 +57,49 @@ Defina em `.env.local` (local) ou nas configurações do provedor de hospedagem 
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 - `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` (opcional)
 
-## Implantação
+## Implantação na Vercel (passo a passo)
 
-1. Configure as variáveis de ambiente acima no provedor (ex.: Vercel).
-2. Publique as regras e índices do Firestore (versionados neste repositório):
-   ```bash
-   firebase login
-   npm run deploy:firestore   # firestore.rules + firestore.indexes.json
-   ```
-3. No Firebase Console, habilite os provedores de login (E-mail/senha e Google)
-   e adicione o domínio de produção em *Authentication → Authorized domains*.
+O app é um projeto **Next.js** padrão, então a Vercel reconhece e configura tudo
+automaticamente. Basta seguir os passos abaixo.
+
+### 1. Entrar na Vercel
+Acesse [vercel.com](https://vercel.com) e faça login com a conta do **GitHub**
+dona deste repositório.
+
+### 2. Importar o projeto
+- Clique em **“Add New… → Project”**.
+- Procure o repositório **`walletquantso`** e clique em **“Import”**.
+- Deixe **Framework**, **Build Command** e **Output** no automático — a Vercel
+  detecta Next.js sozinha.
+
+### 3. Adicionar as variáveis do Firebase
+Ainda na tela de importação, abra **“Environment Variables”** e adicione uma a
+uma as variáveis listadas em [Variáveis de ambiente necessárias](#variáveis-de-ambiente-necessárias).
+Todos os valores ficam no **Firebase Console → ⚙️ Configurações do projeto →
+Seus apps → “Configuração do SDK”** — é só copiar e colar.
+
+### 4. Publicar
+Clique em **“Deploy”**. Em 1–2 minutos o app fica no ar em um endereço como
+`walletquantso.vercel.app`.
+
+### 5. Liberar o domínio no Firebase (para o login funcionar)
+No **Firebase Console → Authentication → Settings → Authorized domains**,
+adicione o domínio que a Vercel gerou (ex.: `walletquantso.vercel.app`).
+Habilite também os provedores de login (E-mail/senha e Google) em
+*Authentication → Sign-in method*.
+
+### 6. Publicar as regras e índices do Firestore
+Estes arquivos (`firestore.rules` e `firestore.indexes.json`) vão para o
+**Firebase**, não para a Vercel. Rode localmente (uma vez, com o Firebase CLI):
+```bash
+firebase login
+npm run deploy:rules      # firestore.rules
+npm run deploy:indexes    # firestore.indexes.json
+```
+
+### Deploys automáticos
+Depois de conectado, **todo commit enviado ao `main` publica automaticamente**
+uma nova versão na Vercel — não é preciso repetir os passos acima.
 
 ## Estrutura principal das pastas
 
