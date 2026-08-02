@@ -52,6 +52,7 @@ function Categories() {
   const [draft, setDraft] = useState<Draft>({ name: "", kind: "expense", parentId: "" });
   const [mergingId, setMergingId] = useState<string | null>(null);
   const [mergeTarget, setMergeTarget] = useState("");
+  const [confirmDelId, setConfirmDelId] = useState<string | null>(null);
   const [creating, setCreating] = useState<Draft>({ name: "", kind: "expense", parentId: "" });
 
   const load = useCallback(async () => {
@@ -111,37 +112,37 @@ function Categories() {
     }
   }
 
-  async function del(c: Category) {
-    if (!user) return;
+  const isBlocked = (c: Category) =>
+    (usage.get(c.id!) ?? 0) > 0 || (childCount.get(c.id!) ?? 0) > 0;
+
+  function delMessage(c: Category): string {
     const used = usage.get(c.id!) ?? 0;
     const kids = childCount.get(c.id!) ?? 0;
-    if (used > 0 || kids > 0) {
-      const parts: string[] = [];
-      if (kids > 0) parts.push(`${kids} subcategoria(s) — que também serão excluídas`);
-      if (used > 0) parts.push(`${used} lançamento(s)/título(s) — que ficarão SEM categoria`);
-      if (!confirm(`"${c.name}" tem ${parts.join(" e ")}.\n\nExcluir tudo isso junto?`)) return;
-      setBusy(true);
-      setError("");
-      try {
+    const parts: string[] = [];
+    if (kids > 0) parts.push(`${kids} subcategoria(s) serão excluídas`);
+    if (used > 0) parts.push(`${used} lançamento(s)/título(s) ficarão sem categoria`);
+    if (parts.length === 0) return `Excluir "${c.name}"?`;
+    return `"${c.name}": ${parts.join(" e ")}. Excluir tudo?`;
+  }
+
+  // No native confirm() here: some mobile browsers suppress repeated dialogs,
+  // which silently blocks the deletion. Confirmation is done inline instead.
+  async function doDelete(c: Category) {
+    if (!user) return;
+    setBusy(true);
+    setError("");
+    try {
+      if (isBlocked(c)) {
         const res = await deleteCategoryDeep(user.uid, c.id!);
-        await load();
         setError(
           `Excluída "${c.name}"${
             res.deletedCategories > 1 ? ` e ${res.deletedCategories - 1} subcategoria(s)` : ""
           }. ${res.unassigned} lançamento(s)/título(s) ficaram sem categoria.`,
         );
-      } catch (err) {
-        setError(`Falha ao excluir: ${(err as Error).message}`);
-      } finally {
-        setBusy(false);
+      } else {
+        await removeCategory(c.id!);
       }
-      return;
-    }
-    if (!confirm(`Excluir a categoria "${c.name}"?`)) return;
-    setBusy(true);
-    setError("");
-    try {
-      await removeCategory(c.id!);
+      setConfirmDelId(null);
       await load();
     } catch (err) {
       setError(`Falha ao excluir: ${(err as Error).message}`);
@@ -303,6 +304,25 @@ function Categories() {
                                 Cancelar
                               </button>
                             </>
+                          ) : confirmDelId === c.id ? (
+                            <>
+                              <span className="muted" style={{ marginRight: "0.5rem" }}>
+                                {delMessage(c)}
+                              </span>
+                              <button
+                                style={{ background: "var(--err)" }}
+                                disabled={busy}
+                                onClick={() => doDelete(c)}
+                              >
+                                {isBlocked(c) ? "Excluir tudo" : "Confirmar exclusão"}
+                              </button>{" "}
+                              <button
+                                style={{ background: "var(--border)" }}
+                                onClick={() => setConfirmDelId(null)}
+                              >
+                                Cancelar
+                              </button>
+                            </>
                           ) : (
                             <>
                               <button
@@ -323,7 +343,11 @@ function Categories() {
                               </button>{" "}
                               <button
                                 style={{ background: "var(--err)" }}
-                                onClick={() => del(c)}
+                                onClick={() => {
+                                  setEditingId(null);
+                                  setMergingId(null);
+                                  setConfirmDelId(c.id!);
+                                }}
                               >
                                 Excluir
                               </button>
