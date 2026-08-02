@@ -85,6 +85,11 @@ export function updateAccount(id: string, patch: Partial<Account>): Promise<void
   return updateDoc(doc(db, COLLECTIONS.accounts, id), patch as DocumentData);
 }
 
+/** Delete an account. Callers should ensure it is not in use first. */
+export function deleteAccount(id: string): Promise<void> {
+  return deleteDoc(doc(db, COLLECTIONS.accounts, id));
+}
+
 /** List the categories owned by a user. */
 export async function listCategories(ownerId: string): Promise<Category[]> {
   const q = query(collection(db, COLLECTIONS.categories), where("ownerId", "==", ownerId));

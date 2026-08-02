@@ -5,12 +5,14 @@ import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
 import {
   createAccount,
+  deleteAccount,
   listAccounts,
   listTransactions,
   updateAccount,
 } from "@/services/firestore";
+import { listBills } from "@/services/bills";
 import { computeBalances } from "@/lib/dashboard/balances";
-import type { Account, AccountType, Transaction } from "@/types";
+import type { Account, AccountType, Bill, Transaction } from "@/types";
 
 const TYPE_LABELS: Record<AccountType, string> = {
   checking: "Conta corrente",
@@ -46,6 +48,7 @@ function Accounts() {
   const { user } = useAuth();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [txs, setTxs] = useState<Transaction[]>([]);
+  const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -62,9 +65,15 @@ function Accounts() {
     setError("");
     setLoading(true);
     try {
-      const [a, t] = await Promise.all([listAccounts(user.uid), listTransactions(user.uid)]);
+      const [a, t, pay, rec] = await Promise.all([
+        listAccounts(user.uid),
+        listTransactions(user.uid),
+        listBills(user.uid, "payable"),
+        listBills(user.uid, "receivable"),
+      ]);
       setAccounts(a);
       setTxs(t);
+      setBills([...pay, ...rec]);
     } catch (err) {
       setError(`Falha ao carregar: ${(err as Error).message}`);
     } finally {
@@ -81,6 +90,48 @@ function Accounts() {
     () => new Map(result.balances.map((b) => [b.accountId, b])),
     [result],
   );
+
+  // How many records still point at each account (blocks deletion when in use).
+  const usageById = useMemo(() => {
+    const usage = new Map<string, number>();
+    const bump = (id?: string | null) => {
+      if (!id) return;
+      usage.set(id, (usage.get(id) ?? 0) + 1);
+    };
+    for (const t of txs) {
+      bump(t.accountId);
+      bump(t.transferAccountId);
+    }
+    for (const b of bills) {
+      bump(b.accountId);
+      for (const p of b.payments ?? []) bump(p.accountId);
+    }
+    return usage;
+  }, [txs, bills]);
+
+  async function handleDelete(a: Account) {
+    if (!a.id) return;
+    const uses = usageById.get(a.id) ?? 0;
+    if (uses > 0) {
+      setError(
+        `Não é possível excluir “${a.name}”: a conta está em uso em ${uses} lançamento(s)/título(s). ` +
+          `Reatribua ou remova esses registros antes de excluir a conta.`,
+      );
+      return;
+    }
+    if (!confirm(`Excluir a conta “${a.name}”? Esta ação não pode ser desfeita.`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      await deleteAccount(a.id);
+      if (editingId === a.id) setEditingId(null);
+      await load();
+    } catch (err) {
+      setError(`Falha ao excluir: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function startEdit(a: Account) {
     setEditingId(a.id!);
@@ -254,12 +305,24 @@ function Accounts() {
                         >
                           {bal ? brl(bal.current) : "—"}
                         </td>
-                        <td>
+                        <td style={{ whiteSpace: "nowrap" }}>
                           <button
                             style={{ background: "var(--border)" }}
                             onClick={() => startEdit(a)}
                           >
                             Editar
+                          </button>{" "}
+                          <button
+                            style={{ background: "var(--err)" }}
+                            disabled={busy}
+                            title={
+                              (usageById.get(a.id!) ?? 0) > 0
+                                ? "Conta em uso — reatribua os lançamentos/títulos antes de excluir"
+                                : "Excluir conta"
+                            }
+                            onClick={() => handleDelete(a)}
+                          >
+                            Excluir
                           </button>
                         </td>
                       </>
