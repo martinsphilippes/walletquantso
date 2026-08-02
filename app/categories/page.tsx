@@ -9,6 +9,7 @@ import {
   createCategory,
   updateCategory,
   removeCategory,
+  deleteCategoryDeep,
   mergeCategories,
 } from "@/services/categories";
 import { computeCategoryUsage } from "@/lib/categories/usage";
@@ -111,12 +112,29 @@ function Categories() {
   }
 
   async function del(c: Category) {
+    if (!user) return;
     const used = usage.get(c.id!) ?? 0;
     const kids = childCount.get(c.id!) ?? 0;
     if (used > 0 || kids > 0) {
-      setError(
-        `"${c.name}" está em uso (${used} lançamento(s)/título(s), ${kids} subcategoria(s)). Use "Mesclar" em vez de excluir.`,
-      );
+      const parts: string[] = [];
+      if (kids > 0) parts.push(`${kids} subcategoria(s) — que também serão excluídas`);
+      if (used > 0) parts.push(`${used} lançamento(s)/título(s) — que ficarão SEM categoria`);
+      if (!confirm(`"${c.name}" tem ${parts.join(" e ")}.\n\nExcluir tudo isso junto?`)) return;
+      setBusy(true);
+      setError("");
+      try {
+        const res = await deleteCategoryDeep(user.uid, c.id!);
+        await load();
+        setError(
+          `Excluída "${c.name}"${
+            res.deletedCategories > 1 ? ` e ${res.deletedCategories - 1} subcategoria(s)` : ""
+          }. ${res.unassigned} lançamento(s)/título(s) ficaram sem categoria.`,
+        );
+      } catch (err) {
+        setError(`Falha ao excluir: ${(err as Error).message}`);
+      } finally {
+        setBusy(false);
+      }
       return;
     }
     if (!confirm(`Excluir a categoria "${c.name}"?`)) return;
