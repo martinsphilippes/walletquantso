@@ -88,14 +88,25 @@ adicione o domínio que a Vercel gerou (ex.: `walletquantso.vercel.app`).
 Habilite também os provedores de login (E-mail/senha e Google) em
 *Authentication → Sign-in method*.
 
-### 6. Publicar as regras e índices do Firestore
-Estes arquivos (`firestore.rules` e `firestore.indexes.json`) vão para o
-**Firebase**, não para a Vercel. Rode localmente (uma vez, com o Firebase CLI):
-```bash
-firebase login
-npm run deploy:rules      # firestore.rules
-npm run deploy:indexes    # firestore.indexes.json
-```
+### 6. Publicar as regras e os índices do Firestore (pelo Console — sem terminal)
+Estes arquivos vão para o **Firebase**, não para a Vercel. Dá para publicar tudo
+direto no navegador, sem instalar o Firebase CLI:
+
+**Regras (`firestore.rules`):**
+1. Firebase Console → **Firestore Database → aba Rules**.
+2. Apague o conteúdo atual e **cole o texto do arquivo `firestore.rules`** deste
+   repositório.
+3. Clique em **Publish**.
+
+**Índices (`firestore.indexes.json`):**
+- Jeito mais fácil: **use o app normalmente**. Quando uma consulta precisar de um
+  índice composto, o Firebase mostra no console do navegador um link
+  **“Create index”** — clique nele e confirme; o índice é criado sozinho.
+- Alternativa manual: Firebase Console → **Firestore Database → aba Indexes →
+  Add index**, recriando cada índice conforme o `firestore.indexes.json`.
+
+> Se preferir o terminal (Firebase CLI), os scripts `npm run deploy:rules` e
+> `npm run deploy:indexes` continuam disponíveis — mas não são necessários.
 
 ### Deploys automáticos
 Depois de conectado, **todo commit enviado ao `main` publica automaticamente**
