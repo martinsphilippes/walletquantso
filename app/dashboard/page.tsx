@@ -10,6 +10,7 @@ import {
   listCostCenters,
   listTransactions,
 } from "@/services/firestore";
+import { listBills } from "@/services/bills";
 import {
   createTransaction,
   updateTransaction,
@@ -19,13 +20,12 @@ import {
 import { TransactionForm } from "@/components/TransactionForm";
 import { transactionsToCsv } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
-import {
-  filterTransactions,
-  summarize,
-  type DashboardFilters,
-} from "@/lib/dashboard/filter";
+import { filterTransactions, type DashboardFilters } from "@/lib/dashboard/filter";
+import { computeOverview } from "@/lib/dashboard/overview";
+import { remaining, billStatus, STATUS_LABELS, sortByDueDate } from "@/lib/bills/status";
 import type {
   Account,
+  Bill,
   Category,
   Contact,
   CostCenter,
@@ -41,6 +41,8 @@ const TYPE_LABELS: Record<TransactionType, string> = {
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+const brDate = (iso: string) => iso.split("-").reverse().join("/");
 
 export default function DashboardPage() {
   return (
@@ -60,6 +62,8 @@ function Dashboard() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [payables, setPayables] = useState<Bill[]>([]);
+  const [receivables, setReceivables] = useState<Bill[]>([]);
   const [accountName, setAccountName] = useState<Map<string, string>>(new Map());
   const [categoryName, setCategoryName] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState("");
@@ -73,12 +77,14 @@ function Dashboard() {
     if (!user) return;
     setError("");
     try {
-      const [t, a, c, cc, ct] = await Promise.all([
+      const [t, a, c, cc, ct, pay, rec] = await Promise.all([
         listTransactions(user.uid),
         listAccounts(user.uid),
         listCategories(user.uid),
         listCostCenters(user.uid),
         listContacts(user.uid),
+        listBills(user.uid, "payable"),
+        listBills(user.uid, "receivable"),
       ]);
       setTxs(t);
       setAccounts(a);
@@ -87,6 +93,8 @@ function Dashboard() {
       ct.sort((x, y) => x.name.localeCompare(y.name, "pt-BR"));
       setCostCenters(cc);
       setContacts(ct);
+      setPayables(pay);
+      setReceivables(rec);
       setAccountName(new Map(a.map((x) => [x.id!, x.name])));
       setCategoryName(new Map(c.map((x) => [x.id!, x.name])));
     } catch (err) {
@@ -99,11 +107,20 @@ function Dashboard() {
     load();
   }, [load]);
 
+  const overview = useMemo(
+    () => computeOverview(accounts, txs ?? [], payables, receivables),
+    [accounts, txs, payables, receivables],
+  );
+
+  const openBills = useMemo(
+    () => sortByDueDate([...payables, ...receivables].filter((b) => remaining(b) > 0)),
+    [payables, receivables],
+  );
+
   const filtered = useMemo(
     () => (txs ? filterTransactions(txs, filters) : []),
     [txs, filters],
   );
-  const summary = useMemo(() => summarize(filtered), [filtered]);
 
   const set = (patch: Partial<DashboardFilters>) =>
     setFilters((prev) => ({ ...prev, ...patch }));
@@ -168,20 +185,49 @@ function Dashboard() {
     );
   }
 
+  const hasAnything =
+    txs.length > 0 || payables.length > 0 || receivables.length > 0 || accounts.length > 0;
+
   return (
     <>
       {error && <p className="badge err">{error}</p>}
 
+      {/* Situação atual (contas + títulos) */}
       <div className="stat-row">
-        <Stat label="Receitas" value={brl(summary.income)} color="var(--ok)" />
-        <Stat label="Despesas" value={brl(summary.expense)} color="var(--err)" />
         <Stat
-          label="Saldo"
-          value={brl(summary.balance)}
-          color={summary.balance >= 0 ? "var(--ok)" : "var(--err)"}
+          label="Saldo atual"
+          value={brl(overview.currentBalance)}
+          color={overview.currentBalance >= 0 ? "var(--ok)" : "var(--err)"}
         />
-        <Stat label="Lançamentos" value={String(summary.count)} />
+        <Stat label="A receber (em aberto)" value={brl(overview.toReceive)} color="var(--ok)" />
+        <Stat label="A pagar (em aberto)" value={brl(overview.toPay)} color="var(--err)" />
+        <Stat
+          label="Saldo projetado"
+          value={brl(overview.projectedBalance)}
+          color={overview.projectedBalance >= 0 ? "var(--ok)" : "var(--err)"}
+        />
       </div>
+
+      {/* Realizados e pendências */}
+      <div className="stat-row">
+        <Stat label="Receitas realizadas" value={brl(overview.realizedIncome)} color="var(--ok)" />
+        <Stat label="Despesas realizadas" value={brl(overview.realizedExpense)} color="var(--err)" />
+        <Stat
+          label="Vencido (em aberto)"
+          value={brl(overview.overdue)}
+          color={overview.overdue > 0 ? "var(--err)" : undefined}
+        />
+        <Stat label="Títulos pendentes" value={String(overview.pendingCount)} />
+      </div>
+
+      {!hasAnything && (
+        <div className="panel">
+          <p className="muted">
+            Comece criando uma conta financeira em “Contas financeiras”, depois registre
+            lançamentos ou contas a pagar/receber. Tudo aparece aqui automaticamente.
+          </p>
+        </div>
+      )}
 
       {form ? (
         <TransactionForm
@@ -201,14 +247,56 @@ function Dashboard() {
             + Novo lançamento
           </button>
           {accounts.length === 0 && (
-            <span className="muted"> — crie uma conta primeiro em “Contas”.</span>
+            <span className="muted"> — crie uma conta primeiro em “Contas financeiras”.</span>
           )}
         </p>
       )}
 
+      {/* Contas a pagar / receber em aberto */}
       <div className="panel">
-        <h2>Filtros</h2>
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+        <h2>Contas em aberto</h2>
+        {openBills.length === 0 ? (
+          <p className="muted">Nenhuma conta a pagar ou receber em aberto.</p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Vencimento</th>
+                  <th>Descrição</th>
+                  <th>Tipo</th>
+                  <th>Situação</th>
+                  <th style={{ textAlign: "right" }}>Em aberto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {openBills.map((b) => (
+                  <tr key={b.id}>
+                    <td>{brDate(b.dueDate)}</td>
+                    <td>{b.description}</td>
+                    <td>{b.kind === "payable" ? "A pagar" : "A receber"}</td>
+                    <td>{STATUS_LABELS[billStatus(b)]}</td>
+                    <td
+                      style={{
+                        textAlign: "right",
+                        whiteSpace: "nowrap",
+                        color: b.kind === "payable" ? "var(--err)" : "var(--ok)",
+                      }}
+                    >
+                      {brl(remaining(b))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Lançamentos (movimentos realizados) */}
+      <div className="panel">
+        <h2>Lançamentos</h2>
+        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
           <input
             placeholder="Buscar descrição…"
             value={filters.text ?? ""}
@@ -252,14 +340,8 @@ function Dashboard() {
               Limpar
             </button>
           )}
-        </div>
-      </div>
-
-      <div className="panel">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-          <span className="muted">{filtered.length} lançamento(s)</span>
           <button
-            style={{ background: "var(--border)" }}
+            style={{ background: "var(--border)", marginLeft: "auto" }}
             onClick={exportCsv}
             disabled={filtered.length === 0}
           >
@@ -267,64 +349,71 @@ function Dashboard() {
           </button>
         </div>
         {filtered.length === 0 ? (
-          <p className="muted">Nenhum lançamento encontrado.</p>
+          <p className="muted">
+            {txs.length === 0
+              ? "Nenhum lançamento ainda. Use “+ Novo lançamento” acima."
+              : "Nenhum lançamento encontrado com os filtros atuais."}
+          </p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Descrição</th>
-                <th>Tipo</th>
-                <th>Categoria</th>
-                <th>Conta</th>
-                <th style={{ textAlign: "right" }}>Valor</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((t) => (
-                <tr key={t.id}>
-                  <td>{t.date.split("-").reverse().join("/")}</td>
-                  <td>{t.description}</td>
-                  <td>{TYPE_LABELS[t.type]}</td>
-                  <td>{t.categoryId ? (categoryName.get(t.categoryId) ?? t.categoryId) : "—"}</td>
-                  <td>
-                    {t.type === "transfer"
-                      ? `${nameOfAccount(t.accountId)} → ${nameOfAccount(t.transferAccountId)}`
-                      : nameOfAccount(t.accountId)}
-                  </td>
-                  <td
-                    style={{
-                      textAlign: "right",
-                      color:
-                        t.type === "income"
-                          ? "var(--ok)"
-                          : t.type === "expense"
-                            ? "var(--err)"
-                            : "var(--text)",
-                    }}
-                  >
-                    {t.type === "expense" ? "-" : t.type === "income" ? "+" : ""}
-                    {brl(t.amount)}
-                  </td>
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    <button
-                      style={{ background: "var(--border)", padding: "0.3rem 0.6rem" }}
-                      onClick={() => setForm({ mode: "edit", tx: t })}
-                    >
-                      Editar
-                    </button>{" "}
-                    <button
-                      style={{ background: "var(--err)", padding: "0.3rem 0.6rem" }}
-                      onClick={() => handleDelete(t)}
-                    >
-                      Excluir
-                    </button>
-                  </td>
+          <div style={{ overflowX: "auto" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Descrição</th>
+                  <th>Tipo</th>
+                  <th>Categoria</th>
+                  <th>Conta</th>
+                  <th style={{ textAlign: "right" }}>Valor</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map((t) => (
+                  <tr key={t.id}>
+                    <td>{brDate(t.date)}</td>
+                    <td>{t.description}</td>
+                    <td>{TYPE_LABELS[t.type]}</td>
+                    <td>{t.categoryId ? (categoryName.get(t.categoryId) ?? t.categoryId) : "—"}</td>
+                    <td>
+                      {t.type === "transfer"
+                        ? `${nameOfAccount(t.accountId)} → ${nameOfAccount(t.transferAccountId)}`
+                        : nameOfAccount(t.accountId)}
+                    </td>
+                    <td
+                      style={{
+                        textAlign: "right",
+                        whiteSpace: "nowrap",
+                        color:
+                          t.type === "income"
+                            ? "var(--ok)"
+                            : t.type === "expense"
+                              ? "var(--err)"
+                              : "var(--text)",
+                      }}
+                    >
+                      {t.type === "expense" ? "-" : t.type === "income" ? "+" : ""}
+                      {brl(t.amount)}
+                    </td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <button
+                        style={{ background: "var(--border)", padding: "0.3rem 0.6rem" }}
+                        onClick={() => setForm({ mode: "edit", tx: t })}
+                      >
+                        Editar
+                      </button>{" "}
+                      <button
+                        style={{ background: "var(--err)", padding: "0.3rem 0.6rem" }}
+                        onClick={() => handleDelete(t)}
+                      >
+                        Excluir
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </>
