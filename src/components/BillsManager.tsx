@@ -42,6 +42,16 @@ const rid = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
+/** Next document number for this list: the highest existing numeric value + 1. */
+function nextDocumentNumber(bills: Bill[]): number {
+  let max = 0;
+  for (const b of bills) {
+    const n = parseInt(String(b.documentNumber ?? ""), 10);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return max + 1;
+}
+
 const STATUS_COLOR: Record<BillStatus, string> = {
   paid: "var(--ok)",
   partial: "var(--warn)",
@@ -114,6 +124,8 @@ export function BillsManager({ kind }: { kind: BillKind }) {
         listContacts(user.uid),
       ]);
       setBills(sortByDueDate(b));
+      // Suggest the next document number automatically (ascending).
+      setCreating((prev) => ({ ...prev, documentNumber: String(nextDocumentNumber(b)) }));
       setAccounts(a);
       setCategories(c.filter((x) => x.kind === (isPayable ? "expense" : "income")));
       cc.sort((x, y) => x.name.localeCompare(y.name, "pt-BR"));
@@ -195,7 +207,12 @@ export function BillsManager({ kind }: { kind: BillKind }) {
       );
       const groupId = mode === "single" ? null : rid();
       const now = Date.now();
-      for (const it of expanded) {
+      const startDoc = (() => {
+        const n = parseInt(creating.documentNumber.trim(), 10);
+        return Number.isFinite(n) && n > 0 ? n : nextDocumentNumber(bills ?? []);
+      })();
+      for (let i = 0; i < expanded.length; i++) {
+        const it = expanded[i];
         const description = it.installment
           ? `${fields.description} (${it.installment.number}/${it.installment.total})`
           : fields.description;
@@ -209,6 +226,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
           amount: it.amount,
           dueDate: it.dueDate,
           competenceDate: it.competenceDate,
+          documentNumber: String(startDoc + i),
           installment: it.installment,
           installmentGroupId: groupId,
         });
@@ -447,7 +465,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
               ))}
             </select>
           </Field>
-          <Field label="Nº documento">
+          <Field label="Nº documento (auto)">
             <input
               value={creating.documentNumber}
               onChange={(e) => setCreating({ ...creating, documentNumber: e.target.value })}
@@ -468,7 +486,9 @@ export function BillsManager({ kind }: { kind: BillKind }) {
         <p className="muted" style={{ marginTop: "0.6rem", fontSize: "0.85rem" }}>
           <strong>Repetição:</strong> <em>Única</em> cria um título só. <em>Fixa</em> repete o
           mesmo valor todo mês, na mesma data, pela quantidade de repetições. <em>Parcelado</em>{" "}
-          divide o valor total automaticamente na quantidade de parcelas (mensais).
+          divide o valor total automaticamente na quantidade de parcelas (mensais). O{" "}
+          <strong>Nº documento</strong> é preenchido automaticamente em ordem crescente (você pode
+          alterá-lo).
         </p>
       </div>
 
@@ -640,6 +660,14 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                   style={fieldStyle}
                                 />
                               </Field>
+                              <Field label="Competência">
+                                <input
+                                  type="date"
+                                  value={draft.competenceDate}
+                                  onChange={(e) => setDraft({ ...draft, competenceDate: e.target.value })}
+                                  style={fieldStyle}
+                                />
+                              </Field>
                               <Field label={contactLabel}>
                                 <select
                                   value={draft.contactId}
@@ -665,6 +693,26 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                     </option>
                                   ))}
                                 </select>
+                              </Field>
+                              <Field label="Centro">
+                                <select
+                                  value={draft.costCenterId}
+                                  onChange={(e) => setDraft({ ...draft, costCenterId: e.target.value })}
+                                >
+                                  <option value="">—</option>
+                                  {costCenters.map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                      {c.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </Field>
+                              <Field label="Nº documento">
+                                <input
+                                  value={draft.documentNumber}
+                                  onChange={(e) => setDraft({ ...draft, documentNumber: e.target.value })}
+                                  style={{ ...fieldStyle, width: 120 }}
+                                />
                               </Field>
                               <div>
                                 <button disabled={busy} onClick={() => saveEdit(b.id!)}>
