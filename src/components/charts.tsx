@@ -121,6 +121,51 @@ export function CumulativeChart({ months, width = 640, height = 180 }: {
   );
 }
 
+export interface LinePoint {
+  label: string;
+  value: number;
+}
+
+/** Generic line chart with a zero baseline (e.g. projected cash-flow balance). */
+export function LineChart({ points, width = 520, height = 160 }: {
+  points: LinePoint[];
+  width?: number;
+  height?: number;
+}) {
+  if (points.length === 0) return <p className="muted">Sem dados para o gráfico.</p>;
+
+  const pad = 28;
+  const values = points.map((p) => p.value);
+  const min = Math.min(0, ...values);
+  const max = Math.max(0, ...values);
+  const span = max - min || 1;
+  const stepX = points.length > 1 ? (width - pad * 2) / (points.length - 1) : 0;
+  const x = (i: number) => pad + i * stepX;
+  const y = (v: number) => pad + (1 - (v - min) / span) * (height - pad * 2);
+  const zeroY = y(0);
+
+  const line = points.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(p.value)}`).join(" ");
+  const area = `${line} L ${x(points.length - 1)} ${zeroY} L ${x(0)} ${zeroY} Z`;
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <svg width={width} height={height} role="img" aria-label="Fluxo de caixa projetado">
+        <line x1={pad} y1={zeroY} x2={width - pad} y2={zeroY} stroke="var(--border)" />
+        <path d={area} fill="rgba(79,140,255,0.15)" />
+        <path d={line} fill="none" stroke="var(--accent)" strokeWidth="2" />
+        {points.map((p, i) => (
+          <g key={i}>
+            <circle cx={x(i)} cy={y(p.value)} r="3" fill="var(--accent)" />
+            <text x={x(i)} y={height - 8} textAnchor="middle" fill="var(--muted)" fontSize="10">
+              {p.label}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
 export interface BarItem {
   label: string;
   value: number;

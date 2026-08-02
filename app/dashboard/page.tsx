@@ -29,7 +29,8 @@ import {
   resultadosPorCentro,
   type Slice,
 } from "@/lib/dashboard/breakdown";
-import { BarChart, DonutChart, PALETTE } from "@/components/charts";
+import { BarChart, DonutChart, LineChart, PALETTE } from "@/components/charts";
+import { projectCashFlow } from "@/lib/cashflow/project";
 import { remaining, billStatus, STATUS_LABELS, sortByDueDate } from "@/lib/bills/status";
 import type {
   Account,
@@ -51,6 +52,12 @@ const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 const brDate = (iso: string) => iso.split("-").reverse().join("/");
+
+const MONTHS_ABBR = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const monthLabel = (ym: string) => {
+  const [y, m] = ym.split("-").map(Number);
+  return `${MONTHS_ABBR[m - 1]}/${String(y).slice(2)}`;
+};
 
 export default function DashboardPage() {
   return (
@@ -164,6 +171,16 @@ function Dashboard() {
 
   const toDonut = (slices: Slice[]) =>
     slices.map((s, i) => ({ label: s.label, value: s.value, color: PALETTE[i % PALETTE.length] }));
+
+  const openingBalance = useMemo(
+    () => accounts.reduce((s, a) => s + (a.initialBalance ?? 0), 0),
+    [accounts],
+  );
+  const cashflow = useMemo(
+    () => projectCashFlow(txs ?? [], [...payables, ...receivables], { openingBalance }),
+    [txs, payables, receivables, openingBalance],
+  );
+  const projectedEnd = cashflow.length ? cashflow[cashflow.length - 1].balance : openingBalance;
 
   const filtered = useMemo(
     () => (txs ? filterTransactions(txs, filters) : []),
@@ -359,6 +376,67 @@ function Dashboard() {
               </table>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Fluxo de caixa (projeção) + Resultados de caixa (realizado) */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+          gap: "1rem",
+        }}
+      >
+        <div className="panel">
+          <h2 style={{ marginBottom: 0 }}>Fluxo de caixa</h2>
+          <p className="muted" style={{ marginTop: 2 }}>Saldo projetado por mês</p>
+          <LineChart points={cashflow.map((m) => ({ label: monthLabel(m.month), value: m.balance }))} />
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              borderTop: "1px solid var(--border)",
+              paddingTop: "0.6rem",
+              marginTop: "0.6rem",
+            }}
+          >
+            <strong>Saldo projetado ao fim</strong>
+            <strong style={{ color: projectedEnd >= 0 ? "var(--ok)" : "var(--err)" }}>
+              {brl(projectedEnd)}
+            </strong>
+          </div>
+        </div>
+
+        <div className="panel">
+          <h2 style={{ marginBottom: 0 }}>Resultados de caixa</h2>
+          <p className="muted" style={{ marginTop: 2 }}>Movimentado (realizado)</p>
+          <BarChart
+            items={[
+              { label: "Entradas", value: overview.realizedIncome, color: "var(--ok)" },
+              { label: "Saídas", value: overview.realizedExpense, color: "var(--err)" },
+            ]}
+          />
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              borderTop: "1px solid var(--border)",
+              paddingTop: "0.6rem",
+              marginTop: "0.6rem",
+            }}
+          >
+            <strong>Resultado</strong>
+            <strong
+              style={{
+                color:
+                  overview.realizedIncome - overview.realizedExpense >= 0
+                    ? "var(--ok)"
+                    : "var(--err)",
+              }}
+            >
+              {brl(overview.realizedIncome - overview.realizedExpense)}
+            </strong>
+          </div>
         </div>
       </div>
 
