@@ -9,6 +9,7 @@ import {
   createContact,
   updateContact,
   removeContact,
+  deleteContactDeep,
   mergeContacts,
 } from "@/services/contacts";
 import { countReferences } from "@/lib/references/usage";
@@ -56,6 +57,7 @@ function Contacts() {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [mergingId, setMergingId] = useState<string | null>(null);
   const [mergeTarget, setMergeTarget] = useState("");
+  const [confirmDelId, setConfirmDelId] = useState<string | null>(null);
   const [creating, setCreating] = useState<Draft>(emptyDraft);
 
   const load = useCallback(async () => {
@@ -117,19 +119,29 @@ function Contacts() {
     }
   }
 
-  async function del(c: Contact) {
+  const isBlocked = (c: Contact) => (usage.get(c.id!) ?? 0) > 0;
+
+  function delMessage(c: Contact): string {
     const used = usage.get(c.id!) ?? 0;
     if (used > 0) {
-      setError(
-        `"${c.name}" está em uso (${used} lançamento(s)/título(s)). Use "Mesclar" em vez de excluir.`,
-      );
-      return;
+      return `"${c.name}": ${used} lançamento(s)/título(s) ficarão sem contato. Excluir?`;
     }
-    if (!confirm(`Excluir o contato "${c.name}"?`)) return;
+    return `Excluir "${c.name}"?`;
+  }
+
+  // Inline confirmation (no native confirm(), which some mobile browsers suppress).
+  async function doDelete(c: Contact) {
+    if (!user) return;
     setBusy(true);
     setError("");
     try {
-      await removeContact(c.id!);
+      if (isBlocked(c)) {
+        const res = await deleteContactDeep(user.uid, c.id!);
+        setError(`Excluído "${c.name}". ${res.unassigned} lançamento(s)/título(s) ficaram sem contato.`);
+      } else {
+        await removeContact(c.id!);
+      }
+      setConfirmDelId(null);
       await load();
     } catch (err) {
       setError(`Falha ao excluir: ${(err as Error).message}`);
@@ -293,6 +305,25 @@ function Contacts() {
                                 Cancelar
                               </button>
                             </>
+                          ) : confirmDelId === c.id ? (
+                            <>
+                              <span className="muted" style={{ marginRight: "0.5rem" }}>
+                                {delMessage(c)}
+                              </span>
+                              <button
+                                style={{ background: "var(--err)" }}
+                                disabled={busy}
+                                onClick={() => doDelete(c)}
+                              >
+                                {isBlocked(c) ? "Excluir mesmo assim" : "Confirmar exclusão"}
+                              </button>{" "}
+                              <button
+                                style={{ background: "var(--border)" }}
+                                onClick={() => setConfirmDelId(null)}
+                              >
+                                Cancelar
+                              </button>
+                            </>
                           ) : (
                             <>
                               <button
@@ -315,7 +346,14 @@ function Contacts() {
                                   </button>{" "}
                                 </>
                               )}
-                              <button style={{ background: "var(--err)" }} onClick={() => del(c)}>
+                              <button
+                                style={{ background: "var(--err)" }}
+                                onClick={() => {
+                                  setEditingId(null);
+                                  setMergingId(null);
+                                  setConfirmDelId(c.id!);
+                                }}
+                              >
                                 Excluir
                               </button>
                             </>
