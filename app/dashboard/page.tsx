@@ -23,7 +23,13 @@ import { downloadText } from "@/lib/export/download";
 import { filterTransactions, type DashboardFilters } from "@/lib/dashboard/filter";
 import { computeOverview } from "@/lib/dashboard/overview";
 import { computeCashBalances, monthResult } from "@/lib/dashboard/cash";
-import { BarChart } from "@/components/charts";
+import {
+  receitasPorCategoria,
+  despesasPorCategoria,
+  resultadosPorCentro,
+  type Slice,
+} from "@/lib/dashboard/breakdown";
+import { BarChart, DonutChart, PALETTE } from "@/components/charts";
 import { remaining, billStatus, STATUS_LABELS, sortByDueDate } from "@/lib/bills/status";
 import type {
   Account,
@@ -130,6 +136,34 @@ function Dashboard() {
   );
 
   const recentTxs = useMemo(() => (txs ?? []).slice(0, 5), [txs]);
+
+  const receitasCat = useMemo(
+    () => receitasPorCategoria(txs ?? [], receivables, categories),
+    [txs, receivables, categories],
+  );
+  const despesasCat = useMemo(
+    () => despesasPorCategoria(txs ?? [], payables, categories),
+    [txs, payables, categories],
+  );
+  const centros = useMemo(
+    () => resultadosPorCentro(txs ?? [], payables, receivables, costCenters),
+    [txs, payables, receivables, costCenters],
+  );
+  const centrosTotal = useMemo(
+    () =>
+      centros.reduce(
+        (acc, c) => ({
+          receitas: acc.receitas + c.receitas,
+          despesas: acc.despesas + c.despesas,
+          resultado: acc.resultado + c.resultado,
+        }),
+        { receitas: 0, despesas: 0, resultado: 0 },
+      ),
+    [centros],
+  );
+
+  const toDonut = (slices: Slice[]) =>
+    slices.map((s, i) => ({ label: s.label, value: s.value, color: PALETTE[i % PALETTE.length] }));
 
   const filtered = useMemo(
     () => (txs ? filterTransactions(txs, filters) : []),
@@ -397,6 +431,127 @@ function Dashboard() {
           )}
         </p>
       )}
+
+      {/* Receitas e Despesas por categoria (situação projetada) */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+          gap: "1rem",
+        }}
+      >
+        <div className="panel">
+          <h2 style={{ marginBottom: 0 }}>Receitas por categoria</h2>
+          <p className="muted" style={{ marginTop: 2 }}>Situação projetada</p>
+          {receitasCat.length === 0 ? (
+            <p className="muted">Sem receitas para exibir.</p>
+          ) : (
+            <>
+              <DonutChart items={toDonut(receitasCat)} />
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  borderTop: "1px solid var(--border)",
+                  paddingTop: "0.6rem",
+                  marginTop: "0.6rem",
+                }}
+              >
+                <strong>Total</strong>
+                <strong style={{ color: "var(--ok)" }}>
+                  {brl(receitasCat.reduce((s, x) => s + x.value, 0))}
+                </strong>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="panel">
+          <h2 style={{ marginBottom: 0 }}>Despesas por categoria</h2>
+          <p className="muted" style={{ marginTop: 2 }}>Situação projetada</p>
+          {despesasCat.length === 0 ? (
+            <p className="muted">Sem despesas para exibir.</p>
+          ) : (
+            <>
+              <DonutChart items={toDonut(despesasCat)} />
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  borderTop: "1px solid var(--border)",
+                  paddingTop: "0.6rem",
+                  marginTop: "0.6rem",
+                }}
+              >
+                <strong>Total</strong>
+                <strong style={{ color: "var(--err)" }}>
+                  {brl(despesasCat.reduce((s, x) => s + x.value, 0))}
+                </strong>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Resultados por centros (situação projetada) */}
+      <div className="panel">
+        <h2 style={{ marginBottom: 0 }}>Resultados por centros</h2>
+        <p className="muted" style={{ marginTop: 2 }}>Situação projetada</p>
+        {centros.length === 0 ? (
+          <p className="muted">Nenhum centro de custo com movimento.</p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Centro</th>
+                  <th style={{ textAlign: "right" }}>Receitas</th>
+                  <th style={{ textAlign: "right" }}>Despesas</th>
+                  <th style={{ textAlign: "right" }}>Resultado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {centros.map((c) => (
+                  <tr key={c.id ?? "none"}>
+                    <td>{c.name}</td>
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap", color: "var(--ok)" }}>
+                      {c.receitas ? brl(c.receitas) : "—"}
+                    </td>
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap", color: "var(--err)" }}>
+                      {c.despesas ? `-${brl(c.despesas)}` : "—"}
+                    </td>
+                    <td
+                      style={{
+                        textAlign: "right",
+                        whiteSpace: "nowrap",
+                        color: c.resultado >= 0 ? "var(--ok)" : "var(--err)",
+                      }}
+                    >
+                      {brl(c.resultado)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td><strong>Total</strong></td>
+                  <td style={{ textAlign: "right" }}>
+                    <strong>{brl(centrosTotal.receitas)}</strong>
+                  </td>
+                  <td style={{ textAlign: "right" }}>
+                    <strong>{centrosTotal.despesas ? `-${brl(centrosTotal.despesas)}` : brl(0)}</strong>
+                  </td>
+                  <td style={{ textAlign: "right" }}>
+                    <strong style={{ color: centrosTotal.resultado >= 0 ? "var(--ok)" : "var(--err)" }}>
+                      {brl(centrosTotal.resultado)}
+                    </strong>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* Contas a pagar / receber em aberto */}
       <div className="panel">
