@@ -5,7 +5,8 @@ import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
 import { listAccounts, listTransactions } from "@/services/firestore";
 import { listBills } from "@/services/bills";
-import { projectCashFlow } from "@/lib/cashflow/project";
+import { projectCashFlow, type CashFlowMonth } from "@/lib/cashflow/project";
+import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import type { Account, Bill, Transaction } from "@/types";
 
 const brl = (n: number) =>
@@ -74,6 +75,17 @@ function Fluxo() {
     [txs, bills, opening],
   );
 
+  const filterDefs: ColFilterDef<CashFlowMonth>[] = [
+    { key: "month", type: "select", value: (r) => monthLabel(r.month) },
+    { key: "in", value: (r) => (r.realizedIn ? brl(r.realizedIn) : ""), align: "right" },
+    { key: "out", value: (r) => (r.realizedOut ? brl(r.realizedOut) : ""), align: "right" },
+    { key: "plannedIn", value: (r) => (r.plannedIn ? brl(r.plannedIn) : ""), align: "right" },
+    { key: "plannedOut", value: (r) => (r.plannedOut ? brl(r.plannedOut) : ""), align: "right" },
+    { key: "net", value: (r) => brl(r.net), align: "right" },
+    { key: "balance", value: (r) => brl(r.balance), align: "right" },
+  ];
+  const cf = useColumnFilters(rows, filterDefs);
+
   if (loading) {
     return (
       <div className="panel">
@@ -108,9 +120,10 @@ function Fluxo() {
                   <th style={{ textAlign: "right" }}>Resultado</th>
                   <th style={{ textAlign: "right" }}>Saldo projetado</th>
                 </tr>
+                <FilterRow defs={filterDefs} cf={cf} />
               </thead>
               <tbody>
-                {rows.map((r) => {
+                {cf.filtered.map((r) => {
                   const isCurrent = r.month === currentMonth;
                   return (
                     <tr

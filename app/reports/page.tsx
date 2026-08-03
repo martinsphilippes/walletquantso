@@ -8,7 +8,9 @@ import {
   monthsPresent,
   totalsByCategory,
   totalsByMonth,
+  type MonthTotal,
 } from "@/lib/reports/aggregate";
+import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import { DonutChart, CumulativeChart, PALETTE, type DonutItem } from "@/components/charts";
 import { toCsv, brNumber } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
@@ -68,6 +70,13 @@ function Reports() {
     () => Math.max(1, ...byMonth.flatMap((m) => [m.income, m.expense])),
     [byMonth],
   );
+
+  const monthDefs: ColFilterDef<MonthTotal>[] = [
+    { key: "month", type: "select", value: (m) => monthLabel(m.month) },
+    { key: "bars", type: "none" },
+    { key: "balance", value: (m) => brl(m.balance), align: "right" },
+  ];
+  const monthCf = useColumnFilters(byMonth, monthDefs);
 
   const scoped = useMemo(
     () => (txs ? (month ? txs.filter((t) => t.date.startsWith(month)) : txs) : []),
@@ -145,9 +154,10 @@ function Reports() {
                 <th style={{ width: "50%" }}>Receita / Despesa</th>
                 <th style={{ textAlign: "right" }}>Saldo</th>
               </tr>
+              <FilterRow defs={monthDefs} cf={monthCf} />
             </thead>
             <tbody>
-              {byMonth.map((m) => (
+              {monthCf.filtered.map((m) => (
                 <tr key={m.month}>
                   <td>{monthLabel(m.month)}</td>
                   <td>

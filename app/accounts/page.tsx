@@ -12,6 +12,7 @@ import {
 } from "@/services/firestore";
 import { listBills } from "@/services/bills";
 import { computeBalances } from "@/lib/dashboard/balances";
+import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import type { Account, AccountType, Bill, Transaction } from "@/types";
 
 const TYPE_LABELS: Record<AccountType, string> = {
@@ -108,6 +109,16 @@ function Accounts() {
     }
     return usage;
   }, [txs, bills]);
+
+  const filterDefs: ColFilterDef<Account>[] = [
+    { key: "name", value: (a) => a.name },
+    { key: "type", type: "select", value: (a) => TYPE_LABELS[a.type] },
+    { key: "initial", value: (a) => brl(a.initialBalance ?? 0), align: "right" },
+    { key: "movements", value: (a) => (balanceById.get(a.id!) ? brl(balanceById.get(a.id!)!.movements) : ""), align: "right" },
+    { key: "current", value: (a) => (balanceById.get(a.id!) ? brl(balanceById.get(a.id!)!.current) : ""), align: "right" },
+    { key: "actions", type: "none" },
+  ];
+  const cf = useColumnFilters(accounts, filterDefs);
 
   async function handleDelete(a: Account) {
     if (!a.id) return;
@@ -232,9 +243,10 @@ function Accounts() {
                 <th style={{ textAlign: "right" }}>Saldo atual</th>
                 <th></th>
               </tr>
+              <FilterRow defs={filterDefs} cf={cf} />
             </thead>
             <tbody>
-              {accounts.map((a) => {
+              {cf.filtered.map((a) => {
                 const bal = balanceById.get(a.id!);
                 const editing = editingId === a.id;
                 return (

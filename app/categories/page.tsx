@@ -13,6 +13,7 @@ import {
   mergeCategories,
 } from "@/services/categories";
 import { computeCategoryUsage } from "@/lib/categories/usage";
+import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import type { Bill, Category, Transaction, TransactionType } from "@/types";
 
 const KIND_LABELS: Record<TransactionType, string> = {
@@ -87,6 +88,15 @@ function Categories() {
     for (const c of cats) if (c.parentId) m.set(c.parentId, (m.get(c.parentId) ?? 0) + 1);
     return m;
   }, [cats]);
+
+  const filterDefs: ColFilterDef<Category>[] = [
+    { key: "name", value: (c) => c.name },
+    { key: "kind", type: "select", value: (c) => KIND_LABELS[c.kind] },
+    { key: "parent", type: "select", value: (c) => (c.parentId ? (nameById.get(c.parentId) ?? "") : "") },
+    { key: "usage", value: (c) => String(usage.get(c.id!) ?? 0), align: "right" },
+    { key: "actions", type: "none" },
+  ];
+  const cf = useColumnFilters(cats, filterDefs);
 
   function startEdit(c: Category) {
     setMergingId(null);
@@ -215,9 +225,10 @@ function Categories() {
                 <th style={{ textAlign: "right" }}>Uso</th>
                 <th></th>
               </tr>
+              <FilterRow defs={filterDefs} cf={cf} />
             </thead>
             <tbody>
-              {cats.map((c) => {
+              {cf.filtered.map((c) => {
                 const editing = editingId === c.id;
                 const merging = mergingId === c.id;
                 const parentOptions = cats.filter((o) => o.id !== c.id);

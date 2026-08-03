@@ -5,7 +5,14 @@ import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
 import { listImportBatches } from "@/services/firestore";
 import { revertImport } from "@/services/import";
+import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import type { ImportBatch } from "@/types";
+
+const STATUS_TEXT: Record<ImportBatch["status"], string> = {
+  preview: "Prévia",
+  committed: "Gravado",
+  reverted: "Desfeito",
+};
 
 export default function HistoryPage() {
   return (
@@ -59,6 +66,16 @@ function History() {
     }
   }
 
+  const defs: ColFilterDef<ImportBatch>[] = [
+    { key: "date", value: (b) => new Date(b.createdAt).toLocaleString("pt-BR") },
+    { key: "file", value: (b) => b.sourceFileName },
+    { key: "status", type: "select", value: (b) => STATUS_TEXT[b.status] },
+    { key: "imported", value: (b) => String(b.counts.imported), align: "right" },
+    { key: "ignored", value: (b) => String(b.counts.ignored), align: "right" },
+    { key: "actions", type: "none" },
+  ];
+  const cf = useColumnFilters(batches ?? [], defs);
+
   if (batches === null) {
     return (
       <div className="panel">
@@ -83,9 +100,10 @@ function History() {
               <th>Ignorados</th>
               <th></th>
             </tr>
+            <FilterRow defs={defs} cf={cf} />
           </thead>
           <tbody>
-            {batches.map((b) => (
+            {cf.filtered.map((b) => (
               <tr key={b.id}>
                 <td>{new Date(b.createdAt).toLocaleString("pt-BR")}</td>
                 <td>{b.sourceFileName}</td>

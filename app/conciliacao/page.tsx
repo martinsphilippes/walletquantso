@@ -10,6 +10,7 @@ import {
   transactionsForAccount,
   summarizeClearing,
 } from "@/lib/reconcile/clearing";
+import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import type { Account, Transaction } from "@/types";
 
 const brl = (n: number) =>
@@ -73,6 +74,14 @@ function Conciliacao() {
     () => (onlyPending ? accountTxs.filter((t) => !t.reconciled) : accountTxs),
     [accountTxs, onlyPending],
   );
+
+  const filterDefs: ColFilterDef<Transaction>[] = [
+    { key: "check", type: "none" },
+    { key: "date", value: (t) => brDate(t.date) },
+    { key: "description", value: (t) => t.description || "" },
+    { key: "amount", value: (t) => brl(Math.abs(movementFor(t, accountId))), align: "right" },
+  ];
+  const cf = useColumnFilters(visible, filterDefs);
 
   async function toggle(t: Transaction) {
     if (!t.id) return;
@@ -173,9 +182,10 @@ function Conciliacao() {
                   <th>Descrição</th>
                   <th style={{ textAlign: "right" }}>Valor</th>
                 </tr>
+                <FilterRow defs={filterDefs} cf={cf} />
               </thead>
               <tbody>
-                {visible.map((t) => {
+                {cf.filtered.map((t) => {
                   const m = movementFor(t, accountId);
                   return (
                     <tr key={t.id} style={t.reconciled ? { opacity: 0.6 } : undefined}>

@@ -18,6 +18,7 @@ import {
   type TransactionInput,
 } from "@/services/transactions";
 import { TransactionForm } from "@/components/TransactionForm";
+import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import { transactionsToCsv } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
 import { filterTransactions, type DashboardFilters } from "@/lib/dashboard/filter";
@@ -204,6 +205,24 @@ function Dashboard() {
 
   const nameOfAccount = (id?: string | null) =>
     id ? (accountName.get(id) ?? id) : "—";
+
+  const colDefs: ColFilterDef<Transaction>[] = [
+    { key: "date", value: (t) => brDate(t.date) },
+    { key: "description", value: (t) => t.description },
+    { key: "type", type: "select", value: (t) => TYPE_LABELS[t.type] },
+    { key: "category", type: "select", value: (t) => (t.categoryId ? (categoryName.get(t.categoryId) ?? "") : "") },
+    {
+      key: "account",
+      type: "select",
+      value: (t) =>
+        t.type === "transfer"
+          ? `${nameOfAccount(t.accountId)} → ${nameOfAccount(t.transferAccountId)}`
+          : nameOfAccount(t.accountId),
+    },
+    { key: "amount", value: (t) => brl(t.amount), align: "right" },
+    { key: "actions", type: "none" },
+  ];
+  const cf = useColumnFilters(filtered, colDefs);
 
   function exportCsv() {
     const csv = transactionsToCsv(filtered, {
@@ -806,9 +825,10 @@ function Dashboard() {
                   <th style={{ textAlign: "right" }}>Valor</th>
                   <th></th>
                 </tr>
+                <FilterRow defs={colDefs} cf={cf} />
               </thead>
               <tbody>
-                {filtered.map((t) => (
+                {cf.filtered.map((t) => (
                   <tr key={t.id}>
                     <td>{brDate(t.date)}</td>
                     <td>{t.description}</td>

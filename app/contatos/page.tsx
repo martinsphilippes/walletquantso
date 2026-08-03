@@ -13,6 +13,7 @@ import {
   mergeContacts,
 } from "@/services/contacts";
 import { countReferences } from "@/lib/references/usage";
+import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import type { Bill, Contact, ContactKind, Transaction } from "@/types";
 
 const KIND_LABELS: Record<ContactKind, string> = {
@@ -87,6 +88,15 @@ function Contacts() {
   }, [load]);
 
   const usage = useMemo(() => countReferences([...txs, ...bills], "contactId"), [txs, bills]);
+
+  const filterDefs: ColFilterDef<Contact>[] = [
+    { key: "name", value: (c) => c.name },
+    { key: "kind", type: "select", value: (c) => KIND_LABELS[c.kind] },
+    { key: "document", value: (c) => c.document ?? "" },
+    { key: "usage", value: (c) => String(usage.get(c.id!) ?? 0), align: "right" },
+    { key: "actions", type: "none" },
+  ];
+  const cf = useColumnFilters(items, filterDefs);
 
   function startEdit(c: Contact) {
     setMergingId(null);
@@ -218,9 +228,10 @@ function Contacts() {
                 <th style={{ textAlign: "right" }}>Uso</th>
                 <th></th>
               </tr>
+              <FilterRow defs={filterDefs} cf={cf} />
             </thead>
             <tbody>
-              {items.map((c) => {
+              {cf.filtered.map((c) => {
                 const editing = editingId === c.id;
                 const merging = mergingId === c.id;
                 const others = items.filter((o) => o.id !== c.id);

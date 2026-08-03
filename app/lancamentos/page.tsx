@@ -17,6 +17,7 @@ import {
   type TransactionInput,
 } from "@/services/transactions";
 import { TransactionForm } from "@/components/TransactionForm";
+import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import { transactionsToCsv } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
 import {
@@ -128,8 +129,29 @@ function Lancamentos() {
   const nameOf = (m: Map<string, string>, id?: string | null) =>
     id ? (m.get(id) ?? "—") : "—";
 
+  // Inline per-column filters, layered on top of the filter panel above.
+  const colDefs: ColFilterDef<Transaction>[] = [
+    { key: "date", value: (t) => t.date.split("-").reverse().join("/") },
+    { key: "description", value: (t) => t.description },
+    { key: "type", type: "select", value: (t) => TYPE_LABELS[t.type] },
+    { key: "category", type: "select", value: (t) => nameOf(categoryName, t.categoryId) },
+    { key: "center", type: "select", value: (t) => nameOf(costCenterName, t.costCenterId) },
+    { key: "contact", type: "select", value: (t) => nameOf(contactName, t.contactId) },
+    {
+      key: "account",
+      type: "select",
+      value: (t) =>
+        t.type === "transfer"
+          ? `${nameOfAccount(t.accountId)} → ${nameOfAccount(t.transferAccountId)}`
+          : nameOfAccount(t.accountId),
+    },
+    { key: "amount", value: (t) => brl(t.amount), align: "right" },
+    { key: "actions", type: "none" },
+  ];
+  const cf = useColumnFilters(filtered, colDefs);
+
   function exportCsv() {
-    const csv = transactionsToCsv(filtered, {
+    const csv = transactionsToCsv(cf.filtered, {
       account: (id) => (id ? (accountName.get(id) ?? id) : ""),
       category: (id) => (id ? (categoryName.get(id) ?? "") : ""),
       costCenter: (id) => (id ? (costCenterName.get(id) ?? "") : ""),
@@ -338,11 +360,11 @@ function Lancamentos() {
             marginBottom: "0.75rem",
           }}
         >
-          <span className="muted">{filtered.length} lançamento(s)</span>
+          <span className="muted">{cf.filtered.length} lançamento(s)</span>
           <button
             style={{ background: "var(--border)" }}
             onClick={exportCsv}
-            disabled={filtered.length === 0}
+            disabled={cf.filtered.length === 0}
           >
             Exportar CSV
           </button>
@@ -368,9 +390,10 @@ function Lancamentos() {
                   <th style={{ textAlign: "right" }}>Valor</th>
                   <th></th>
                 </tr>
+                <FilterRow defs={colDefs} cf={cf} />
               </thead>
               <tbody>
-                {filtered.map((t) => (
+                {cf.filtered.map((t) => (
                   <tr key={t.id}>
                     <td>{t.date.split("-").reverse().join("/")}</td>
                     <td>{t.description}</td>
