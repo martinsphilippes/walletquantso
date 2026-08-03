@@ -62,9 +62,12 @@ function Lancamentos() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [error, setError] = useState("");
   const [filters, setFilters] = useState<DashboardFilters>({});
-  const [form, setForm] = useState<{ mode: "new" } | { mode: "edit"; tx: Transaction } | null>(
-    null,
-  );
+  const [form, setForm] = useState<
+    | { mode: "new" }
+    | { mode: "edit"; tx: Transaction }
+    | { mode: "clone"; tx: Transaction }
+    | null
+  >(null);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -143,6 +146,10 @@ function Lancamentos() {
       if (form?.mode === "edit") {
         await updateTransaction(user.uid, form.tx.id!, input);
         setForm(null);
+      } else if (form?.mode === "clone") {
+        // Clone: create a brand-new lançamento from the copied data and close.
+        await createTransaction(user.uid, input);
+        setForm(null);
       } else {
         // Quick-entry: keep the form open so several lançamentos can be added
         // in a row (the form itself keeps the selected fields fixed).
@@ -212,8 +219,14 @@ function Lancamentos() {
           categories={categories}
           costCenters={costCenters}
           contacts={contacts}
-          initial={form.mode === "edit" ? txToInput(form.tx) : undefined}
-          submitLabel={form.mode === "edit" ? "Salvar alterações" : "Adicionar lançamento"}
+          initial={form.mode === "new" ? undefined : txToInput(form.tx)}
+          submitLabel={
+            form.mode === "edit"
+              ? "Salvar alterações"
+              : form.mode === "clone"
+                ? "Duplicar lançamento"
+                : "Adicionar lançamento"
+          }
           busy={saving}
           quickEntry={form.mode === "new"}
           onSubmit={handleSubmit}
@@ -391,6 +404,15 @@ function Lancamentos() {
                         onClick={() => setForm({ mode: "edit", tx: t })}
                       >
                         Editar
+                      </button>{" "}
+                      <button
+                        style={{ background: "var(--border)", padding: "0.3rem 0.6rem" }}
+                        onClick={() => {
+                          setForm({ mode: "clone", tx: t });
+                          if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+                        }}
+                      >
+                        Clonar
                       </button>{" "}
                       <button
                         style={{ background: "var(--err)", padding: "0.3rem 0.6rem" }}
