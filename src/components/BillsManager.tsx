@@ -425,6 +425,13 @@ export function BillsManager({ kind }: { kind: BillKind }) {
         accountId: account,
       });
       setPayingId(null);
+      // If this baixa fully settles the title, drop it from the list at once
+      // (it now lives in Lançamentos). Partial baixas keep the remaining balance.
+      const fullySettled = amount + 0.005 >= remaining(b);
+      if (fullySettled) {
+        setBills((prev) => (prev ?? []).filter((x) => x.id !== b.id));
+        sel.clear();
+      }
       await load();
     } catch (err) {
       setError(`Falha ao registrar baixa: ${(err as Error).message}`);

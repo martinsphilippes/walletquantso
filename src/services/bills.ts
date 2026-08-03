@@ -69,9 +69,16 @@ export async function addPayment(id: string, payment: BillPayment): Promise<void
   const txRecord = buildBillPaymentTransaction(bill, payment);
   const txRef = await addDoc(collection(db, COLLECTIONS.transactions), txRecord);
 
-  const stored: BillPayment = { ...payment, transactionId: txRef.id };
-  const payments = [...(bill.payments ?? []), stored];
-  await updateDoc(doc(db, COLLECTIONS.bills, id), { payments });
+  // Record the settlement on the bill. If this fails, roll back the transaction
+  // so we never end up with a lançamento that didn't actually settle the title.
+  try {
+    const stored: BillPayment = { ...payment, transactionId: txRef.id };
+    const payments = [...(bill.payments ?? []), stored];
+    await updateDoc(doc(db, COLLECTIONS.bills, id), { payments });
+  } catch (err) {
+    await deleteDoc(doc(db, COLLECTIONS.transactions, txRef.id)).catch(() => {});
+    throw err;
+  }
 }
 
 /** Remove a settlement from a bill, deleting its materialized transaction too. */
