@@ -14,6 +14,7 @@ import {
 } from "@/services/cost-centers";
 import { countReferences } from "@/lib/references/usage";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
+import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import type { Bill, CostCenter, Transaction } from "@/types";
 
 export default function CostCentersPage() {
@@ -72,11 +73,35 @@ function CostCenters() {
   const usage = useMemo(() => countReferences([...txs, ...bills], "costCenterId"), [txs, bills]);
 
   const filterDefs: ColFilterDef<CostCenter>[] = [
+    { key: "select", type: "none" },
     { key: "name", value: (c) => c.name },
     { key: "usage", value: (c) => String(usage.get(c.id!) ?? 0), align: "right" },
     { key: "actions", type: "none" },
   ];
   const cf = useColumnFilters(items, filterDefs);
+  const sel = useBulkSelect(cf.filtered, (c) => c.id);
+
+  async function bulkDelete() {
+    if (!user || sel.count === 0) return;
+    setBusy(true);
+    setError("");
+    const byId = new Map(items.map((c) => [c.id!, c]));
+    try {
+      for (const id of sel.selectedIds) {
+        const c = byId.get(id);
+        if (!c) continue;
+        if (isBlocked(c)) await deleteCostCenterDeep(user.uid, id);
+        else await removeCostCenter(id);
+      }
+      sel.clear();
+      setConfirmDelId(null);
+      await load();
+    } catch (err) {
+      setError(`Falha ao excluir: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function startEdit(c: CostCenter) {
     setMergingId(null);
@@ -180,6 +205,7 @@ function CostCenters() {
       {error && <p className="badge warn">{error}</p>}
 
       <div className="panel">
+        <BulkBar sel={sel} onDelete={bulkDelete} busy={busy} noun="centro" />
         {items.length === 0 ? (
           <p className="muted">
             Nenhum centro de custo ainda. Centros de custo ajudam a agrupar
@@ -189,6 +215,7 @@ function CostCenters() {
           <table>
             <thead>
               <tr>
+                <th style={{ width: 32 }}><SelectAllCheckbox sel={sel} /></th>
                 <th>Centro de custo</th>
                 <th style={{ textAlign: "right" }}>Uso</th>
                 <th></th>
@@ -202,6 +229,7 @@ function CostCenters() {
                 const others = items.filter((o) => o.id !== c.id);
                 return (
                   <tr key={c.id}>
+                    <td><RowCheckbox sel={sel} id={c.id} /></td>
                     {editing ? (
                       <>
                         <td>

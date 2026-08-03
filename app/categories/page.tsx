@@ -14,6 +14,7 @@ import {
 } from "@/services/categories";
 import { computeCategoryUsage } from "@/lib/categories/usage";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
+import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import type { Bill, Category, Transaction, TransactionType } from "@/types";
 
 const KIND_LABELS: Record<TransactionType, string> = {
@@ -90,6 +91,7 @@ function Categories() {
   }, [cats]);
 
   const filterDefs: ColFilterDef<Category>[] = [
+    { key: "select", type: "none" },
     { key: "name", value: (c) => c.name },
     { key: "kind", type: "select", value: (c) => KIND_LABELS[c.kind] },
     { key: "parent", type: "select", value: (c) => (c.parentId ? (nameById.get(c.parentId) ?? "") : "") },
@@ -97,6 +99,29 @@ function Categories() {
     { key: "actions", type: "none" },
   ];
   const cf = useColumnFilters(cats, filterDefs);
+  const sel = useBulkSelect(cf.filtered, (c) => c.id);
+
+  async function bulkDelete() {
+    if (!user || sel.count === 0) return;
+    setBusy(true);
+    setError("");
+    const byId = new Map(cats.map((c) => [c.id!, c]));
+    try {
+      for (const id of sel.selectedIds) {
+        const c = byId.get(id);
+        if (!c) continue;
+        if (isBlocked(c)) await deleteCategoryDeep(user.uid, id);
+        else await removeCategory(id);
+      }
+      sel.clear();
+      setConfirmDelId(null);
+      await load();
+    } catch (err) {
+      setError(`Falha ao excluir: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function startEdit(c: Category) {
     setMergingId(null);
@@ -213,12 +238,14 @@ function Categories() {
       {error && <p className="badge warn">{error}</p>}
 
       <div className="panel">
+        <BulkBar sel={sel} onDelete={bulkDelete} busy={busy} noun="categoria" />
         {cats.length === 0 ? (
           <p className="muted">Nenhuma categoria ainda. Crie a primeira abaixo.</p>
         ) : (
           <table>
             <thead>
               <tr>
+                <th style={{ width: 32 }}><SelectAllCheckbox sel={sel} /></th>
                 <th>Categoria</th>
                 <th>Tipo</th>
                 <th>Subcategoria de</th>
@@ -234,6 +261,7 @@ function Categories() {
                 const parentOptions = cats.filter((o) => o.id !== c.id);
                 return (
                   <tr key={c.id}>
+                    <td><RowCheckbox sel={sel} id={c.id} /></td>
                     {editing ? (
                       <>
                         <td>

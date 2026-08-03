@@ -23,6 +23,7 @@ import {
 } from "@/services/bills";
 import { parseBrCurrency } from "@/lib/br/parse";
 import { DateParts } from "@/components/DateParts";
+import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import { expandRepeat, type RepeatMode } from "@/lib/bills/repeat";
 import {
   billStatus,
@@ -201,6 +202,23 @@ export function BillsManager({ kind }: { kind: BillKind }) {
       }),
     [entityFiltered, showPaid, fStatus, t],
   );
+
+  const sel = useBulkSelect(visible, (b) => b.id);
+
+  async function bulkDelete() {
+    if (sel.count === 0) return;
+    setBusy(true);
+    setError("");
+    try {
+      for (const id of sel.selectedIds) await removeBill(id);
+      sel.clear();
+      await load();
+    } catch (err) {
+      setError(`Falha ao excluir: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const filterCount =
     (fAccount ? 1 : 0) +
@@ -651,6 +669,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
             Mostrar quitados
           </label>
         </div>
+        <BulkBar sel={sel} onDelete={bulkDelete} busy={busy} noun="título" />
         {visible.length === 0 ? (
           <p className="muted">
             {bills.length === 0
@@ -662,6 +681,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
             <table>
               <thead>
                 <tr>
+                  <th style={{ width: 32 }}><SelectAllCheckbox sel={sel} /></th>
                   <th>Vencimento</th>
                   <th>Descrição</th>
                   <th>Parcela</th>
@@ -683,6 +703,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                   return (
                     <Fragment key={b.id}>
                       <tr>
+                        <td><RowCheckbox sel={sel} id={b.id} /></td>
                         <td style={{ whiteSpace: "nowrap" }}>{brDate(b.dueDate)}</td>
                         <td>{b.description}</td>
                         <td style={{ whiteSpace: "nowrap" }}>
@@ -740,7 +761,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
 
                       {paying && (
                         <tr key={`${b.id}-pay`}>
-                          <td colSpan={9} style={subRowStyle}>
+                          <td colSpan={10} style={subRowStyle}>
                             <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
                               <strong>{settleLabel}:</strong>
                               <input
@@ -773,7 +794,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
 
                       {editing && (
                         <tr key={`${b.id}-edit`}>
-                          <td colSpan={9} style={subRowStyle}>
+                          <td colSpan={10} style={subRowStyle}>
                             <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "flex-end" }}>
                               <Field label="Descrição">
                                 <input
@@ -865,7 +886,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
 
                       {paid > 0 && (
                         <tr key={`${b.id}-hist`}>
-                          <td colSpan={9} style={{ ...subRowStyle, paddingTop: 0 }}>
+                          <td colSpan={10} style={{ ...subRowStyle, paddingTop: 0 }}>
                             <span className="muted" style={{ fontSize: "0.8rem" }}>
                               Baixas:{" "}
                               {b.payments.map((p) => (

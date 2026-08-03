@@ -19,6 +19,7 @@ import {
 } from "@/services/transactions";
 import { TransactionForm } from "@/components/TransactionForm";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
+import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import { transactionsToCsv } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
 import { filterTransactions, type DashboardFilters } from "@/lib/dashboard/filter";
@@ -207,6 +208,7 @@ function Dashboard() {
     id ? (accountName.get(id) ?? id) : "—";
 
   const colDefs: ColFilterDef<Transaction>[] = [
+    { key: "select", type: "none" },
     { key: "date", value: (t) => brDate(t.date) },
     { key: "description", value: (t) => t.description },
     { key: "type", type: "select", value: (t) => TYPE_LABELS[t.type] },
@@ -223,6 +225,19 @@ function Dashboard() {
     { key: "actions", type: "none" },
   ];
   const cf = useColumnFilters(filtered, colDefs);
+  const sel = useBulkSelect(cf.filtered, (t) => t.id);
+
+  async function handleBulkDelete() {
+    if (!user || sel.count === 0) return;
+    setError("");
+    try {
+      for (const id of sel.selectedIds) await removeTransaction(user.uid, id);
+      sel.clear();
+      await load();
+    } catch (err) {
+      setError(`Falha ao excluir: ${(err as Error).message}`);
+    }
+  }
 
   function exportCsv() {
     const csv = transactionsToCsv(filtered, {
@@ -806,6 +821,7 @@ function Dashboard() {
             Exportar CSV
           </button>
         </div>
+        <BulkBar sel={sel} onDelete={handleBulkDelete} noun="lançamento" />
         {filtered.length === 0 ? (
           <p className="muted">
             {txs.length === 0
@@ -817,6 +833,7 @@ function Dashboard() {
             <table>
               <thead>
                 <tr>
+                  <th style={{ width: 32 }}><SelectAllCheckbox sel={sel} /></th>
                   <th>Data</th>
                   <th>Descrição</th>
                   <th>Tipo</th>
@@ -830,6 +847,7 @@ function Dashboard() {
               <tbody>
                 {cf.filtered.map((t) => (
                   <tr key={t.id}>
+                    <td><RowCheckbox sel={sel} id={t.id} /></td>
                     <td>{brDate(t.date)}</td>
                     <td>{t.description}</td>
                     <td>{TYPE_LABELS[t.type]}</td>

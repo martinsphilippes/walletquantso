@@ -13,6 +13,7 @@ import {
 import { listBills } from "@/services/bills";
 import { computeBalances } from "@/lib/dashboard/balances";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
+import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import type { Account, AccountType, Bill, Transaction } from "@/types";
 
 const TYPE_LABELS: Record<AccountType, string> = {
@@ -111,6 +112,7 @@ function Accounts() {
   }, [txs, bills]);
 
   const filterDefs: ColFilterDef<Account>[] = [
+    { key: "select", type: "none" },
     { key: "name", value: (a) => a.name },
     { key: "type", type: "select", value: (a) => TYPE_LABELS[a.type] },
     { key: "initial", value: (a) => brl(a.initialBalance ?? 0), align: "right" },
@@ -119,6 +121,39 @@ function Accounts() {
     { key: "actions", type: "none" },
   ];
   const cf = useColumnFilters(accounts, filterDefs);
+  const sel = useBulkSelect(cf.filtered, (a) => a.id);
+
+  async function bulkDelete() {
+    if (sel.count === 0) return;
+    setBusy(true);
+    setError("");
+    const byId = new Map(accounts.map((a) => [a.id!, a]));
+    const blocked: string[] = [];
+    try {
+      for (const id of sel.selectedIds) {
+        const a = byId.get(id);
+        if (!a) continue;
+        if ((usageById.get(id) ?? 0) > 0) {
+          blocked.push(a.name);
+          continue;
+        }
+        await deleteAccount(id);
+        if (editingId === id) setEditingId(null);
+      }
+      sel.clear();
+      await load();
+      if (blocked.length > 0) {
+        setError(
+          `${blocked.length} conta(s) não foram excluídas por estarem em uso: ${blocked.join(", ")}. ` +
+            `Reatribua ou remova os lançamentos/títulos ligados a elas primeiro.`,
+        );
+      }
+    } catch (err) {
+      setError(`Falha ao excluir: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function handleDelete(a: Account) {
     if (!a.id) return;
@@ -230,12 +265,14 @@ function Accounts() {
       )}
 
       <div className="panel">
+        <BulkBar sel={sel} onDelete={bulkDelete} busy={busy} noun="conta" />
         {accounts.length === 0 ? (
           <p className="muted">Nenhuma conta ainda. Crie a primeira abaixo.</p>
         ) : (
           <table>
             <thead>
               <tr>
+                <th style={{ width: 32 }}><SelectAllCheckbox sel={sel} /></th>
                 <th>Conta</th>
                 <th>Tipo</th>
                 <th style={{ textAlign: "right" }}>Saldo inicial</th>
@@ -251,6 +288,7 @@ function Accounts() {
                 const editing = editingId === a.id;
                 return (
                   <tr key={a.id}>
+                    <td><RowCheckbox sel={sel} id={a.id} /></td>
                     {editing ? (
                       <>
                         <td>
