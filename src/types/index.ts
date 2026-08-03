@@ -114,6 +114,8 @@ export interface Bill {
   installment?: Installment | null;
   installmentGroupId?: string | null;
   notes?: string | null;
+  /** Id of the import batch that created this title (for undo/audit). */
+  importBatchId?: string | null;
   createdAt: number;
 }
 

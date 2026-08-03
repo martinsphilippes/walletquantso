@@ -16,8 +16,16 @@ import {
 import type { CanonicalField, ColumnMapping } from "@/types";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
-import { commitImport, revertImport, type CommitReport } from "@/services/import";
+import {
+  commitImport,
+  revertImport,
+  commitBillsImport,
+  revertBillsImport,
+  type CommitReport,
+} from "@/services/import";
 import Link from "next/link";
+
+type ImportMode = "transactions" | "bills";
 
 const FIELD_LABELS: Record<CanonicalField, string> = {
   date: "Data",
@@ -61,6 +69,9 @@ function Importer() {
   const [reverted, setReverted] = useState(false);
   const [mergeTransfers, setMergeTransfers] = useState(true);
   const [groupParcels, setGroupParcels] = useState(true);
+  const [mode, setMode] = useState<ImportMode>("transactions");
+  const [importedAsBills, setImportedAsBills] = useState(false);
+  const isBills = mode === "bills";
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     setError("");
@@ -121,19 +132,20 @@ function Importer() {
     return { rows, transfersFound, installmentGroupsFound };
   }, [preview, mergeTransfers, groupParcels]);
 
-  const rowsToImport: NormalizedRow[] = reconciled?.rows ?? preview?.importable ?? [];
+  // Titles skip the transfer/installment reconciliation (it doesn't apply).
+  const rowsToImport: NormalizedRow[] = isBills
+    ? preview?.importable ?? []
+    : reconciled?.rows ?? preview?.importable ?? [];
 
   async function confirmImport() {
     if (!user || !preview) return;
     setBusy(true);
     setError("");
     try {
-      const r = await commitImport({
-        ownerId: user.uid,
-        fileName,
-        mapping,
-        importable: rowsToImport,
-      });
+      const r = isBills
+        ? await commitBillsImport({ ownerId: user.uid, fileName, mapping, importable: rowsToImport })
+        : await commitImport({ ownerId: user.uid, fileName, mapping, importable: rowsToImport });
+      setImportedAsBills(isBills);
       setReport(r);
     } catch (err) {
       setError(`Falha ao gravar: ${(err as Error).message}`);
@@ -147,7 +159,8 @@ function Importer() {
     setBusy(true);
     setError("");
     try {
-      await revertImport(user.uid, report.batchId);
+      if (importedAsBills) await revertBillsImport(user.uid, report.batchId);
+      else await revertImport(user.uid, report.batchId);
       setReverted(true);
     } catch (err) {
       setError(`Falha ao desfazer: ${(err as Error).message}`);
@@ -165,7 +178,32 @@ function Importer() {
       </p>
 
       <div className="panel">
-        <h2>1. Selecione o arquivo</h2>
+        <h2>1. O que você está importando?</h2>
+        <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+          <label style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+            <input
+              type="radio"
+              name="mode"
+              checked={mode === "transactions"}
+              onChange={() => setMode("transactions")}
+            />
+            Lançamentos (movimentos realizados)
+          </label>
+          <label style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+            <input
+              type="radio"
+              name="mode"
+              checked={mode === "bills"}
+              onChange={() => setMode("bills")}
+            />
+            Contas a pagar/receber (títulos)
+          </label>
+        </div>
+        <p className="muted" style={{ marginTop: 0 }}>
+          {isBills
+            ? "A coluna de data vira o vencimento; despesa = a pagar, receita = a receber."
+            : "Cada linha vira um lançamento realizado (receita/despesa/transferência)."}
+        </p>
         <input type="file" accept=".csv,.xls,.xlsx,.txt" onChange={onFile} />
         {fileName && (
           <p className="muted">
@@ -293,7 +331,7 @@ function Importer() {
         </div>
       )}
 
-      {reconciled && preview && !report && (
+      {!isBills && reconciled && preview && !report && (
         <div className="panel">
           <h2>4. Reconciliação</h2>
           <p>
@@ -335,12 +373,27 @@ function Importer() {
         </div>
       )}
 
+      {isBills && preview && !report && (
+        <div className="panel">
+          <h2>4. Gravar títulos</h2>
+          <p className="muted">
+            Cada linha vira um título em aberto (a pagar/a receber). O valor é o total; as
+            baixas você registra depois em Contas a pagar/receber.
+          </p>
+          <p style={{ marginTop: "1rem" }}>
+            <button onClick={confirmImport} disabled={busy || rowsToImport.length === 0}>
+              {busy ? "Gravando…" : `Confirmar e gravar ${rowsToImport.length} título(s)`}
+            </button>
+          </p>
+        </div>
+      )}
+
       {report && (
         <div className="panel">
           <h2>5. Importação concluída</h2>
           {reverted ? (
             <p className="badge warn">
-              Importação desfeita — {report.imported} lançamento(s) removido(s).
+              Importação desfeita — {report.imported} {importedAsBills ? "título(s)" : "lançamento(s)"} removido(s).
             </p>
           ) : (
             <>
