@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { parseBrCurrency } from "@/lib/br/parse";
 import type { Account, Category, Contact, CostCenter, TransactionType } from "@/types";
 import type { TransactionInput } from "@/services/transactions";
@@ -13,11 +13,45 @@ interface Props {
   initial?: Partial<TransactionInput>;
   submitLabel: string;
   busy?: boolean;
+  /**
+   * Fast-entry mode: after saving, the form stays open and keeps the selected
+   * classification fields (tipo, data, conta, categoria, centro, contato),
+   * clearing only the value, description and notes so the next entry is quick.
+   */
+  quickEntry?: boolean;
   onSubmit: (input: TransactionInput) => void;
   onCancel: () => void;
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+const MONTHS = [
+  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+  "Jul", "Ago", "Set", "Out", "Nov", "Dez",
+];
+
+/** Number of days in a given month (1-based month). */
+function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
+/** Format a raw digit string as a cents-first BRL value ("12345" -> "123,45"). */
+function maskAmount(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return "";
+  const cents = parseInt(digits, 10);
+  return (cents / 100).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+/** Format an existing numeric amount for editing (e.g. 123.4 -> "123,40"). */
+function formatAmount(value: number | undefined): string {
+  if (value == null) return "";
+  return Math.abs(value).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
 
 export function TransactionForm({
   accounts,
@@ -27,14 +61,18 @@ export function TransactionForm({
   initial,
   submitLabel,
   busy,
+  quickEntry,
   onSubmit,
   onCancel,
 }: Props) {
+  const initialDate = initial?.date ?? new Date().toISOString().slice(0, 10);
+  const [iy, im, id] = initialDate.split("-").map(Number);
+
   const [type, setType] = useState<TransactionType>(initial?.type ?? "expense");
-  const [date, setDate] = useState(initial?.date ?? today());
-  const [amount, setAmount] = useState(
-    initial?.amount != null ? String(initial.amount).replace(".", ",") : "",
-  );
+  const [day, setDay] = useState<number>(id || new Date().getDate());
+  const [month, setMonth] = useState<number>(im || new Date().getMonth() + 1);
+  const [year, setYear] = useState<number>(iy || new Date().getFullYear());
+  const [amount, setAmount] = useState(formatAmount(initial?.amount));
   const [description, setDescription] = useState(initial?.description ?? "");
   const [accountId, setAccountId] = useState(initial?.accountId ?? "");
   const [transferAccountId, setTransferAccountId] = useState(initial?.transferAccountId ?? "");
@@ -43,11 +81,19 @@ export function TransactionForm({
   const [contactId, setContactId] = useState(initial?.contactId ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [error, setError] = useState("");
+  const amountRef = useRef<HTMLInputElement>(null);
+
+  const thisYear = new Date().getFullYear();
+  const years: number[] = [];
+  for (let y = thisYear + 1; y >= thisYear - 6; y--) years.push(y);
+
+  // Clamp the day to the selected month/year (e.g. 31 -> 30 in April).
+  const maxDay = daysInMonth(year, month);
+  const safeDay = Math.min(day, maxDay);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (!date) return setError("Informe a data.");
     const value = parseBrCurrency(amount);
     if (value == null || value <= 0) return setError("Informe um valor maior que zero.");
     if (!accountId) return setError("Selecione a conta.");
@@ -56,6 +102,7 @@ export function TransactionForm({
       if (transferAccountId === accountId)
         return setError("A conta de destino deve ser diferente da origem.");
     }
+    const date = `${year}-${String(month).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}`;
     onSubmit({
       date,
       amount: value,
@@ -68,6 +115,16 @@ export function TransactionForm({
       contactId: contactId || null,
       notes: notes.trim() || undefined,
     });
+
+    if (quickEntry) {
+      // Keep the classification fields; clear only what changes per entry.
+      setAmount("");
+      setDescription("");
+      setNotes("");
+      setError("");
+      // Refocus the value field for the next quick entry.
+      amountRef.current?.focus();
+    }
   }
 
   const relevantCategories = categories.filter((c) => c.kind === type || type === "transfer");
@@ -83,15 +140,54 @@ export function TransactionForm({
             <option value="transfer">Transferência</option>
           </select>
         </label>
-        <label style={col}>
+        <div style={{ ...col, flex: "1 1 220px" }}>
           <span className="muted">Data</span>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={f} />
-        </label>
+          <div style={{ display: "flex", gap: "0.35rem" }}>
+            <select
+              aria-label="Dia"
+              value={safeDay}
+              onChange={(e) => setDay(Number(e.target.value))}
+              style={{ ...f, flex: "0 0 4.2rem" }}
+            >
+              {Array.from({ length: maxDay }, (_, i) => i + 1).map((d) => (
+                <option key={d} value={d}>
+                  {String(d).padStart(2, "0")}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Mês"
+              value={month}
+              onChange={(e) => setMonth(Number(e.target.value))}
+              style={{ ...f, flex: "1 1 auto" }}
+            >
+              {MONTHS.map((m, i) => (
+                <option key={m} value={i + 1}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Ano"
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              style={{ ...f, flex: "0 0 5.2rem" }}
+            >
+              {years.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
         <label style={col}>
           <span className="muted">Valor (R$)</span>
           <input
+            ref={amountRef}
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(e) => setAmount(maskAmount(e.target.value))}
+            inputMode="numeric"
             placeholder="0,00"
             style={{ ...f, textAlign: "right" }}
           />
@@ -192,8 +288,13 @@ export function TransactionForm({
           {busy ? "Salvando…" : submitLabel}
         </button>{" "}
         <button type="button" style={{ background: "var(--border)" }} onClick={onCancel}>
-          Cancelar
+          {quickEntry ? "Fechar" : "Cancelar"}
         </button>
+        {quickEntry && (
+          <span className="muted" style={{ marginLeft: "0.75rem", fontSize: "0.8rem" }}>
+            As seleções ficam fixas para o próximo lançamento.
+          </span>
+        )}
       </p>
     </form>
   );

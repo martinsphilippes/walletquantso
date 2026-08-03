@@ -215,9 +215,14 @@ function Dashboard() {
     setSaving(true);
     setError("");
     try {
-      if (form?.mode === "edit") await updateTransaction(user.uid, form.tx.id!, input);
-      else await createTransaction(user.uid, input);
-      setForm(null);
+      if (form?.mode === "edit") {
+        await updateTransaction(user.uid, form.tx.id!, input);
+        setForm(null);
+      } else {
+        // Quick-entry: keep the form open so several lançamentos can be added
+        // in a row (the form itself keeps the selected fields fixed).
+        await createTransaction(user.uid, input);
+      }
       await load();
     } catch (err) {
       setError(`Falha ao salvar: ${(err as Error).message}`);
@@ -509,6 +514,7 @@ function Dashboard() {
           initial={form.mode === "edit" ? txToInput(form.tx) : undefined}
           submitLabel={form.mode === "edit" ? "Salvar alterações" : "Adicionar lançamento"}
           busy={saving}
+          quickEntry={form.mode === "new"}
           onSubmit={handleSubmit}
           onCancel={() => setForm(null)}
         />
