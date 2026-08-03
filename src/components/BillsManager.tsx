@@ -114,6 +114,8 @@ export function BillsManager({ kind }: { kind: BillKind }) {
   const [payAmount, setPayAmount] = useState("");
   const [payDate, setPayDate] = useState(today());
   const [payAccount, setPayAccount] = useState("");
+  // "settle" quita o título (fecha, mesmo com valor diferente); "partial" mantém o saldo.
+  const [payMode, setPayMode] = useState<"settle" | "partial">("settle");
 
   // List filters (so you can see e.g. only the titles of a given account).
   const [fAccount, setFAccount] = useState("");
@@ -400,6 +402,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     setPayAmount(String(remaining(b)).replace(".", ","));
     setPayDate(today());
     setPayAccount(b.accountId ?? "");
+    setPayMode("settle");
   }
 
   async function confirmPay(b: Bill) {
@@ -418,16 +421,20 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     setBusy(true);
     setError("");
     try {
-      await addPayment(b.id!, {
-        id: rid(),
-        date: payDate || today(),
-        amount,
-        accountId: account,
-      });
+      const settle = payMode === "settle";
+      await addPayment(
+        b.id!,
+        {
+          id: rid(),
+          date: payDate || today(),
+          amount,
+          accountId: account,
+        },
+        { settle },
+      );
       setPayingId(null);
-      // If this baixa fully settles the title, drop it from the list at once
-      // (it now lives in Lançamentos). Partial baixas keep the remaining balance.
-      const fullySettled = amount + 0.005 >= remaining(b);
+      // "Quitar" fecha o título; parcial fecha só se o valor cobrir o restante.
+      const fullySettled = settle || amount + 0.005 >= remaining(b);
       if (fullySettled) {
         setBills((prev) => (prev ?? []).filter((x) => x.id !== b.id));
         sel.clear();
@@ -787,6 +794,14 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                           <td colSpan={10} style={subRowStyle}>
                             <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
                               <strong>{settleLabel}:</strong>
+                              <select
+                                value={payMode}
+                                onChange={(e) => setPayMode(e.target.value as "settle" | "partial")}
+                                title="Quitar fecha o título pelo valor pago; parcial mantém o saldo em aberto."
+                              >
+                                <option value="settle">Quitar (total)</option>
+                                <option value="partial">Baixa parcial</option>
+                              </select>
                               <input
                                 value={payAmount}
                                 onChange={(e) => setPayAmount(e.target.value)}
@@ -810,6 +825,11 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                               >
                                 Cancelar
                               </button>
+                              <span className="muted" style={{ fontSize: "0.78rem", flexBasis: "100%" }}>
+                                {payMode === "settle"
+                                  ? "Quitar: fecha o título pelo valor informado (o título sai da lista)."
+                                  : "Parcial: registra só uma parte; o título continua com o saldo em aberto."}
+                              </span>
                             </div>
                           </td>
                         </tr>

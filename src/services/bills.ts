@@ -60,7 +60,11 @@ export function removeBill(id: string): Promise<void> {
  * the baixa shows up in Lançamentos and moves the account balance. The created
  * transaction id is stored on the payment for undo/consistency.
  */
-export async function addPayment(id: string, payment: BillPayment): Promise<void> {
+export async function addPayment(
+  id: string,
+  payment: BillPayment,
+  opts?: { settle?: boolean },
+): Promise<void> {
   const snap = await getDoc(doc(db, COLLECTIONS.bills, id));
   if (!snap.exists()) throw new Error("Título não encontrado.");
   const bill = { id, ...(snap.data() as Bill) };
@@ -74,7 +78,14 @@ export async function addPayment(id: string, payment: BillPayment): Promise<void
   try {
     const stored: BillPayment = { ...payment, transactionId: txRef.id };
     const payments = [...(bill.payments ?? []), stored];
-    await updateDoc(doc(db, COLLECTIONS.bills, id), { payments });
+    const patch: Partial<Bill> = { payments };
+    // "Quitar": close the title at the amount actually paid (the real value may
+    // differ from the original), so remaining goes to zero and it leaves the list.
+    if (opts?.settle) {
+      const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+      patch.amount = Math.round(totalPaid * 100) / 100;
+    }
+    await updateDoc(doc(db, COLLECTIONS.bills, id), patch as DocumentData);
   } catch (err) {
     await deleteDoc(doc(db, COLLECTIONS.transactions, txRef.id)).catch(() => {});
     throw err;
