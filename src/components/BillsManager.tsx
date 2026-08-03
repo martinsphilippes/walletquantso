@@ -24,6 +24,7 @@ import {
 import { parseBrCurrency } from "@/lib/br/parse";
 import { DateParts } from "@/components/DateParts";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
+import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import { expandRepeat, type RepeatMode } from "@/lib/bills/repeat";
 import {
   billStatus,
@@ -203,7 +204,26 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     [entityFiltered, showPaid, fStatus, t],
   );
 
-  const sel = useBulkSelect(visible, (b) => b.id);
+  // Per-column header filters, layered on top of the filter panel above.
+  const colDefs: ColFilterDef<Bill>[] = [
+    { key: "select", type: "none" },
+    { key: "dueDate", value: (b) => brDate(b.dueDate) },
+    { key: "description", value: (b) => b.description },
+    {
+      key: "installment",
+      type: "select",
+      value: (b) => (b.installment ? `${b.installment.number}/${b.installment.total}` : ""),
+    },
+    { key: "account", type: "select", value: (b) => (b.accountId ? (accountName.get(b.accountId) ?? "") : "") },
+    { key: "contact", type: "select", value: (b) => (b.contactId ? (contactName.get(b.contactId) ?? "") : "") },
+    { key: "status", type: "select", value: (b) => STATUS_LABELS[billStatus(b, t)] },
+    { key: "amount", value: (b) => brl(b.amount), align: "right" },
+    { key: "remaining", value: (b) => brl(remaining(b)), align: "right" },
+    { key: "actions", type: "none" },
+  ];
+  const cf = useColumnFilters(visible, colDefs);
+
+  const sel = useBulkSelect(cf.filtered, (b) => b.id);
 
   async function bulkDelete() {
     if (sel.count === 0) return;
@@ -658,7 +678,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
             marginBottom: "0.75rem",
           }}
         >
-          <span className="muted">{visible.length} título(s)</span>
+          <span className="muted">{cf.filtered.length} título(s)</span>
           <label className="muted" style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
             <input
               type="checkbox"
@@ -692,9 +712,10 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                   <th style={{ textAlign: "right" }}>Em aberto</th>
                   <th></th>
                 </tr>
+                <FilterRow defs={colDefs} cf={cf} />
               </thead>
               <tbody>
-                {visible.map((b) => {
+                {cf.filtered.map((b) => {
                   const status = billStatus(b, t);
                   const rem = remaining(b);
                   const paid = paidAmount(b);
