@@ -22,6 +22,7 @@ import {
   backfillPaymentTransactions,
 } from "@/services/bills";
 import { parseBrCurrency } from "@/lib/br/parse";
+import { DateParts } from "@/components/DateParts";
 import { expandRepeat, type RepeatMode } from "@/lib/bills/repeat";
 import {
   billStatus,
@@ -440,19 +441,15 @@ export function BillsManager({ kind }: { kind: BillKind }) {
             />
           </Field>
           <Field label="Vencimento">
-            <input
-              type="date"
+            <DateParts
               value={creating.dueDate}
-              onChange={(e) => setCreating({ ...creating, dueDate: e.target.value })}
-              style={fieldStyle}
+              onChange={(iso) => setCreating({ ...creating, dueDate: iso })}
             />
           </Field>
           <Field label="Competência">
-            <input
-              type="date"
+            <DateParts
               value={creating.competenceDate}
-              onChange={(e) => setCreating({ ...creating, competenceDate: e.target.value })}
-              style={fieldStyle}
+              onChange={(iso) => setCreating({ ...creating, competenceDate: iso })}
             />
           </Field>
           <Field label="Repetição">
@@ -751,12 +748,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                 onChange={(e) => setPayAmount(e.target.value)}
                                 style={{ ...fieldStyle, width: 110, textAlign: "right" }}
                               />
-                              <input
-                                type="date"
-                                value={payDate}
-                                onChange={(e) => setPayDate(e.target.value)}
-                                style={fieldStyle}
-                              />
+                              <DateParts value={payDate} onChange={setPayDate} />
                               <select value={payAccount} onChange={(e) => setPayAccount(e.target.value)}>
                                 <option value="">Conta…</option>
                                 {accounts.map((a) => (
@@ -798,19 +790,15 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                 />
                               </Field>
                               <Field label="Vencimento">
-                                <input
-                                  type="date"
+                                <DateParts
                                   value={draft.dueDate}
-                                  onChange={(e) => setDraft({ ...draft, dueDate: e.target.value })}
-                                  style={fieldStyle}
+                                  onChange={(iso) => setDraft({ ...draft, dueDate: iso })}
                                 />
                               </Field>
                               <Field label="Competência">
-                                <input
-                                  type="date"
+                                <DateParts
                                   value={draft.competenceDate}
-                                  onChange={(e) => setDraft({ ...draft, competenceDate: e.target.value })}
-                                  style={fieldStyle}
+                                  onChange={(iso) => setDraft({ ...draft, competenceDate: iso })}
                                 />
                               </Field>
                               <Field label={contactLabel}>
