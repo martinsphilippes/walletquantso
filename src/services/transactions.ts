@@ -54,16 +54,17 @@ function buildRecord(ownerId: string, input: TransactionInput, createdAt: number
 
 /**
  * Build the ledger transaction that materializes a bill settlement (baixa), so
- * it shows up in Lançamentos and affects account balances. Returns null when no
- * account can be resolved (a cash movement must hit an account). `payable`
- * settlements are expenses; `receivable` settlements are income.
+ * it shows up in Lançamentos and affects account balances. `payable`
+ * settlements are expenses; `receivable` settlements are income. When no account
+ * can be resolved (e.g. imported títulos with no account), the entry is still
+ * created with an empty account so it appears in Lançamentos — the user can
+ * assign the account later, and balance math safely ignores account-less entries.
  */
 export function buildBillPaymentTransaction(
   bill: Bill,
   payment: BillPayment,
-): Transaction | null {
-  const accountId = payment.accountId ?? bill.accountId ?? null;
-  if (!accountId) return null;
+): Transaction {
+  const accountId = payment.accountId ?? bill.accountId ?? "";
   const type: TransactionType = bill.kind === "receivable" ? "income" : "expense";
   const record: Transaction = {
     ownerId: bill.ownerId,

@@ -136,7 +136,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
       // One-time migration: turn older baixas (settlements without a ledger
       // transaction) into real lançamentos, then re-read so the list is fresh.
       const needsBackfill = b.some((bl) =>
-        (bl.payments ?? []).some((p) => !p.transactionId && (p.accountId ?? bl.accountId)),
+        (bl.payments ?? []).some((p) => !p.transactionId),
       );
       if (needsBackfill) {
         await backfillPaymentTransactions(b);

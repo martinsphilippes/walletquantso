@@ -65,15 +65,11 @@ export async function addPayment(id: string, payment: BillPayment): Promise<void
   if (!snap.exists()) throw new Error("Título não encontrado.");
   const bill = { id, ...(snap.data() as Bill) };
 
-  // Materialize the cash movement as a transaction (if an account is known).
+  // Materialize the cash movement as a transaction so it shows in Lançamentos.
   const txRecord = buildBillPaymentTransaction(bill, payment);
-  let transactionId: string | null = null;
-  if (txRecord) {
-    const txRef = await addDoc(collection(db, COLLECTIONS.transactions), txRecord);
-    transactionId = txRef.id;
-  }
+  const txRef = await addDoc(collection(db, COLLECTIONS.transactions), txRecord);
 
-  const stored: BillPayment = { ...payment, transactionId };
+  const stored: BillPayment = { ...payment, transactionId: txRef.id };
   const payments = [...(bill.payments ?? []), stored];
   await updateDoc(doc(db, COLLECTIONS.bills, id), { payments });
 }
@@ -111,7 +107,6 @@ export async function backfillPaymentTransactions(bills: Bill[]): Promise<number
       const p = payments[i];
       if (p.transactionId) continue;
       const txRecord = buildBillPaymentTransaction(b, p);
-      if (!txRecord) continue; // no account to attribute it to
       const txRef = await addDoc(collection(db, COLLECTIONS.transactions), txRecord);
       payments[i] = { ...p, transactionId: txRef.id };
       changed = true;
