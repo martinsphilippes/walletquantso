@@ -19,6 +19,7 @@ import {
   removeBill,
   addPayment,
   removePayment,
+  backfillPaymentTransactions,
 } from "@/services/bills";
 import { parseBrCurrency } from "@/lib/br/parse";
 import { expandRepeat, type RepeatMode } from "@/lib/bills/repeat";
@@ -124,13 +125,23 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     if (!user) return;
     setError("");
     try {
-      const [b, a, c, cc, ct] = await Promise.all([
+      const [b0, a, c, cc, ct] = await Promise.all([
         listBills(user.uid, kind),
         listAccounts(user.uid),
         listCategories(user.uid),
         listCostCenters(user.uid),
         listContacts(user.uid),
       ]);
+      let b = b0;
+      // One-time migration: turn older baixas (settlements without a ledger
+      // transaction) into real lançamentos, then re-read so the list is fresh.
+      const needsBackfill = b.some((bl) =>
+        (bl.payments ?? []).some((p) => !p.transactionId && (p.accountId ?? bl.accountId)),
+      );
+      if (needsBackfill) {
+        await backfillPaymentTransactions(b);
+        b = await listBills(user.uid, kind);
+      }
       setBills(sortByDueDate(b));
       // Suggest the next document number automatically (ascending).
       setCreating((prev) => ({ ...prev, documentNumber: String(nextDocumentNumber(b)) }));
@@ -357,6 +368,13 @@ export function BillsManager({ kind }: { kind: BillKind }) {
       setError("Informe um valor de baixa maior que zero.");
       return;
     }
+    // A baixa is real cash moving through an account, so it needs one to become
+    // a lançamento (and appear in the dashboard, saldos, conciliação, etc.).
+    const account = payAccount || b.accountId || "";
+    if (!account) {
+      setError("Selecione a conta da baixa para lançá-la no caixa.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -364,7 +382,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
         id: rid(),
         date: payDate || today(),
         amount,
-        accountId: payAccount || null,
+        accountId: account,
       });
       setPayingId(null);
       await load();

@@ -8,7 +8,7 @@ import { addDoc, collection, deleteDoc, doc, updateDoc } from "firebase/firestor
 import { db } from "./firebase";
 import { COLLECTIONS, appendAudit } from "./firestore";
 import { dedupHash } from "@/lib/import/engine";
-import type { Transaction, TransactionType } from "@/types";
+import type { Bill, BillPayment, Transaction, TransactionType } from "@/types";
 
 export interface TransactionInput {
   date: string; // ISO YYYY-MM-DD
@@ -38,6 +38,8 @@ function buildRecord(ownerId: string, input: TransactionInput, createdAt: number
     installment: null,
     installmentGroupId: null,
     importBatchId: null,
+    billId: null,
+    billPaymentId: null,
     dedupHash: dedupHash({
       date: input.date,
       amount: input.amount,
@@ -47,6 +49,47 @@ function buildRecord(ownerId: string, input: TransactionInput, createdAt: number
     createdAt,
   };
   if (input.notes && input.notes.trim()) record.notes = input.notes.trim();
+  return record;
+}
+
+/**
+ * Build the ledger transaction that materializes a bill settlement (baixa), so
+ * it shows up in Lançamentos and affects account balances. Returns null when no
+ * account can be resolved (a cash movement must hit an account). `payable`
+ * settlements are expenses; `receivable` settlements are income.
+ */
+export function buildBillPaymentTransaction(
+  bill: Bill,
+  payment: BillPayment,
+): Transaction | null {
+  const accountId = payment.accountId ?? bill.accountId ?? null;
+  if (!accountId) return null;
+  const type: TransactionType = bill.kind === "receivable" ? "income" : "expense";
+  const record: Transaction = {
+    ownerId: bill.ownerId,
+    date: payment.date,
+    amount: Math.abs(payment.amount),
+    type,
+    description: bill.description,
+    accountId,
+    categoryId: bill.categoryId ?? null,
+    transferAccountId: null,
+    costCenterId: bill.costCenterId ?? null,
+    contactId: bill.contactId ?? null,
+    installment: null,
+    installmentGroupId: null,
+    importBatchId: null,
+    billId: bill.id ?? null,
+    billPaymentId: payment.id,
+    notes: bill.kind === "receivable" ? "Baixa de conta a receber" : "Baixa de conta a pagar",
+    dedupHash: dedupHash({
+      date: payment.date,
+      amount: payment.amount,
+      description: bill.description,
+      account: accountId,
+    }),
+    createdAt: Date.now(),
+  };
   return record;
 }
 

@@ -85,6 +85,13 @@ export interface BillPayment {
   amount: number;
   /** Account the money moved through (optional). */
   accountId?: string | null;
+  /**
+   * Id of the ledger transaction materialized for this settlement, so the
+   * baixa shows up in Lançamentos and account balances. When set, dashboard
+   * math takes the cash from that transaction instead of the payment (no double
+   * counting). Older payments made before this feature have it unset.
+   */
+  transactionId?: string | null;
 }
 
 /**
@@ -150,6 +157,10 @@ export interface Transaction {
   installment?: Installment | null;
   /** Groups the installments of a single purchase into one series. */
   installmentGroupId?: string | null;
+  /** When this entry was materialized from a bill settlement (baixa). */
+  billId?: string | null;
+  /** The specific BillPayment this entry settles (links back to the bill). */
+  billPaymentId?: string | null;
   tags?: string[];
   /** Id of the import batch that created this record (for undo/audit). */
   importBatchId?: string | null;

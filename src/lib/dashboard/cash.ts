@@ -85,13 +85,16 @@ export function computeCashBalances(
   }
 
   // Bill settlements are confirmed cash; open remainders are projected only.
+  // Materialized baixas are already in `txs` above, so skip them here.
   for (const b of receivables) {
-    for (const p of b.payments) applyBoth(p.accountId ?? b.accountId, p.amount || 0);
+    for (const p of b.payments)
+      if (!p.transactionId) applyBoth(p.accountId ?? b.accountId, p.amount || 0);
     const rem = remaining(b);
     if (rem > 0) applyProjected(b.accountId, rem);
   }
   for (const b of payables) {
-    for (const p of b.payments) applyBoth(p.accountId ?? b.accountId, -(p.amount || 0));
+    for (const p of b.payments)
+      if (!p.transactionId) applyBoth(p.accountId ?? b.accountId, -(p.amount || 0));
     const rem = remaining(b);
     if (rem > 0) applyProjected(b.accountId, -rem);
   }
@@ -146,11 +149,13 @@ export function monthResult(
   }
 
   for (const b of receivables) {
-    for (const p of b.payments) if (monthOf(p.date) === month) income += p.amount || 0;
+    for (const p of b.payments)
+      if (!p.transactionId && monthOf(p.date) === month) income += p.amount || 0;
     if (monthOf(b.dueDate) === month) income += remaining(b);
   }
   for (const b of payables) {
-    for (const p of b.payments) if (monthOf(p.date) === month) expense += p.amount || 0;
+    for (const p of b.payments)
+      if (!p.transactionId && monthOf(p.date) === month) expense += p.amount || 0;
     if (monthOf(b.dueDate) === month) expense += remaining(b);
   }
 

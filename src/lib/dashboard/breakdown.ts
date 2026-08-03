@@ -7,8 +7,15 @@
 // unit-testable. Transfers are internal and never counted.
 
 import type { Bill, Category, CostCenter, Transaction } from "@/types";
+import { remaining, unmaterializedPaid } from "@/lib/bills/status";
 
 const round = (n: number) => Math.round(n * 100) / 100;
+
+// The projected contribution of a bill = its still-open remainder plus any
+// settled part not yet materialized as a transaction. The materialized part is
+// counted through the transactions loop, so this avoids double counting while
+// keeping older (non-materialized) baixas fully represented.
+const billValue = (b: Bill) => remaining(b) + unmaterializedPaid(b);
 
 export interface Slice {
   /** Grouping id, or null when the record has no category/center. */
@@ -51,7 +58,7 @@ export function receitasPorCategoria(
   const names = nameMap(categories);
   const entries: Array<{ key: string | null; value: number }> = [];
   for (const t of txs) if (t.type === "income") entries.push({ key: t.categoryId ?? null, value: t.amount });
-  for (const b of receivables) entries.push({ key: b.categoryId ?? null, value: b.amount });
+  for (const b of receivables) entries.push({ key: b.categoryId ?? null, value: billValue(b) });
   return group(entries, names, "Sem categoria");
 }
 
@@ -64,7 +71,7 @@ export function despesasPorCategoria(
   const names = nameMap(categories);
   const entries: Array<{ key: string | null; value: number }> = [];
   for (const t of txs) if (t.type === "expense") entries.push({ key: t.categoryId ?? null, value: t.amount });
-  for (const b of payables) entries.push({ key: b.categoryId ?? null, value: b.amount });
+  for (const b of payables) entries.push({ key: b.categoryId ?? null, value: billValue(b) });
   return group(entries, names, "Sem categoria");
 }
 
@@ -77,7 +84,7 @@ export function receitasPorCentro(
   const names = nameMap(costCenters);
   const entries: Array<{ key: string | null; value: number }> = [];
   for (const t of txs) if (t.type === "income") entries.push({ key: t.costCenterId ?? null, value: t.amount });
-  for (const b of receivables) entries.push({ key: b.costCenterId ?? null, value: b.amount });
+  for (const b of receivables) entries.push({ key: b.costCenterId ?? null, value: billValue(b) });
   return group(entries, names, "Sem centro");
 }
 
@@ -90,7 +97,7 @@ export function despesasPorCentro(
   const names = nameMap(costCenters);
   const entries: Array<{ key: string | null; value: number }> = [];
   for (const t of txs) if (t.type === "expense") entries.push({ key: t.costCenterId ?? null, value: t.amount });
-  for (const b of payables) entries.push({ key: b.costCenterId ?? null, value: b.amount });
+  for (const b of payables) entries.push({ key: b.costCenterId ?? null, value: billValue(b) });
   return group(entries, names, "Sem centro");
 }
 
@@ -124,8 +131,8 @@ export function resultadosPorCentro(
     if (t.type === "income") ensure(t.costCenterId ?? null).receitas += t.amount;
     else if (t.type === "expense") ensure(t.costCenterId ?? null).despesas += t.amount;
   }
-  for (const b of receivables) ensure(b.costCenterId ?? null).receitas += b.amount;
-  for (const b of payables) ensure(b.costCenterId ?? null).despesas += b.amount;
+  for (const b of receivables) ensure(b.costCenterId ?? null).receitas += billValue(b);
+  for (const b of payables) ensure(b.costCenterId ?? null).despesas += billValue(b);
 
   const result: CentroResult[] = [];
   for (const [id, v] of rows) {

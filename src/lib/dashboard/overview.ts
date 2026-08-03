@@ -11,7 +11,7 @@
 // keeps it unit-testable.
 
 import type { Account, Bill, Transaction } from "@/types";
-import { paidAmount, remaining } from "@/lib/bills/status";
+import { unmaterializedPaid, remaining } from "@/lib/bills/status";
 
 export interface FinancialOverview {
   /** Sum of every account's opening balance. */
@@ -58,9 +58,11 @@ export function computeOverview(
     else if (t.type === "expense") realizedExpense += t.amount;
     // transfers move money between the user's own accounts → net zero for cash
   }
-  // Settlements recorded on bills are realized cash movements.
-  for (const b of receivables) realizedIncome += paidAmount(b);
-  for (const b of payables) realizedExpense += paidAmount(b);
+  // Settlements recorded on bills are realized cash movements. Once a baixa is
+  // materialized as a transaction it is already counted in the loop above, so
+  // only the not-yet-materialized part is added here.
+  for (const b of receivables) realizedIncome += unmaterializedPaid(b);
+  for (const b of payables) realizedExpense += unmaterializedPaid(b);
   realizedIncome = round(realizedIncome);
   realizedExpense = round(realizedExpense);
 

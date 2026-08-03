@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   paidAmount,
+  unmaterializedPaid,
   remaining,
   billStatus,
   summarizeBills,
@@ -34,6 +35,16 @@ describe("paidAmount / remaining", () => {
   it("never returns a negative remaining", () => {
     const b = bill({ amount: 100, payments: [{ id: "1", date: "2025-06-01", amount: 150 }] });
     expect(remaining(b)).toBe(0);
+  });
+
+  it("unmaterializedPaid excludes payments that became transactions", () => {
+    const b = bill({ amount: 100, payments: [
+      { id: "1", date: "2025-06-01", amount: 30 }, // old baixa, no transaction
+      { id: "2", date: "2025-06-05", amount: 20, transactionId: "tx-2" }, // materialized
+    ] });
+    expect(paidAmount(b)).toBe(50); // full settled amount, for status/remaining
+    expect(unmaterializedPaid(b)).toBe(30); // only the part not yet a transaction
+    expect(remaining(b)).toBe(50);
   });
 });
 

@@ -142,4 +142,21 @@ describe("computeOverview", () => {
     expect(o.toPay).toBe(100);
     expect(o.toReceive).toBe(50);
   });
+
+  it("does not double count a payment already materialized as a transaction", () => {
+    // The baixa is now a real income transaction; the receivable's payment
+    // carries its transactionId. Only one of them must count.
+    const paidBill = bill("receivable", 100, "2026-08-10", [100]);
+    paidBill.payments[0].transactionId = "tx-1";
+    const o = computeOverview(
+      [account(0)],
+      [tx("income", 100, { billId: paidBill.id, billPaymentId: "0" })],
+      [],
+      [paidBill],
+      TODAY,
+    );
+    expect(o.realizedIncome).toBe(100); // not 200
+    expect(o.toReceive).toBe(0);
+    expect(o.currentBalance).toBe(100);
+  });
 });

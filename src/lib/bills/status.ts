@@ -13,6 +13,19 @@ export function paidAmount(bill: Pick<Bill, "payments">): number {
   return bill.payments.reduce((sum, p) => sum + (p.amount || 0), 0);
 }
 
+/**
+ * Settled amount NOT yet materialized as a ledger transaction. When a baixa is
+ * materialized (it has a `transactionId`), the cash is represented by that
+ * transaction, so dashboard math must not also count the payment. Older baixas
+ * without a `transactionId` are still counted here so nothing is lost.
+ */
+export function unmaterializedPaid(bill: Pick<Bill, "payments">): number {
+  return bill.payments.reduce(
+    (sum, p) => sum + (p.transactionId ? 0 : p.amount || 0),
+    0,
+  );
+}
+
 /** Amount still outstanding (never negative). */
 export function remaining(bill: Pick<Bill, "amount" | "payments">): number {
   return Math.max(0, round(bill.amount - paidAmount(bill)));
