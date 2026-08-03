@@ -114,7 +114,6 @@ export function BillsManager({ kind }: { kind: BillKind }) {
   const [payAmount, setPayAmount] = useState("");
   const [payDate, setPayDate] = useState(today());
   const [payAccount, setPayAccount] = useState("");
-  const [showPaid, setShowPaid] = useState(false);
 
   // List filters (so you can see e.g. only the titles of a given account).
   const [fAccount, setFAccount] = useState("");
@@ -194,14 +193,16 @@ export function BillsManager({ kind }: { kind: BillKind }) {
   // Totals reflect the current entity filters (e.g. only the chosen account).
   const summary = useMemo(() => summarizeBills(entityFiltered, t), [entityFiltered, t]);
 
+  // Fully-settled (baixados) titles leave this list — they live in Lançamentos.
+  // Só aparecem aqui se o filtro de Status for explicitamente "Pago".
   const visible = useMemo(
     () =>
       entityFiltered.filter((b) => {
         const st = billStatus(b, t);
         if (fStatus) return st === fStatus;
-        return showPaid || st !== "paid";
+        return st !== "paid";
       }),
-    [entityFiltered, showPaid, fStatus, t],
+    [entityFiltered, fStatus, t],
   );
 
   // Per-column header filters, layered on top of the filter panel above.
@@ -679,15 +680,9 @@ export function BillsManager({ kind }: { kind: BillKind }) {
           }}
         >
           <span className="muted">{cf.filtered.length} título(s)</span>
-          <label className="muted" style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
-            <input
-              type="checkbox"
-              checked={showPaid}
-              onChange={(e) => setShowPaid(e.target.checked)}
-              disabled={fStatus !== ""}
-            />
-            Mostrar quitados
-          </label>
+          <span className="muted" style={{ fontSize: "0.8rem" }}>
+            Títulos quitados saem daqui e aparecem em Lançamentos (use Status → “Pago” para revê-los).
+          </span>
         </div>
         <BulkBar sel={sel} onDelete={bulkDelete} busy={busy} noun="título" />
         {visible.length === 0 ? (
