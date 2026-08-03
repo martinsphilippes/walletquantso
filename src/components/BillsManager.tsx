@@ -112,6 +112,14 @@ export function BillsManager({ kind }: { kind: BillKind }) {
   const [payAccount, setPayAccount] = useState("");
   const [showPaid, setShowPaid] = useState(false);
 
+  // List filters (so you can see e.g. only the titles of a given account).
+  const [fAccount, setFAccount] = useState("");
+  const [fContact, setFContact] = useState("");
+  const [fCategory, setFCategory] = useState("");
+  const [fCostCenter, setFCostCenter] = useState("");
+  const [fStatus, setFStatus] = useState<BillStatus | "">("");
+  const [fText, setFText] = useState("");
+
   const load = useCallback(async () => {
     if (!user) return;
     setError("");
@@ -143,15 +151,61 @@ export function BillsManager({ kind }: { kind: BillKind }) {
   }, [load]);
 
   const t = today();
-  const summary = useMemo(() => summarizeBills(bills ?? [], t), [bills, t]);
   const contactName = useMemo(
     () => new Map(contacts.map((c) => [c.id!, c.name])),
     [contacts],
   );
-  const visible = useMemo(
-    () => (bills ?? []).filter((b) => showPaid || billStatus(b, t) !== "paid"),
-    [bills, showPaid, t],
+  const accountName = useMemo(
+    () => new Map(accounts.map((a) => [a.id!, a.name])),
+    [accounts],
   );
+
+  // Apply the entity filters (account, contact, category, center, text). The
+  // paid/status visibility toggle is applied separately, on top of this.
+  const entityFiltered = useMemo(() => {
+    const q = fText.trim().toLowerCase();
+    return (bills ?? []).filter((b) => {
+      if (fAccount && b.accountId !== fAccount) return false;
+      if (fContact && b.contactId !== fContact) return false;
+      if (fCategory && b.categoryId !== fCategory) return false;
+      if (fCostCenter && b.costCenterId !== fCostCenter) return false;
+      if (q) {
+        const hay = `${b.description ?? ""} ${b.documentNumber ?? ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [bills, fAccount, fContact, fCategory, fCostCenter, fText]);
+
+  // Totals reflect the current entity filters (e.g. only the chosen account).
+  const summary = useMemo(() => summarizeBills(entityFiltered, t), [entityFiltered, t]);
+
+  const visible = useMemo(
+    () =>
+      entityFiltered.filter((b) => {
+        const st = billStatus(b, t);
+        if (fStatus) return st === fStatus;
+        return showPaid || st !== "paid";
+      }),
+    [entityFiltered, showPaid, fStatus, t],
+  );
+
+  const filterCount =
+    (fAccount ? 1 : 0) +
+    (fContact ? 1 : 0) +
+    (fCategory ? 1 : 0) +
+    (fCostCenter ? 1 : 0) +
+    (fStatus ? 1 : 0) +
+    (fText.trim() ? 1 : 0);
+
+  const clearFilters = () => {
+    setFAccount("");
+    setFContact("");
+    setFCategory("");
+    setFCostCenter("");
+    setFStatus("");
+    setFText("");
+  };
 
   function draftToBill(d: Draft): Omit<Bill, "id" | "payments" | "createdAt" | "ownerId" | "kind"> | null {
     const amount = parseBrCurrency(d.amount);
@@ -493,6 +547,76 @@ export function BillsManager({ kind }: { kind: BillKind }) {
       </div>
 
       <div className="panel">
+        <h2>Filtros</h2>
+        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+          <Field label="Conta">
+            <select value={fAccount} onChange={(e) => setFAccount(e.target.value)}>
+              <option value="">Todas as contas</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Status">
+            <select value={fStatus} onChange={(e) => setFStatus(e.target.value as BillStatus | "")}>
+              <option value="">Todos os status</option>
+              <option value="open">{STATUS_LABELS.open}</option>
+              <option value="overdue">{STATUS_LABELS.overdue}</option>
+              <option value="partial">{STATUS_LABELS.partial}</option>
+              <option value="paid">{STATUS_LABELS.paid}</option>
+            </select>
+          </Field>
+          <Field label={contactLabel}>
+            <select value={fContact} onChange={(e) => setFContact(e.target.value)}>
+              <option value="">Todos</option>
+              {contacts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Categoria">
+            <select value={fCategory} onChange={(e) => setFCategory(e.target.value)}>
+              <option value="">Todas</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {costCenters.length > 0 && (
+            <Field label="Centro">
+              <select value={fCostCenter} onChange={(e) => setFCostCenter(e.target.value)}>
+                <option value="">Todos</option>
+                {costCenters.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+          <Field label="Buscar">
+            <input
+              placeholder="Descrição ou nº doc…"
+              value={fText}
+              onChange={(e) => setFText(e.target.value)}
+              style={{ ...fieldStyle, minWidth: 180 }}
+            />
+          </Field>
+          {filterCount > 0 && (
+            <button type="button" style={{ background: "var(--border)" }} onClick={clearFilters}>
+              Limpar ({filterCount})
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="panel">
         <div
           style={{
             display: "flex",
@@ -507,6 +631,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
               type="checkbox"
               checked={showPaid}
               onChange={(e) => setShowPaid(e.target.checked)}
+              disabled={fStatus !== ""}
             />
             Mostrar quitados
           </label>
@@ -525,6 +650,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                   <th>Vencimento</th>
                   <th>Descrição</th>
                   <th>Parcela</th>
+                  <th>Conta</th>
                   <th>{contactLabel}</th>
                   <th>Status</th>
                   <th style={{ textAlign: "right" }}>Valor</th>
@@ -556,6 +682,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                             "—"
                           )}
                         </td>
+                        <td>{b.accountId ? (accountName.get(b.accountId) ?? "—") : "—"}</td>
                         <td>{b.contactId ? (contactName.get(b.contactId) ?? "—") : "—"}</td>
                         <td>
                           <span style={{ color: STATUS_COLOR[status], fontWeight: 600 }}>
@@ -598,7 +725,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
 
                       {paying && (
                         <tr key={`${b.id}-pay`}>
-                          <td colSpan={8} style={subRowStyle}>
+                          <td colSpan={9} style={subRowStyle}>
                             <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
                               <strong>{settleLabel}:</strong>
                               <input
@@ -636,7 +763,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
 
                       {editing && (
                         <tr key={`${b.id}-edit`}>
-                          <td colSpan={8} style={subRowStyle}>
+                          <td colSpan={9} style={subRowStyle}>
                             <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "flex-end" }}>
                               <Field label="Descrição">
                                 <input
@@ -732,7 +859,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
 
                       {paid > 0 && (
                         <tr key={`${b.id}-hist`}>
-                          <td colSpan={8} style={{ ...subRowStyle, paddingTop: 0 }}>
+                          <td colSpan={9} style={{ ...subRowStyle, paddingTop: 0 }}>
                             <span className="muted" style={{ fontSize: "0.8rem" }}>
                               Baixas:{" "}
                               {b.payments.map((p) => (
