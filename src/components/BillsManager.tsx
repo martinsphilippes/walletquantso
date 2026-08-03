@@ -20,6 +20,7 @@ import {
   addPayment,
   removePayment,
   backfillPaymentTransactions,
+  settleBillAtPaid,
 } from "@/services/bills";
 import { parseBrCurrency } from "@/lib/br/parse";
 import { DateParts } from "@/components/DateParts";
@@ -447,6 +448,22 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     }
   }
 
+  async function settleTitle(b: Bill) {
+    setBusy(true);
+    setError("");
+    try {
+      await settleBillAtPaid(b.id!);
+      // Fecha o título pelo valor já pago → sai da lista (fica em Lançamentos).
+      setBills((prev) => (prev ?? []).filter((x) => x.id !== b.id));
+      sel.clear();
+      await load();
+    } catch (err) {
+      setError(`Falha ao quitar: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function undoPayment(billId: string, paymentId: string) {
     setBusy(true);
     setError("");
@@ -771,6 +788,18 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                             <>
                               <button className="btn-primary" onClick={() => startPay(b)}>
                                 {settleLabel}
+                              </button>{" "}
+                            </>
+                          )}
+                          {paid > 0 && rem > 0 && (
+                            <>
+                              <button
+                                style={{ background: "var(--ok)", padding: "0.3rem 0.6rem" }}
+                                disabled={busy}
+                                title={`Encerrar o título pelo valor já pago (${brl(paid)}), descartando o saldo em aberto.`}
+                                onClick={() => settleTitle(b)}
+                              >
+                                Quitar
                               </button>{" "}
                             </>
                           )}

@@ -56,6 +56,21 @@ export function removeBill(id: string): Promise<void> {
 }
 
 /**
+ * Close a partially-paid title at the amount already paid: the real value turned
+ * out to be what was settled, so the outstanding remainder is dropped. Sets the
+ * bill's amount to the sum of its payments (remaining → 0, status → paid) without
+ * adding a new payment or lançamento. No-op if nothing has been paid.
+ */
+export async function settleBillAtPaid(id: string): Promise<void> {
+  const snap = await getDoc(doc(db, COLLECTIONS.bills, id));
+  if (!snap.exists()) throw new Error("Título não encontrado.");
+  const bill = snap.data() as Bill;
+  const paid = (bill.payments ?? []).reduce((s, p) => s + (p.amount || 0), 0);
+  if (paid <= 0) throw new Error("O título ainda não tem baixa para quitar.");
+  await updateDoc(doc(db, COLLECTIONS.bills, id), { amount: Math.round(paid * 100) / 100 });
+}
+
+/**
  * Append a settlement to a bill and materialize it as a ledger transaction, so
  * the baixa shows up in Lançamentos and moves the account balance. The created
  * transaction id is stored on the payment for undo/consistency.
