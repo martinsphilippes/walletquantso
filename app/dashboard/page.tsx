@@ -315,6 +315,7 @@ function Dashboard() {
           <h2 style={{ marginBottom: 0 }}>Resultado do mês</h2>
           <p className="muted" style={{ marginTop: 2 }}>Situação projetada</p>
           <ChartSwitcher
+            storageKey="wq.chart.resultadoMes"
             kinds={["bar", "donut"]}
             items={[
               { label: "Receitas", value: month.income, color: "var(--ok)" },
@@ -421,6 +422,7 @@ function Dashboard() {
           <h2 style={{ marginBottom: 0 }}>Resultados de caixa</h2>
           <p className="muted" style={{ marginTop: 2 }}>Movimentado (realizado)</p>
           <ChartSwitcher
+            storageKey="wq.chart.resultadosCaixa"
             kinds={["bar", "donut"]}
             items={[
               { label: "Entradas", value: overview.realizedIncome, color: "var(--ok)" },
@@ -536,7 +538,7 @@ function Dashboard() {
             <p className="muted">Sem receitas para exibir.</p>
           ) : (
             <>
-              <ChartSwitcher items={toDonut(receitasCat)} />
+              <ChartSwitcher storageKey="wq.chart.receitasCategoria" items={toDonut(receitasCat)} />
               <div
                 style={{
                   display: "flex",
@@ -562,7 +564,7 @@ function Dashboard() {
             <p className="muted">Sem despesas para exibir.</p>
           ) : (
             <>
-              <ChartSwitcher items={toDonut(despesasCat)} />
+              <ChartSwitcher storageKey="wq.chart.despesasCategoria" items={toDonut(despesasCat)} />
               <div
                 style={{
                   display: "flex",
@@ -657,7 +659,7 @@ function Dashboard() {
             <p className="muted">Sem receitas para exibir.</p>
           ) : (
             <>
-              <ChartSwitcher items={toDonut(receitasCentro)} />
+              <ChartSwitcher storageKey="wq.chart.receitasCentro" items={toDonut(receitasCentro)} />
               <div style={totalRow}>
                 <strong>Total</strong>
                 <strong style={{ color: "var(--ok)" }}>
@@ -675,7 +677,7 @@ function Dashboard() {
             <p className="muted">Sem despesas para exibir.</p>
           ) : (
             <>
-              <ChartSwitcher items={toDonut(despesasCentro)} />
+              <ChartSwitcher storageKey="wq.chart.despesasCentro" items={toDonut(despesasCentro)} />
               <div style={totalRow}>
                 <strong>Total</strong>
                 <strong style={{ color: "var(--err)" }}>

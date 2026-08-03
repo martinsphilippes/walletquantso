@@ -2,7 +2,7 @@
 
 // Small, dependency-free SVG charts for the reports page.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { donutSegments, cumulativeBalance, type CumulativePoint } from "@/lib/reports/charts";
 import type { MonthTotal } from "@/lib/reports/aggregate";
 
@@ -262,12 +262,39 @@ export function ChartSwitcher({
   items,
   kinds = ["donut", "hbar", "bar"],
   initial,
+  storageKey,
 }: {
   items: DonutItem[];
   kinds?: ChartKind[];
   initial?: ChartKind;
+  /** When set, the chosen type is remembered in the browser under this key. */
+  storageKey?: string;
 }) {
   const [kind, setKind] = useState<ChartKind>(initial ?? kinds[0]);
+
+  // Load the saved preference after mount (avoids SSR/hydration mismatch).
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      const saved = localStorage.getItem(storageKey) as ChartKind | null;
+      if (saved && kinds.includes(saved)) setKind(saved);
+    } catch {
+      /* ignore storage errors (private mode, etc.) */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
+
+  const choose = (k: ChartKind) => {
+    setKind(k);
+    if (storageKey) {
+      try {
+        localStorage.setItem(storageKey, k);
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
   const active = kinds.includes(kind) ? kind : kinds[0];
   return (
     <div>
@@ -276,7 +303,7 @@ export function ChartSwitcher({
           <button
             key={k}
             type="button"
-            onClick={() => setKind(k)}
+            onClick={() => choose(k)}
             style={{
               padding: "0.2rem 0.6rem",
               fontSize: "0.78rem",
