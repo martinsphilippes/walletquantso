@@ -236,6 +236,47 @@ export function CategoryManager({ mode }: { mode: CategoryManagerMode }) {
     }
   }
 
+  // ── Edição em massa — inline na barra de seleção, como em Lançamentos.
+  // Nas categorias aplica o centro de custo; nas subcategorias, a categoria.
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkValue, setBulkValue] = useState("");
+  const [bulkMsg, setBulkMsg] = useState("");
+
+  async function applyBulk() {
+    if (!user || sel.count === 0) return;
+    if (!bulkValue) {
+      setBulkMsg(isSub ? "Escolha a categoria a aplicar." : "Escolha o centro de custo a aplicar.");
+      return;
+    }
+    setBusy(true);
+    setBulkMsg("");
+    setError("");
+    try {
+      const parent = isSub ? catById.get(bulkValue) : undefined;
+      for (const id of sel.selectedIds) {
+        if (isSub) {
+          // Sub não pode virar filha de si mesma (não acontece: bulkValue é principal).
+          await updateCategory(id, {
+            parentId: bulkValue,
+            kind: parent?.kind ?? "expense",
+            costCenterId: null,
+          });
+        } else {
+          await updateCategory(id, { costCenterId: bulkValue });
+        }
+      }
+      setBulkMsg(`✅ ${sel.count} ${noun}(s) atualizada(s).`);
+      sel.clear();
+      setBulkOpen(false);
+      setBulkValue("");
+      await load();
+    } catch (err) {
+      setBulkMsg(`❌ Falha ao aplicar: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function doMerge(sourceId: string) {
     if (!user || !mergeTarget) return;
     setBusy(true);
@@ -304,7 +345,75 @@ export function CategoryManager({ mode }: { mode: CategoryManagerMode }) {
             centro de cada uma.
           </p>
         )}
-        <BulkBar sel={sel} onDelete={bulkDelete} busy={busy} noun={noun} />
+        <BulkBar
+          sel={sel}
+          onDelete={bulkDelete}
+          busy={busy}
+          noun={noun}
+          extra={
+            !bulkOpen ? (
+              <>
+                <button
+                  style={{ background: "var(--border)" }}
+                  onClick={() => {
+                    setBulkOpen(true);
+                    setBulkValue("");
+                    setBulkMsg("");
+                  }}
+                >
+                  {isSub ? "Editar categoria" : "Editar centro de custo"}
+                </button>
+                {bulkMsg && (
+                  <span
+                    className={`badge ${bulkMsg.startsWith("✅") ? "ok" : "warn"}`}
+                    style={{ fontSize: "0.85rem" }}
+                  >
+                    {bulkMsg}
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                <span>{isSub ? "Nova categoria:" : "Novo centro de custo:"}</span>
+                <select value={bulkValue} onChange={(e) => setBulkValue(e.target.value)}>
+                  <option value="">— escolha —</option>
+                  {(isSub ? mains : centers).map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+                <button disabled={busy} onClick={applyBulk}>
+                  {busy ? "Aplicando…" : `Aplicar a ${sel.count} selecionada(s)`}
+                </button>
+                <button
+                  style={{ background: "var(--border)" }}
+                  disabled={busy}
+                  onClick={() => {
+                    setBulkOpen(false);
+                    setBulkValue("");
+                    setBulkMsg("");
+                  }}
+                >
+                  Cancelar
+                </button>
+                {bulkMsg && (
+                  <span
+                    className={`badge ${bulkMsg.startsWith("✅") ? "ok" : "warn"}`}
+                    style={{ fontSize: "0.85rem" }}
+                  >
+                    {bulkMsg}
+                  </span>
+                )}
+              </>
+            )
+          }
+        />
+        {sel.count === 0 && bulkMsg && (
+          <p style={{ marginBottom: "0.75rem" }}>
+            <span className={`badge ${bulkMsg.startsWith("✅") ? "ok" : "warn"}`}>{bulkMsg}</span>
+          </p>
+        )}
         {rows.length === 0 ? (
           <p className="muted">
             {isSub
