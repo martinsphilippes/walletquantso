@@ -23,6 +23,7 @@ import {
   settleBillAtPaid,
 } from "@/services/bills";
 import { parseBrCurrency } from "@/lib/br/parse";
+import { categoryOptions, effectiveCostCenterId } from "@/lib/categories/tree";
 import { DateParts } from "@/components/DateParts";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
@@ -176,6 +177,15 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     () => new Map(accounts.map((a) => [a.id!, a.name])),
     [accounts],
   );
+  const catOptions = useMemo(() => categoryOptions(categories), [categories]);
+  const catById = useMemo(
+    () => new Map(categories.filter((c) => c.id).map((c) => [c.id as string, c])),
+    [categories],
+  );
+  // Categoria pertence a um centro de custo: escolher a categoria puxa o
+  // centro automaticamente (continua editável).
+  const centerForCategory = (id: string) =>
+    effectiveCostCenterId(id ? catById.get(id) : undefined, catById);
 
   // Apply the entity filters (account, contact, category, center, text). The
   // paid/status visibility toggle is applied separately, on top of this.
@@ -569,12 +579,18 @@ export function BillsManager({ kind }: { kind: BillKind }) {
           <Field label="Categoria">
             <select
               value={creating.categoryId}
-              onChange={(e) => setCreating({ ...creating, categoryId: e.target.value })}
+              onChange={(e) =>
+                setCreating({
+                  ...creating,
+                  categoryId: e.target.value,
+                  costCenterId: centerForCategory(e.target.value) ?? creating.costCenterId,
+                })
+              }
             >
               <option value="">Categoria…</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
+              {catOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
                 </option>
               ))}
             </select>
@@ -667,9 +683,9 @@ export function BillsManager({ kind }: { kind: BillKind }) {
           <Field label="Categoria">
             <select value={fCategory} onChange={(e) => setFCategory(e.target.value)}>
               <option value="">Todas</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
+              {catOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
                 </option>
               ))}
             </select>
@@ -911,12 +927,19 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                               <Field label="Categoria">
                                 <select
                                   value={draft.categoryId}
-                                  onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}
+                                  onChange={(e) =>
+                                    setDraft({
+                                      ...draft,
+                                      categoryId: e.target.value,
+                                      costCenterId:
+                                        centerForCategory(e.target.value) ?? draft.costCenterId,
+                                    })
+                                  }
                                 >
                                   <option value="">—</option>
-                                  {categories.map((c) => (
-                                    <option key={c.id} value={c.id}>
-                                      {c.name}
+                                  {catOptions.map((o) => (
+                                    <option key={o.id} value={o.id}>
+                                      {o.label}
                                     </option>
                                   ))}
                                 </select>

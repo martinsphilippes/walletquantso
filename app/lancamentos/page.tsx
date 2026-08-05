@@ -22,6 +22,7 @@ import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/Col
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import { FilterField } from "@/components/FilterField";
 import { todayBr, daysAgoBr, monthRangeBr } from "@/lib/br/date";
+import { categoryOptions, effectiveCostCenterId } from "@/lib/categories/tree";
 import { transactionsToCsv } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
 import {
@@ -118,6 +119,11 @@ function Lancamentos() {
   const contactName = useMemo(
     () => new Map(contacts.map((x) => [x.id!, x.name])),
     [contacts],
+  );
+  const catOptions = useMemo(() => categoryOptions(categories), [categories]);
+  const catById = useMemo(
+    () => new Map(categories.filter((c) => c.id).map((c) => [c.id as string, c])),
+    [categories],
   );
 
   const filtered = useMemo(
@@ -430,9 +436,9 @@ function Lancamentos() {
               onChange={(e) => set({ categoryId: e.target.value || undefined })}
             >
               <option value="">Todas as categorias</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
+              {catOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
                 </option>
               ))}
             </select>
@@ -539,14 +545,30 @@ function Lancamentos() {
             ) : (
               <>
                 <span>Categoria:</span>
-                <select value={bulkCat} onChange={(e) => setBulkCat(e.target.value)}>
+                <select
+                  value={bulkCat}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setBulkCat(id);
+                    // Categoria pertence a um centro: sugerir o centro dela.
+                    const cc =
+                      id && id !== "__clear__"
+                        ? effectiveCostCenterId(catById.get(id), catById)
+                        : null;
+                    if (cc) setBulkCenter(cc);
+                  }}
+                >
                   <option value="">— não alterar —</option>
                   <option value="__clear__">— limpar (nenhuma) —</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({TYPE_LABELS[c.kind]})
-                    </option>
-                  ))}
+                  {catOptions.map((o) => {
+                    const kind = catById.get(o.id)?.kind;
+                    return (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                        {kind ? ` (${TYPE_LABELS[kind]})` : ""}
+                      </option>
+                    );
+                  })}
                 </select>
                 <span>Centro de custo:</span>
                 <select value={bulkCenter} onChange={(e) => setBulkCenter(e.target.value)}>

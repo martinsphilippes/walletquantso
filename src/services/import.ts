@@ -136,6 +136,7 @@ export async function commitImport(params: {
       name,
       kind: "expense",
       parentId: null,
+      costCenterId: null,
       createdAt: now,
     };
     setupBatch.set(ref, category);
@@ -398,7 +399,7 @@ export async function commitBillsImport(params: {
   }
   for (const name of newCategories.values()) {
     const ref = doc(collection(db, COLLECTIONS.categories));
-    const category: Category = { ownerId, name, kind: "expense", parentId: null, createdAt: now };
+    const category: Category = { ownerId, name, kind: "expense", parentId: null, costCenterId: null, createdAt: now };
     setupBatch.set(ref, category);
     categoriesByName.set(normalizeHeader(name), ref.id);
   }

@@ -29,7 +29,11 @@ export interface Account {
   createdAt: number;
 }
 
-/** A category or subcategory (subcategory has a `parentId`). */
+/**
+ * A category or subcategory. Hierarchy: cost center → category → subcategory.
+ * A top-level category (parentId null) must belong to a cost center; a
+ * subcategory points to its parent category and inherits its cost center.
+ */
 export interface Category {
   id?: string;
   ownerId: string;
@@ -38,6 +42,8 @@ export interface Category {
   kind: TransactionType;
   /** Parent category id when this is a subcategory; null for top-level. */
   parentId: string | null;
+  /** Cost center a top-level category belongs to (subcategories inherit it). */
+  costCenterId?: string | null;
   createdAt: number;
 }
 

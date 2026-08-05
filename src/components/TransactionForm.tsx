@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { parseBrCurrency } from "@/lib/br/parse";
+import { categoryOptions, effectiveCostCenterId } from "@/lib/categories/tree";
 import type { Account, Category, Contact, CostCenter, TransactionType } from "@/types";
 import type { TransactionInput } from "@/services/transactions";
 import { todayBr } from "@/lib/br/date";
@@ -129,6 +130,19 @@ export function TransactionForm({
   }
 
   const relevantCategories = categories.filter((c) => c.kind === type || type === "transfer");
+  const catOptions = useMemo(() => categoryOptions(relevantCategories), [relevantCategories]);
+  const catById = useMemo(
+    () => new Map(categories.filter((c) => c.id).map((c) => [c.id as string, c])),
+    [categories],
+  );
+
+  // Categoria pertence a um centro de custo: ao escolher a categoria, o centro
+  // vem junto automaticamente (continua editável).
+  function pickCategory(id: string) {
+    setCategoryId(id);
+    const cc = effectiveCostCenterId(id ? catById.get(id) : undefined, catById);
+    if (cc) setCostCenterId(cc);
+  }
 
   return (
     <form onSubmit={submit} className="panel" style={{ background: "var(--bg)" }}>
@@ -237,11 +251,11 @@ export function TransactionForm({
         {type !== "transfer" && (
           <label style={col}>
             <span className="muted">Categoria</span>
-            <select value={categoryId ?? ""} onChange={(e) => setCategoryId(e.target.value)}>
+            <select value={categoryId ?? ""} onChange={(e) => pickCategory(e.target.value)}>
               <option value="">— nenhuma —</option>
-              {relevantCategories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
+              {catOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
                 </option>
               ))}
             </select>
