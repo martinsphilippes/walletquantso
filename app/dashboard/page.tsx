@@ -25,7 +25,7 @@ import { transactionsToCsv } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
 import { filterTransactions, type DashboardFilters } from "@/lib/dashboard/filter";
 import { computeOverview } from "@/lib/dashboard/overview";
-import { todayBr, currentMonthBr, daysAgoBr } from "@/lib/br/date";
+import { todayBr, currentMonthBr, daysAgoBr, monthRangeBr } from "@/lib/br/date";
 import { computeCashBalances, monthResult, type MonthMode } from "@/lib/dashboard/cash";
 import {
   receitasPorCategoria,
@@ -195,25 +195,43 @@ function Dashboard() {
     }
   };
 
+  // Período dos painéis por categoria/centro (vazio = histórico inteiro).
+  // Lançamentos entram pela data; títulos, pelo vencimento.
+  const [bdFrom, setBdFrom] = useState("");
+  const [bdTo, setBdTo] = useState("");
+  const inBdRange = useCallback(
+    (d: string) => (!bdFrom || d >= bdFrom) && (!bdTo || d <= bdTo),
+    [bdFrom, bdTo],
+  );
+  const bdTxs = useMemo(() => (txs ?? []).filter((t) => inBdRange(t.date)), [txs, inBdRange]);
+  const bdPayables = useMemo(
+    () => payables.filter((b) => inBdRange(b.dueDate)),
+    [payables, inBdRange],
+  );
+  const bdReceivables = useMemo(
+    () => receivables.filter((b) => inBdRange(b.dueDate)),
+    [receivables, inBdRange],
+  );
+
   const receitasCat = useMemo(
-    () => receitasPorCategoria(txs ?? [], receivables, categories, bdMode),
-    [txs, receivables, categories, bdMode],
+    () => receitasPorCategoria(bdTxs, bdReceivables, categories, bdMode),
+    [bdTxs, bdReceivables, categories, bdMode],
   );
   const despesasCat = useMemo(
-    () => despesasPorCategoria(txs ?? [], payables, categories, bdMode),
-    [txs, payables, categories, bdMode],
+    () => despesasPorCategoria(bdTxs, bdPayables, categories, bdMode),
+    [bdTxs, bdPayables, categories, bdMode],
   );
   const receitasCentro = useMemo(
-    () => receitasPorCentro(txs ?? [], receivables, costCenters, bdMode),
-    [txs, receivables, costCenters, bdMode],
+    () => receitasPorCentro(bdTxs, bdReceivables, costCenters, bdMode),
+    [bdTxs, bdReceivables, costCenters, bdMode],
   );
   const despesasCentro = useMemo(
-    () => despesasPorCentro(txs ?? [], payables, costCenters, bdMode),
-    [txs, payables, costCenters, bdMode],
+    () => despesasPorCentro(bdTxs, bdPayables, costCenters, bdMode),
+    [bdTxs, bdPayables, costCenters, bdMode],
   );
   const centros = useMemo(
-    () => resultadosPorCentro(txs ?? [], payables, receivables, costCenters, bdMode),
-    [txs, payables, receivables, costCenters, bdMode],
+    () => resultadosPorCentro(bdTxs, bdPayables, bdReceivables, costCenters, bdMode),
+    [bdTxs, bdPayables, bdReceivables, costCenters, bdMode],
   );
   const costCenterName = useMemo(
     () => new Map(costCenters.map((c) => [c.id!, c.name])),
@@ -832,6 +850,84 @@ function Dashboard() {
           )}
         </p>
       )}
+
+      {/* Período dos painéis por categoria/centro */}
+      <div className="panel" style={{ padding: "0.75rem 1rem" }}>
+        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+          <strong style={{ alignSelf: "center" }}>Período dos gráficos</strong>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignSelf: "center" }}>
+            {(() => {
+              const presets: Array<{ label: string; from: string; to: string }> = [
+                { label: "Este mês", ...monthRangeBr(0) },
+                { label: "Mês passado", ...monthRangeBr(-1) },
+                { label: "Próximo mês", ...monthRangeBr(1) },
+                { label: "30 dias", from: daysAgoBr(30), to: todayBr() },
+                { label: "60 dias", from: daysAgoBr(60), to: todayBr() },
+                { label: "90 dias", from: daysAgoBr(90), to: todayBr() },
+              ];
+              const chip = (active: boolean): React.CSSProperties => ({
+                padding: "0.25rem 0.75rem",
+                fontSize: "0.8rem",
+                borderRadius: 999,
+                border: "1px solid var(--border)",
+                background: active ? "var(--accent)" : "transparent",
+                color: active ? "var(--accent-ink)" : "var(--muted)",
+                cursor: "pointer",
+              });
+              return (
+                <>
+                  {presets.map((p) => {
+                    const active = bdFrom === p.from && bdTo === p.to;
+                    return (
+                      <button
+                        key={p.label}
+                        type="button"
+                        style={chip(active)}
+                        onClick={() => {
+                          setBdFrom(p.from);
+                          setBdTo(p.to);
+                        }}
+                      >
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    style={chip(!bdFrom && !bdTo)}
+                    onClick={() => {
+                      setBdFrom("");
+                      setBdTo("");
+                    }}
+                  >
+                    Tudo
+                  </button>
+                </>
+              );
+            })()}
+          </div>
+          <FilterField label="Data inicial (de)">
+            <input
+              type="date"
+              value={bdFrom}
+              onChange={(e) => setBdFrom(e.target.value)}
+              style={fieldStyle}
+            />
+          </FilterField>
+          <FilterField label="Data final (até)">
+            <input
+              type="date"
+              value={bdTo}
+              onChange={(e) => setBdTo(e.target.value)}
+              style={fieldStyle}
+            />
+          </FilterField>
+        </div>
+        <p className="muted" style={{ marginBottom: 0, fontSize: "0.82rem" }}>
+          Vale para os painéis abaixo (por categoria e por centro): lançamentos pela data,
+          títulos pelo vencimento.
+        </p>
+      </div>
 
       {/* Receitas e Despesas por categoria (situação projetada) */}
       <div
