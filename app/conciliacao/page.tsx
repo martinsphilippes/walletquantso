@@ -11,6 +11,7 @@ import {
   transactionsForAccount,
   summarizeClearing,
 } from "@/lib/reconcile/clearing";
+import { computeCashBalances } from "@/lib/dashboard/cash";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import type { Account, Bill, Transaction } from "@/types";
 
@@ -33,7 +34,8 @@ function Conciliacao() {
   const { user } = useAuth();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [txs, setTxs] = useState<Transaction[]>([]);
-  const [bills, setBills] = useState<Bill[]>([]);
+  const [payables, setPayables] = useState<Bill[]>([]);
+  const [receivables, setReceivables] = useState<Bill[]>([]);
   const [accountId, setAccountId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -51,10 +53,22 @@ function Conciliacao() {
         listBills(user.uid, "payable"),
         listBills(user.uid, "receivable"),
       ]);
-      setAccounts(a);
+      // Ordem preferida dos botões de conta: Cora, C6, BTG, demais.
+      const rank = (n: string) => {
+        const s = n.toLowerCase();
+        if (s.includes("cora")) return 0;
+        if (s.includes("c6")) return 1;
+        if (s.includes("btg")) return 2;
+        return 3;
+      };
+      const sorted = [...a].sort(
+        (x, y) => rank(x.name) - rank(y.name) || x.name.localeCompare(y.name, "pt-BR"),
+      );
+      setAccounts(sorted);
       setTxs(t);
-      setBills([...pay, ...rec]);
-      setAccountId((cur) => cur || a[0]?.id || "");
+      setPayables(pay);
+      setReceivables(rec);
+      setAccountId((cur) => cur || sorted[0]?.id || "");
     } catch (err) {
       setError(`Falha ao carregar: ${(err as Error).message}`);
     } finally {
@@ -82,6 +96,17 @@ function Conciliacao() {
     () => (onlyPending ? accountTxs.filter((t) => !t.reconciled) : accountTxs),
     [accountTxs, onlyPending],
   );
+
+  // Saldo desta conta pelo MESMO cálculo do Dashboard ("Saldos de caixa"),
+  // para comparação lado a lado — qualquer diferença fica exposta na tela.
+  const dashConfirmed = useMemo(() => {
+    const row = computeCashBalances(accounts, txs, payables, receivables).rows.find(
+      (r) => r.accountId === accountId,
+    );
+    return row ? row.confirmed : null;
+  }, [accounts, txs, payables, receivables, accountId]);
+
+  const bills = useMemo(() => [...payables, ...receivables], [payables, receivables]);
 
   // Baixas antigas desta conta que ainda não viraram lançamento: o Dashboard
   // as soma, mas esta tela (que trabalha sobre lançamentos) não as vê — o que
@@ -201,16 +226,31 @@ function Conciliacao() {
 
       <div className="panel">
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
-          <label style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
-            <span className="muted">Conta</span>
-            <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
+          <span className="muted">Conta</span>
+          <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+            {accounts.map((a) => {
+              const active = accountId === a.id;
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => setAccountId(a.id!)}
+                  style={{
+                    padding: "0.45rem 0.9rem",
+                    borderRadius: 8,
+                    border: active ? "2px solid var(--accent)" : "1px solid var(--border)",
+                    background: active ? "var(--accent)" : "var(--panel)",
+                    color: active ? "var(--accent-ink)" : "var(--text)",
+                    font: "inherit",
+                    fontWeight: active ? 700 : 400,
+                    cursor: "pointer",
+                  }}
+                >
                   {a.name}
-                </option>
-              ))}
-            </select>
-          </label>
+                </button>
+              );
+            })}
+          </div>
           <label className="muted" style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
             <input
               type="checkbox"
@@ -269,6 +309,22 @@ function Conciliacao() {
           <Stat label="Pendentes" value={String(summary.pendingCount)} />
         </div>
       )}
+
+      {summary &&
+        dashConfirmed != null &&
+        Math.round((dashConfirmed - summary.currentBalance) * 100) !== 0 && (
+          <div className="panel" style={{ borderColor: "var(--err)" }}>
+            <p style={{ margin: 0 }}>
+              ⚠ O Dashboard mostra <strong>{brl(dashConfirmed)}</strong> para esta conta —
+              diferença de{" "}
+              <strong>{brl(Math.round((dashConfirmed - summary.currentBalance) * 100) / 100)}</strong>{" "}
+              em relação a esta tela.
+              {unmaterialized.count > 0
+                ? " A causa são as baixas antigas indicadas acima — use “Corrigir agora”."
+                : " Tire um print desta tela e me envie para eu investigar."}
+            </p>
+          </div>
+        )}
 
       <div className="panel">
         {visible.length === 0 ? (
