@@ -23,7 +23,7 @@ import {
   settleBillAtPaid,
 } from "@/services/bills";
 import { parseBrCurrency } from "@/lib/br/parse";
-import { categoryOptions, effectiveCostCenterId } from "@/lib/categories/tree";
+import { effectiveCostCenterId } from "@/lib/categories/tree";
 import { DateParts } from "@/components/DateParts";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
@@ -73,7 +73,10 @@ interface Draft {
   competenceDate: string;
   documentNumber: string;
   contactId: string;
+  /** Categoria principal escolhida (só principais aqui). */
   categoryId: string;
+  /** Subcategoria da categoria acima; gravada no lugar dela quando escolhida. */
+  subcategoryId: string;
   costCenterId: string;
   accountId: string;
   notes: string;
@@ -89,6 +92,7 @@ const emptyDraft = (): Draft => ({
   documentNumber: "",
   contactId: "",
   categoryId: "",
+  subcategoryId: "",
   costCenterId: "",
   accountId: "",
   notes: "",
@@ -124,6 +128,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
   const [fAccount, setFAccount] = useState("");
   const [fContact, setFContact] = useState("");
   const [fCategory, setFCategory] = useState("");
+  const [fSubcategory, setFSubcategory] = useState("");
   const [fCostCenter, setFCostCenter] = useState("");
   const [fStatus, setFStatus] = useState<BillStatus | "">("");
   const [fText, setFText] = useState("");
@@ -177,11 +182,15 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     () => new Map(accounts.map((a) => [a.id!, a.name])),
     [accounts],
   );
-  const catOptions = useMemo(() => categoryOptions(categories), [categories]);
   const catById = useMemo(
     () => new Map(categories.filter((c) => c.id).map((c) => [c.id as string, c])),
     [categories],
   );
+  // Hierarquia: centro → categoria → subcategoria. Categoria e subcategoria
+  // são campos separados; a subcategoria só lista as filhas da categoria.
+  const mainCategories = useMemo(() => categories.filter((c) => !c.parentId), [categories]);
+  const subsOf = (mainId: string) =>
+    mainId ? categories.filter((c) => c.parentId === mainId) : [];
   // Categoria pertence a um centro de custo: escolher a categoria puxa o
   // centro automaticamente (continua editável).
   const centerForCategory = (id: string) =>
@@ -194,7 +203,13 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     return (bills ?? []).filter((b) => {
       if (fAccount && b.accountId !== fAccount) return false;
       if (fContact && b.contactId !== fContact) return false;
-      if (fCategory && b.categoryId !== fCategory) return false;
+      if (fCategory) {
+        // Filtrar pela categoria inclui as subcategorias dela.
+        const cat = b.categoryId ? catById.get(b.categoryId) : undefined;
+        const mainId = cat?.parentId ?? cat?.id;
+        if (mainId !== fCategory) return false;
+      }
+      if (fSubcategory && b.categoryId !== fSubcategory) return false;
       if (fCostCenter && b.costCenterId !== fCostCenter) return false;
       if (q) {
         const hay = `${b.description ?? ""} ${b.documentNumber ?? ""}`.toLowerCase();
@@ -202,7 +217,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
       }
       return true;
     });
-  }, [bills, fAccount, fContact, fCategory, fCostCenter, fText]);
+  }, [bills, fAccount, fContact, fCategory, fSubcategory, fCostCenter, fText, catById]);
 
   // Totals reflect the current entity filters (e.g. only the chosen account).
   const summary = useMemo(() => summarizeBills(entityFiltered, t), [entityFiltered, t]);
@@ -259,6 +274,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     (fAccount ? 1 : 0) +
     (fContact ? 1 : 0) +
     (fCategory ? 1 : 0) +
+    (fSubcategory ? 1 : 0) +
     (fCostCenter ? 1 : 0) +
     (fStatus ? 1 : 0) +
     (fText.trim() ? 1 : 0);
@@ -267,6 +283,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     setFAccount("");
     setFContact("");
     setFCategory("");
+    setFSubcategory("");
     setFCostCenter("");
     setFStatus("");
     setFText("");
@@ -293,7 +310,8 @@ export function BillsManager({ kind }: { kind: BillKind }) {
       competenceDate: d.competenceDate || d.dueDate,
       documentNumber: d.documentNumber.trim() || null,
       contactId: d.contactId || null,
-      categoryId: d.categoryId || null,
+      // Grava a subcategoria quando escolhida; senão a categoria principal.
+      categoryId: (d.subcategoryId || d.categoryId) || null,
       costCenterId: d.costCenterId || null,
       accountId: d.accountId || null,
       notes: d.notes.trim() || null,
@@ -362,6 +380,9 @@ export function BillsManager({ kind }: { kind: BillKind }) {
   function startEdit(b: Bill) {
     setPayingId(null);
     setEditingId(b.id!);
+    // Se o título aponta para uma subcategoria, separa em categoria + sub.
+    const cat = b.categoryId ? catById.get(b.categoryId) : undefined;
+    const isSubCat = !!cat?.parentId;
     setDraft({
       description: b.description,
       amount: String(b.amount).replace(".", ","),
@@ -369,7 +390,8 @@ export function BillsManager({ kind }: { kind: BillKind }) {
       competenceDate: b.competenceDate ?? b.dueDate,
       documentNumber: b.documentNumber ?? "",
       contactId: b.contactId ?? "",
-      categoryId: b.categoryId ?? "",
+      categoryId: isSubCat ? (cat?.parentId ?? "") : (b.categoryId ?? ""),
+      subcategoryId: isSubCat ? (b.categoryId ?? "") : "",
       costCenterId: b.costCenterId ?? "",
       accountId: b.accountId ?? "",
       notes: b.notes ?? "",
@@ -583,18 +605,34 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                 setCreating({
                   ...creating,
                   categoryId: e.target.value,
+                  subcategoryId: "",
                   costCenterId: centerForCategory(e.target.value) ?? creating.costCenterId,
                 })
               }
             >
               <option value="">Categoria…</option>
-              {catOptions.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.label}
+              {mainCategories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
                 </option>
               ))}
             </select>
           </Field>
+          {subsOf(creating.categoryId).length > 0 && (
+            <Field label="Subcategoria">
+              <select
+                value={creating.subcategoryId}
+                onChange={(e) => setCreating({ ...creating, subcategoryId: e.target.value })}
+              >
+                <option value="">— nenhuma —</option>
+                {subsOf(creating.categoryId).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
           <Field label={contactLabel}>
             <select
               value={creating.contactId}
@@ -681,15 +719,33 @@ export function BillsManager({ kind }: { kind: BillKind }) {
             </select>
           </Field>
           <Field label="Categoria">
-            <select value={fCategory} onChange={(e) => setFCategory(e.target.value)}>
+            <select
+              value={fCategory}
+              onChange={(e) => {
+                setFCategory(e.target.value);
+                setFSubcategory("");
+              }}
+            >
               <option value="">Todas</option>
-              {catOptions.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.label}
+              {mainCategories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
                 </option>
               ))}
             </select>
           </Field>
+          {fCategory && subsOf(fCategory).length > 0 && (
+            <Field label="Subcategoria">
+              <select value={fSubcategory} onChange={(e) => setFSubcategory(e.target.value)}>
+                <option value="">Todas</option>
+                {subsOf(fCategory).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
           {costCenters.length > 0 && (
             <Field label="Centro">
               <select value={fCostCenter} onChange={(e) => setFCostCenter(e.target.value)}>
@@ -931,19 +987,37 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                     setDraft({
                                       ...draft,
                                       categoryId: e.target.value,
+                                      subcategoryId: "",
                                       costCenterId:
                                         centerForCategory(e.target.value) ?? draft.costCenterId,
                                     })
                                   }
                                 >
                                   <option value="">—</option>
-                                  {catOptions.map((o) => (
-                                    <option key={o.id} value={o.id}>
-                                      {o.label}
+                                  {mainCategories.map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                      {c.name}
                                     </option>
                                   ))}
                                 </select>
                               </Field>
+                              {subsOf(draft.categoryId).length > 0 && (
+                                <Field label="Subcategoria">
+                                  <select
+                                    value={draft.subcategoryId}
+                                    onChange={(e) =>
+                                      setDraft({ ...draft, subcategoryId: e.target.value })
+                                    }
+                                  >
+                                    <option value="">— nenhuma —</option>
+                                    {subsOf(draft.categoryId).map((c) => (
+                                      <option key={c.id} value={c.id}>
+                                        {c.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </Field>
+                              )}
                               <Field label="Centro">
                                 <select
                                   value={draft.costCenterId}

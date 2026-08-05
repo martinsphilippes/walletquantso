@@ -14,6 +14,8 @@ export interface DashboardFilters {
   type?: TransactionType | "";
   /** Restrict to a single category. */
   categoryId?: string;
+  /** Restrict to any of these categories (e.g. a category plus its subcategories). */
+  categoryIds?: string[];
   /** Restrict to a single cost center. */
   costCenterId?: string;
   /** Restrict to a single contact. */
@@ -44,6 +46,8 @@ export function filterTransactions(
       return false;
     if (f.type && t.type !== f.type) return false;
     if (f.categoryId && t.categoryId !== f.categoryId) return false;
+    if (f.categoryIds && f.categoryIds.length > 0 && !f.categoryIds.includes(t.categoryId ?? ""))
+      return false;
     if (f.costCenterId && t.costCenterId !== f.costCenterId) return false;
     if (f.contactId && t.contactId !== f.contactId) return false;
     if (f.from && t.date < f.from) return false;

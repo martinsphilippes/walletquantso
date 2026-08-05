@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { parseBrCurrency } from "@/lib/br/parse";
-import { categoryOptions, effectiveCostCenterId } from "@/lib/categories/tree";
+import { effectiveCostCenterId } from "@/lib/categories/tree";
 import type { Account, Category, Contact, CostCenter, TransactionType } from "@/types";
 import type { TransactionInput } from "@/services/transactions";
 import { todayBr } from "@/lib/br/date";
@@ -78,7 +78,15 @@ export function TransactionForm({
   const [description, setDescription] = useState(initial?.description ?? "");
   const [accountId, setAccountId] = useState(initial?.accountId ?? "");
   const [transferAccountId, setTransferAccountId] = useState(initial?.transferAccountId ?? "");
-  const [categoryId, setCategoryId] = useState(initial?.categoryId ?? "");
+  // Categoria e subcategoria são campos separados. O registro guarda um único
+  // categoryId (a subcategoria quando escolhida); aqui ele é dividido em dois.
+  const initialCat = categories.find((c) => c.id === (initial?.categoryId ?? ""));
+  const [categoryId, setCategoryId] = useState(
+    initialCat?.parentId ?? initialCat?.id ?? "",
+  );
+  const [subcategoryId, setSubcategoryId] = useState(
+    initialCat?.parentId ? (initialCat.id ?? "") : "",
+  );
   const [costCenterId, setCostCenterId] = useState(initial?.costCenterId ?? "");
   const [contactId, setContactId] = useState(initial?.contactId ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
@@ -112,7 +120,7 @@ export function TransactionForm({
       description: description.trim(),
       accountId,
       transferAccountId: type === "transfer" ? transferAccountId : null,
-      categoryId: categoryId || null,
+      categoryId: (subcategoryId || categoryId) || null,
       costCenterId: costCenterId || null,
       contactId: contactId || null,
       notes: notes.trim() || undefined,
@@ -129,8 +137,13 @@ export function TransactionForm({
     }
   }
 
-  const relevantCategories = categories.filter((c) => c.kind === type || type === "transfer");
-  const catOptions = useMemo(() => categoryOptions(relevantCategories), [relevantCategories]);
+  // Só categorias principais no campo Categoria; subcategorias no campo próprio.
+  const mainCategories = categories.filter(
+    (c) => !c.parentId && (c.kind === type || type === "transfer"),
+  );
+  const subOptions = categoryId
+    ? categories.filter((c) => c.parentId === categoryId)
+    : [];
   const catById = useMemo(
     () => new Map(categories.filter((c) => c.id).map((c) => [c.id as string, c])),
     [categories],
@@ -140,6 +153,7 @@ export function TransactionForm({
   // vem junto automaticamente (continua editável).
   function pickCategory(id: string) {
     setCategoryId(id);
+    setSubcategoryId("");
     const cc = effectiveCostCenterId(id ? catById.get(id) : undefined, catById);
     if (cc) setCostCenterId(cc);
   }
@@ -253,9 +267,22 @@ export function TransactionForm({
             <span className="muted">Categoria</span>
             <select value={categoryId ?? ""} onChange={(e) => pickCategory(e.target.value)}>
               <option value="">— nenhuma —</option>
-              {catOptions.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.label}
+              {mainCategories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {type !== "transfer" && subOptions.length > 0 && (
+          <label style={col}>
+            <span className="muted">Subcategoria</span>
+            <select value={subcategoryId} onChange={(e) => setSubcategoryId(e.target.value)}>
+              <option value="">— nenhuma —</option>
+              {subOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
                 </option>
               ))}
             </select>

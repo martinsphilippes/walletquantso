@@ -22,7 +22,7 @@ import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/Col
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import { FilterField } from "@/components/FilterField";
 import { todayBr, daysAgoBr, monthRangeBr } from "@/lib/br/date";
-import { categoryOptions, effectiveCostCenterId } from "@/lib/categories/tree";
+import { effectiveCostCenterId } from "@/lib/categories/tree";
 import { transactionsToCsv } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
 import {
@@ -120,11 +120,29 @@ function Lancamentos() {
     () => new Map(contacts.map((x) => [x.id!, x.name])),
     [contacts],
   );
-  const catOptions = useMemo(() => categoryOptions(categories), [categories]);
   const catById = useMemo(
     () => new Map(categories.filter((c) => c.id).map((c) => [c.id as string, c])),
     [categories],
   );
+  // Hierarquia: categoria principal e subcategoria são campos separados.
+  const mainCategories = useMemo(() => categories.filter((c) => !c.parentId), [categories]);
+  const subsOf = (mainId: string) =>
+    mainId ? categories.filter((c) => c.parentId === mainId) : [];
+
+  // Categoria selecionada no filtro: derivada dos filtros ativos (o exato em
+  // `categoryId` quando é uma sub; o grupo inteiro em `categoryIds` quando é
+  // uma principal — inclui as subs dela).
+  const fCatMain = filters.categoryId
+    ? (catById.get(filters.categoryId)?.parentId ?? "")
+    : (filters.categoryIds?.[0] ?? "");
+  const pickFilterCategory = (id: string) => {
+    if (!id) {
+      set({ categoryId: undefined, categoryIds: undefined });
+      return;
+    }
+    const group = [id, ...categories.filter((c) => c.parentId === id).map((c) => c.id!)];
+    set({ categoryId: undefined, categoryIds: group });
+  };
 
   const filtered = useMemo(
     () => (txs ? filterTransactions(txs, filters) : []),
@@ -145,7 +163,23 @@ function Lancamentos() {
     { key: "date", value: (t) => t.date.split("-").reverse().join("/") },
     { key: "description", value: (t) => t.description },
     { key: "type", type: "select", value: (t) => TYPE_LABELS[t.type] },
-    { key: "category", type: "select", value: (t) => nameOf(categoryName, t.categoryId) },
+    // Categoria mostra sempre a principal; a subcategoria tem coluna própria.
+    {
+      key: "category",
+      type: "select",
+      value: (t) => {
+        const c = t.categoryId ? catById.get(t.categoryId) : undefined;
+        return c ? (c.parentId ? (categoryName.get(c.parentId) ?? "—") : c.name) : "—";
+      },
+    },
+    {
+      key: "subcategory",
+      type: "select",
+      value: (t) => {
+        const c = t.categoryId ? catById.get(t.categoryId) : undefined;
+        return c?.parentId ? c.name : "";
+      },
+    },
     { key: "center", type: "select", value: (t) => nameOf(costCenterName, t.costCenterId) },
     { key: "contact", type: "select", value: (t) => nameOf(contactName, t.contactId) },
     {
@@ -177,6 +211,7 @@ function Lancamentos() {
   // ── Edição em massa (categoria + centro juntos) — inline na barra ────────
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkCat, setBulkCat] = useState("");
+  const [bulkSub, setBulkSub] = useState("");
   const [bulkCenter, setBulkCenter] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkMsg, setBulkMsg] = useState("");
@@ -190,8 +225,10 @@ function Lancamentos() {
     const ids = sel.selectedIds;
     const byId = new Map((txs ?? []).map((t) => [t.id!, t]));
 
+    // Grava a subcategoria quando escolhida; senão a categoria principal.
     // Categoria tem tipo (receita/despesa): aplica só onde o tipo combina.
-    const catValue = bulkCat === "__clear__" ? null : bulkCat || undefined;
+    const chosenCat = bulkSub || bulkCat;
+    const catValue = chosenCat === "__clear__" ? null : chosenCat || undefined;
     let catIds = ids;
     let skipped = 0;
     if (bulkCat && catValue) {
@@ -226,6 +263,7 @@ function Lancamentos() {
       sel.clear();
       setBulkOpen(false);
       setBulkCat("");
+      setBulkSub("");
       setBulkCenter("");
       await load();
     } catch (err) {
@@ -432,17 +470,36 @@ function Lancamentos() {
           </FilterField>
           <FilterField label="Categoria">
             <select
-              value={filters.categoryId ?? ""}
-              onChange={(e) => set({ categoryId: e.target.value || undefined })}
+              value={fCatMain}
+              onChange={(e) => pickFilterCategory(e.target.value)}
             >
               <option value="">Todas as categorias</option>
-              {catOptions.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.label}
+              {mainCategories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
                 </option>
               ))}
             </select>
           </FilterField>
+          {fCatMain && subsOf(fCatMain).length > 0 && (
+            <FilterField label="Subcategoria">
+              <select
+                value={filters.categoryId ?? ""}
+                onChange={(e) =>
+                  e.target.value
+                    ? set({ categoryId: e.target.value, categoryIds: undefined })
+                    : pickFilterCategory(fCatMain)
+                }
+              >
+                <option value="">Todas</option>
+                {subsOf(fCatMain).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </FilterField>
+          )}
           {costCenters.length > 0 && (
             <FilterField label="Centro de custo">
               <select
@@ -527,6 +584,7 @@ function Lancamentos() {
                   onClick={() => {
                     setBulkOpen(true);
                     setBulkCat("");
+                    setBulkSub("");
                     setBulkCenter("");
                     setBulkMsg("");
                   }}
@@ -550,6 +608,7 @@ function Lancamentos() {
                   onChange={(e) => {
                     const id = e.target.value;
                     setBulkCat(id);
+                    setBulkSub("");
                     // Categoria pertence a um centro: sugerir o centro dela.
                     const cc =
                       id && id !== "__clear__"
@@ -560,16 +619,25 @@ function Lancamentos() {
                 >
                   <option value="">— não alterar —</option>
                   <option value="__clear__">— limpar (nenhuma) —</option>
-                  {catOptions.map((o) => {
-                    const kind = catById.get(o.id)?.kind;
-                    return (
-                      <option key={o.id} value={o.id}>
-                        {o.label}
-                        {kind ? ` (${TYPE_LABELS[kind]})` : ""}
-                      </option>
-                    );
-                  })}
+                  {mainCategories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({TYPE_LABELS[c.kind]})
+                    </option>
+                  ))}
                 </select>
+                {bulkCat && bulkCat !== "__clear__" && subsOf(bulkCat).length > 0 && (
+                  <>
+                    <span>Subcategoria:</span>
+                    <select value={bulkSub} onChange={(e) => setBulkSub(e.target.value)}>
+                      <option value="">— nenhuma —</option>
+                      {subsOf(bulkCat).map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
                 <span>Centro de custo:</span>
                 <select value={bulkCenter} onChange={(e) => setBulkCenter(e.target.value)}>
                   <option value="">— não alterar —</option>
@@ -589,6 +657,7 @@ function Lancamentos() {
                   onClick={() => {
                     setBulkOpen(false);
                     setBulkCat("");
+                    setBulkSub("");
                     setBulkCenter("");
                     setBulkMsg("");
                   }}
@@ -628,6 +697,7 @@ function Lancamentos() {
                   <th>Descrição</th>
                   <th>Tipo</th>
                   <th>Categoria</th>
+                  <th>Subcategoria</th>
                   <th>Centro</th>
                   <th>Contato</th>
                   <th>Conta</th>
@@ -643,7 +713,19 @@ function Lancamentos() {
                     <td>{t.date.split("-").reverse().join("/")}</td>
                     <td>{t.description}</td>
                     <td>{TYPE_LABELS[t.type]}</td>
-                    <td>{nameOf(categoryName, t.categoryId)}</td>
+                    <td>
+                      {(() => {
+                        const c = t.categoryId ? catById.get(t.categoryId) : undefined;
+                        if (!c) return "—";
+                        return c.parentId ? (categoryName.get(c.parentId) ?? "—") : c.name;
+                      })()}
+                    </td>
+                    <td>
+                      {(() => {
+                        const c = t.categoryId ? catById.get(t.categoryId) : undefined;
+                        return c?.parentId ? c.name : "—";
+                      })()}
+                    </td>
                     <td>{nameOf(costCenterName, t.costCenterId)}</td>
                     <td>{nameOf(contactName, t.contactId)}</td>
                     <td>
