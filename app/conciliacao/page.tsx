@@ -75,10 +75,14 @@ function Conciliacao() {
     [accountTxs, onlyPending],
   );
 
+  const origem = (t: Transaction) =>
+    t.externalId?.startsWith("cora:") ? "Banco (Cora)" : "App/Importação";
+
   const filterDefs: ColFilterDef<Transaction>[] = [
     { key: "check", type: "none" },
     { key: "date", value: (t) => brDate(t.date) },
     { key: "description", value: (t) => t.description || "" },
+    { key: "origem", type: "select", value: origem },
     { key: "amount", value: (t) => brl(Math.abs(movementFor(t, accountId))), align: "right" },
   ];
   const cf = useColumnFilters(visible, filterDefs);
@@ -223,6 +227,7 @@ function Conciliacao() {
                   <th style={{ width: 40 }}>✓</th>
                   <th>Data</th>
                   <th>Descrição</th>
+                  <th>Origem</th>
                   <th style={{ textAlign: "right" }}>Valor</th>
                 </tr>
                 <FilterRow defs={filterDefs} cf={cf} />
@@ -230,6 +235,7 @@ function Conciliacao() {
               <tbody>
                 {cf.filtered.map((t) => {
                   const m = movementFor(t, accountId);
+                  const doBanco = t.externalId?.startsWith("cora:");
                   return (
                     <tr key={t.id} style={t.reconciled ? { opacity: 0.6 } : undefined}>
                       <td>
@@ -242,6 +248,18 @@ function Conciliacao() {
                       </td>
                       <td style={{ whiteSpace: "nowrap" }}>{brDate(t.date)}</td>
                       <td>{t.description || "—"}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        <span
+                          className="badge"
+                          style={
+                            doBanco
+                              ? { background: "rgba(46,204,113,0.15)", color: "var(--ok)" }
+                              : { background: "var(--border)", color: "var(--muted)" }
+                          }
+                        >
+                          {doBanco ? "Banco (Cora)" : "App/Importação"}
+                        </span>
+                      </td>
                       <td
                         style={{
                           textAlign: "right",
