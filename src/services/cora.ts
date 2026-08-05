@@ -86,6 +86,8 @@ export interface AutoProcessResult {
   merged: number;
   /** Existing lançamentos adopted (stamped with the bank id). */
   linked: number;
+  /** Linked lançamentos moved from the wrong account to this one. */
+  moved: number;
   /** Payables settled at the bank value. */
   settled: number;
   /** Already processed in earlier runs. */
@@ -109,7 +111,14 @@ export async function autoProcessCora(
   ]);
   const plan = planAutoProcess(entries, txs, payables, accountId);
 
-  const result: AutoProcessResult = { created: 0, merged: 0, linked: 0, settled: 0, skipped: 0 };
+  const result: AutoProcessResult = {
+    created: 0,
+    merged: 0,
+    linked: 0,
+    moved: 0,
+    settled: 0,
+    skipped: 0,
+  };
   const now = Date.now();
 
   for (const action of plan) {
@@ -135,6 +144,15 @@ export async function autoProcessCora(
           reconciled: true,
         });
         result.linked++;
+        break;
+
+      case "move":
+        // The bank movement belongs to this account; fix the lançamento's account.
+        await updateDoc(doc(db, COLLECTIONS.transactions, action.keep.id!), {
+          accountId,
+          reconciled: true,
+        });
+        result.moved++;
         break;
 
       case "settleBill":

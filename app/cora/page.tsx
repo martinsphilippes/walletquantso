@@ -110,6 +110,7 @@ function CoraSync() {
       if (r.created > 0) parts.push(`${r.created} lançamento(s) novo(s)`);
       if (r.merged + r.linked > 0)
         parts.push(`${r.merged + r.linked} vinculado(s) ao que já existia (preservados)`);
+      if (r.moved > 0) parts.push(`${r.moved} movido(s) para esta conta`);
       if (r.settled > 0) parts.push(`${r.settled} conta(s) a pagar quitada(s) pelo valor do banco`);
       if (r.skipped > 0) parts.push(`${r.skipped} já processado(s) antes`);
       setResult(`Distribuição concluída: ${parts.join(" · ") || "nada a fazer"}.`);

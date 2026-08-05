@@ -74,11 +74,26 @@ describe("planAutoProcess", () => {
     expect(a).toMatchObject({ kind: "link", keep: original });
   });
 
-  it("skips movements already linked", () => {
+  it("skips movements already linked on the right account", () => {
     const e = entry({ externalId: "cora:c" });
     const linked = tx({ externalId: "cora:c" });
     const [a] = planAutoProcess([e], [linked], [], ACC);
     expect(a).toMatchObject({ kind: "skip" });
+  });
+
+  it("moves a linked lançamento that sits on the wrong account", () => {
+    const e = entry({ externalId: "cora:d" });
+    const wrongAccount = tx({ externalId: "cora:d", accountId: "c6" });
+    const [a] = planAutoProcess([e], [wrongAccount], [], ACC);
+    expect(a).toMatchObject({ kind: "move", keep: wrongAccount });
+  });
+
+  it("prefers merging into the Meu Dinheiro twin even when the copy is on another account", () => {
+    const e = entry({ externalId: "cora:e", amount: 80 });
+    const copyOnC6 = tx({ externalId: "cora:e", amount: 80, accountId: "c6" });
+    const original = tx({ amount: 80, description: "original MD" });
+    const [a] = planAutoProcess([e], [copyOnC6, original], [], ACC);
+    expect(a).toMatchObject({ kind: "merge", keep: original, removeId: copyOnC6.id });
   });
 
   it("settles the open payable with the most similar name (closest due date wins)", () => {
