@@ -11,6 +11,7 @@ import {
   type MonthTotal,
 } from "@/lib/reports/aggregate";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
+import { FilterField } from "@/components/FilterField";
 import { DonutChart, CumulativeChart, PALETTE, type DonutItem } from "@/components/charts";
 import { toCsv, brNumber } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
@@ -193,19 +194,31 @@ function Reports() {
 
       <div className="panel">
         <h2>Por categoria</h2>
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
-          <select value={type} onChange={(e) => setType(e.target.value as TransactionType)}>
-            <option value="expense">Despesas</option>
-            <option value="income">Receitas</option>
-          </select>
-          <select value={month} onChange={(e) => setMonth(e.target.value)}>
-            <option value="">Todos os meses</option>
-            {months.map((m) => (
-              <option key={m} value={m}>
-                {monthLabel(m)}
-              </option>
-            ))}
-          </select>
+        <div
+          style={{
+            display: "flex",
+            gap: "0.75rem",
+            flexWrap: "wrap",
+            marginBottom: "1rem",
+            alignItems: "flex-end",
+          }}
+        >
+          <FilterField label="Tipo">
+            <select value={type} onChange={(e) => setType(e.target.value as TransactionType)}>
+              <option value="expense">Despesas</option>
+              <option value="income">Receitas</option>
+            </select>
+          </FilterField>
+          <FilterField label="Mês">
+            <select value={month} onChange={(e) => setMonth(e.target.value)}>
+              <option value="">Todos os meses</option>
+              {months.map((m) => (
+                <option key={m} value={m}>
+                  {monthLabel(m)}
+                </option>
+              ))}
+            </select>
+          </FilterField>
           <span className="muted" style={{ alignSelf: "center" }}>
             Total: <strong>{brl(categoryTotal)}</strong>
           </span>

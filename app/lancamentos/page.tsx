@@ -19,6 +19,7 @@ import {
 import { TransactionForm } from "@/components/TransactionForm";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
+import { FilterField } from "@/components/FilterField";
 import { transactionsToCsv } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
 import {
@@ -282,82 +283,98 @@ function Lancamentos() {
 
       <div className="panel">
         <h2>Filtros</h2>
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-          <input
-            placeholder="Buscar descrição…"
-            value={filters.text ?? ""}
-            onChange={(e) => set({ text: e.target.value })}
-            style={fieldStyle}
-          />
-          <select
-            value={filters.type ?? ""}
-            onChange={(e) => set({ type: (e.target.value || "") as TransactionType | "" })}
-          >
-            <option value="">Todos os tipos</option>
-            <option value="income">Receita</option>
-            <option value="expense">Despesa</option>
-            <option value="transfer">Transferência</option>
-          </select>
-          <select
-            value={filters.accountId ?? ""}
-            onChange={(e) => set({ accountId: e.target.value || undefined })}
-          >
-            <option value="">Todas as contas</option>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filters.categoryId ?? ""}
-            onChange={(e) => set({ categoryId: e.target.value || undefined })}
-          >
-            <option value="">Todas as categorias</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          {costCenters.length > 0 && (
+        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+          <FilterField label="Buscar descrição">
+            <input
+              placeholder="Ex.: aluguel, pix…"
+              value={filters.text ?? ""}
+              onChange={(e) => set({ text: e.target.value })}
+              style={fieldStyle}
+            />
+          </FilterField>
+          <FilterField label="Tipo">
             <select
-              value={filters.costCenterId ?? ""}
-              onChange={(e) => set({ costCenterId: e.target.value || undefined })}
+              value={filters.type ?? ""}
+              onChange={(e) => set({ type: (e.target.value || "") as TransactionType | "" })}
             >
-              <option value="">Todos os centros</option>
-              {costCenters.map((c) => (
+              <option value="">Todos os tipos</option>
+              <option value="income">Receita</option>
+              <option value="expense">Despesa</option>
+              <option value="transfer">Transferência</option>
+            </select>
+          </FilterField>
+          <FilterField label="Conta">
+            <select
+              value={filters.accountId ?? ""}
+              onChange={(e) => set({ accountId: e.target.value || undefined })}
+            >
+              <option value="">Todas as contas</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </FilterField>
+          <FilterField label="Categoria">
+            <select
+              value={filters.categoryId ?? ""}
+              onChange={(e) => set({ categoryId: e.target.value || undefined })}
+            >
+              <option value="">Todas as categorias</option>
+              {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
             </select>
+          </FilterField>
+          {costCenters.length > 0 && (
+            <FilterField label="Centro de custo">
+              <select
+                value={filters.costCenterId ?? ""}
+                onChange={(e) => set({ costCenterId: e.target.value || undefined })}
+              >
+                <option value="">Todos os centros</option>
+                {costCenters.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </FilterField>
           )}
           {contacts.length > 0 && (
-            <select
-              value={filters.contactId ?? ""}
-              onChange={(e) => set({ contactId: e.target.value || undefined })}
-            >
-              <option value="">Todos os contatos</option>
-              {contacts.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <FilterField label="Contato">
+              <select
+                value={filters.contactId ?? ""}
+                onChange={(e) => set({ contactId: e.target.value || undefined })}
+              >
+                <option value="">Todos os contatos</option>
+                {contacts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </FilterField>
           )}
-          <input
-            type="date"
-            value={filters.from ?? ""}
-            onChange={(e) => set({ from: e.target.value || undefined })}
-            style={fieldStyle}
-          />
-          <input
-            type="date"
-            value={filters.to ?? ""}
-            onChange={(e) => set({ to: e.target.value || undefined })}
-            style={fieldStyle}
-          />
+          <FilterField label="Data inicial (de)">
+            <input
+              type="date"
+              value={filters.from ?? ""}
+              onChange={(e) => set({ from: e.target.value || undefined })}
+              style={fieldStyle}
+            />
+          </FilterField>
+          <FilterField label="Data final (até)">
+            <input
+              type="date"
+              value={filters.to ?? ""}
+              onChange={(e) => set({ to: e.target.value || undefined })}
+              style={fieldStyle}
+            />
+          </FilterField>
           {activeFilterCount > 0 && (
             <button style={{ background: "var(--border)" }} onClick={() => setFilters({})}>
               Limpar
