@@ -6,8 +6,8 @@
 //
 // Env vars:
 //   CORA_CLIENT_ID        — the application's client id from Cora
-//   CORA_CERT_BASE64      — base64 of the certificate .pem
-//   CORA_KEY_BASE64       — base64 of the private key .key
+//   CORA_CERT / CORA_KEY  — the certificate/key PEM pasted as-is (multiline ok)
+//   CORA_CERT_BASE64 / CORA_KEY_BASE64 — same, but base64-encoded (alternative)
 //   CORA_BASE_URL         — default https://matls-clients.api.cora.com.br
 //   CORA_SCOPE            — optional scope requested on the token (e.g. "account")
 
@@ -30,14 +30,33 @@ interface CoraConfig {
   scope?: string;
 }
 
+/**
+ * Accept a PEM either pasted directly (contains "-----BEGIN") or base64-encoded.
+ * This lets the user just copy the certificate/key file contents into the env
+ * var, without any base64 tooling.
+ */
+function resolvePem(raw?: string, b64?: string): string | undefined {
+  if (raw && raw.includes("-----BEGIN")) return raw;
+  if (b64 && b64.trim()) {
+    const decoded = Buffer.from(b64, "base64").toString("utf8");
+    if (decoded.includes("-----BEGIN")) return decoded;
+  }
+  // Tolerate a base64 blob pasted into the raw var by mistake.
+  if (raw && raw.trim()) {
+    const decoded = Buffer.from(raw, "base64").toString("utf8");
+    if (decoded.includes("-----BEGIN")) return decoded;
+  }
+  return undefined;
+}
+
 function readConfig(): CoraConfig {
   const clientId = process.env.CORA_CLIENT_ID;
-  const certB64 = process.env.CORA_CERT_BASE64;
-  const keyB64 = process.env.CORA_KEY_BASE64;
+  const cert = resolvePem(process.env.CORA_CERT, process.env.CORA_CERT_BASE64);
+  const key = resolvePem(process.env.CORA_KEY, process.env.CORA_KEY_BASE64);
   const missing = [
     !clientId && "CORA_CLIENT_ID",
-    !certB64 && "CORA_CERT_BASE64",
-    !keyB64 && "CORA_KEY_BASE64",
+    !cert && "CORA_CERT (ou CORA_CERT_BASE64)",
+    !key && "CORA_KEY (ou CORA_KEY_BASE64)",
   ].filter(Boolean);
   if (missing.length) {
     throw new CoraConfigError(
@@ -46,8 +65,8 @@ function readConfig(): CoraConfig {
   }
   return {
     clientId: clientId!,
-    cert: Buffer.from(certB64!, "base64").toString("utf8"),
-    key: Buffer.from(keyB64!, "base64").toString("utf8"),
+    cert: cert!,
+    key: key!,
     baseUrl: (process.env.CORA_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, ""),
     scope: process.env.CORA_SCOPE || undefined,
   };

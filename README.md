@@ -124,14 +124,14 @@ Passo a passo:
 1. **No Cora** (portal do desenvolvedor → Integrações / Integração direta):
    gere o **Client ID**, o **certificado** (`.pem`) e a **chave privada**
    (`.key`) com permissão de consulta de extrato (escopo `account`).
-2. **Converta o certificado e a chave para base64** (uma linha):
-   `base64 -w0 certificate.pem` e `base64 -w0 private-key.key`.
-3. **Na Vercel** (Project → Settings → Environment Variables), cadastre:
-   `CORA_CLIENT_ID`, `CORA_CERT_BASE64`, `CORA_KEY_BASE64`, `FIREBASE_PROJECT_ID`
-   (o mesmo do Firebase) e, opcionalmente, `CORA_BASE_URL`, `CORA_SCOPE` e
+2. **Na Vercel** (Project → Settings → Environment Variables), cadastre:
+   `CORA_CLIENT_ID`, `CORA_CERT` (cole o conteúdo do `certificate.pem`),
+   `CORA_KEY` (cole o conteúdo do `private-key.key`) e `FIREBASE_PROJECT_ID`
+   (o mesmo do Firebase). Opcionais: `CORA_BASE_URL`, `CORA_SCOPE` e
    `CORA_ALLOWED_EMAIL` (trava a integração ao seu e-mail). Veja `.env.example`.
-4. **Faça um novo deploy** para as variáveis entrarem em vigor.
-5. No app, abra **Sincronizar Cora**, escolha a **conta** de destino e o
+   (Se preferir, dá para usar `CORA_CERT_BASE64`/`CORA_KEY_BASE64` em base64.)
+3. **Faça um novo deploy** para as variáveis entrarem em vigor.
+4. No app, abra **Sincronizar Cora**, escolha a **conta** de destino e o
    **período**, clique em **Buscar no Cora** e depois em **Importar**.
 
 Segurança: o certificado/chave ficam só no servidor (Vercel), nunca no
