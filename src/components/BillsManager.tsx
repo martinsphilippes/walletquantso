@@ -4,7 +4,7 @@
 // and "contas a receber" pages via the `kind` prop. Handles create, edit,
 // delete, and partial settlements; status is derived, never stored.
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/services/auth-context";
 import {
   listAccounts,
@@ -408,6 +408,33 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     });
   }
 
+  const createFormRef = useRef<HTMLDivElement>(null);
+
+  /** Preenche o formulário "Novo título" com os dados de um título existente. */
+  function startClone(b: Bill) {
+    setEditingId(null);
+    setPayingId(null);
+    const cat = b.categoryId ? catById.get(b.categoryId) : undefined;
+    const isSubCat = !!cat?.parentId;
+    setCreating({
+      // Tira o sufixo de parcela "(2/8)" para o clone nascer limpo.
+      description: b.description.replace(/\s*\(\d+\/\d+\)\s*$/, ""),
+      amount: String(b.amount).replace(".", ","),
+      dueDate: b.dueDate,
+      competenceDate: b.competenceDate ?? b.dueDate,
+      documentNumber: String(nextDocumentNumber(bills ?? [])),
+      contactId: b.contactId ?? "",
+      categoryId: isSubCat ? (cat?.parentId ?? "") : (b.categoryId ?? ""),
+      subcategoryId: isSubCat ? (b.categoryId ?? "") : "",
+      costCenterId: b.costCenterId ?? "",
+      accountId: b.accountId ?? "",
+      notes: b.notes ?? "",
+      repeatMode: "single",
+      repeatCount: "2",
+    });
+    createFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   async function saveEdit(id: string) {
     const fields = draftToBill(draft);
     if (!fields) return;
@@ -537,7 +564,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
         <Stat label={`Títulos (${summary.paidCount} quitado(s))`} value={String(summary.count)} />
       </div>
 
-      <div className="panel">
+      <div className="panel" ref={createFormRef}>
         <h2>Novo título</h2>
         <form
           onSubmit={createNew}
@@ -901,6 +928,13 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                             onClick={() => startEdit(b)}
                           >
                             Editar
+                          </button>{" "}
+                          <button
+                            style={{ background: "var(--border)", padding: "0.3rem 0.6rem" }}
+                            title="Preenche o formulário Novo título com os dados deste."
+                            onClick={() => startClone(b)}
+                          >
+                            Clonar
                           </button>{" "}
                           <button
                             style={{ background: "var(--err)", padding: "0.3rem 0.6rem" }}
