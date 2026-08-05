@@ -103,6 +103,28 @@ function Conciliacao() {
     }
   }
 
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  /** Mark/unmark every currently visible (filtered) row of this account. */
+  async function bulkSet(reconciled: boolean) {
+    const targets = cf.filtered.filter((t) => t.id && !!t.reconciled !== reconciled);
+    if (targets.length === 0) return;
+    setBulkBusy(true);
+    setError("");
+    try {
+      for (const t of targets) {
+        await setReconciled(t.id!, reconciled);
+      }
+      const ids = new Set(targets.map((t) => t.id));
+      setTxs((prev) => prev.map((x) => (ids.has(x.id) ? { ...x, reconciled } : x)));
+    } catch (err) {
+      setError(`Falha ao atualizar em massa: ${(err as Error).message}`);
+      await load();
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="panel">
@@ -149,7 +171,28 @@ function Conciliacao() {
             />
             Mostrar só pendentes
           </label>
+          <button
+            style={{ background: "var(--border)" }}
+            disabled={bulkBusy || cf.filtered.length === 0}
+            onClick={() => bulkSet(false)}
+            title="Remove o ✓ de todos os lançamentos visíveis, para conciliar manualmente do zero."
+          >
+            {bulkBusy ? "Atualizando…" : "Desmarcar todos"}
+          </button>
+          <button
+            style={{ background: "var(--border)" }}
+            disabled={bulkBusy || cf.filtered.length === 0}
+            onClick={() => bulkSet(true)}
+            title="Marca todos os lançamentos visíveis como conciliados."
+          >
+            {bulkBusy ? "Atualizando…" : "Marcar todos"}
+          </button>
         </div>
+        <p className="muted" style={{ marginBottom: 0, fontSize: "0.82rem" }}>
+          Os botões agem sobre a lista visível (respeitam os filtros). Dica: se a
+          sincronização antiga marcou tudo como conciliado, use “Desmarcar todos”
+          para recomeçar e ir dando baixa item por item.
+        </p>
       </div>
 
       {summary && (
