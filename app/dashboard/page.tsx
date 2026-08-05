@@ -504,7 +504,7 @@ function Dashboard() {
       {/* Situação atual (contas + títulos) */}
       <div className="stat-row">
         <Stat
-          label="Saldo atual"
+          label="Saldo atual (todas as contas)"
           value={brl(overview.currentBalance)}
           color={overview.currentBalance >= 0 ? "var(--ok)" : "var(--err)"}
         />
