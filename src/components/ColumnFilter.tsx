@@ -34,20 +34,41 @@ export interface ColumnFilters<T> {
 export function useColumnFilters<T>(rows: T[], defs: ColFilterDef<T>[]): ColumnFilters<T> {
   const [filters, setFilters] = useState<Record<string, string>>({});
 
+  // Faceted options: each dropdown only offers values present in the rows that
+  // match every OTHER active filter (e.g. with Tipo = Receita, the Categoria
+  // dropdown lists only categories that occur in receitas).
   const options = useMemo(() => {
+    const matchesExcept = (r: T, skipKey: string) => {
+      for (const d of defs) {
+        if (d.key === skipKey) continue;
+        const f = filters[d.key];
+        if (!f || !d.value) continue;
+        const v = d.value(r);
+        if (d.type === "select") {
+          if (v !== f) return false;
+        } else if (!v.toLowerCase().includes(f.toLowerCase())) {
+          return false;
+        }
+      }
+      return true;
+    };
     const o: Record<string, string[]> = {};
     for (const d of defs) {
       if (d.type === "select" && d.value) {
         const set = new Set<string>();
         for (const r of rows) {
+          if (!matchesExcept(r, d.key)) continue;
           const v = d.value(r);
           if (v) set.add(v);
         }
+        // Keep the current selection visible even if no row matches anymore.
+        const current = filters[d.key];
+        if (current) set.add(current);
         o[d.key] = Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
       }
     }
     return o;
-  }, [rows, defs]);
+  }, [rows, defs, filters]);
 
   const filtered = useMemo(
     () =>

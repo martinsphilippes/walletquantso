@@ -188,7 +188,12 @@ export function BillsManager({ kind }: { kind: BillKind }) {
   );
   // Hierarquia: centro → categoria → subcategoria. Categoria e subcategoria
   // são campos separados; a subcategoria só lista as filhas da categoria.
-  const mainCategories = useMemo(() => categories.filter((c) => !c.parentId), [categories]);
+  // Contas a pagar usam só categorias de despesa; a receber, só de receita.
+  const billCatKind = isPayable ? "expense" : "income";
+  const mainCategories = useMemo(
+    () => categories.filter((c) => !c.parentId && c.kind === billCatKind),
+    [categories, billCatKind],
+  );
   const subsOf = (mainId: string) =>
     mainId ? categories.filter((c) => c.parentId === mainId) : [];
   // Categoria pertence a um centro de custo: escolher a categoria puxa o

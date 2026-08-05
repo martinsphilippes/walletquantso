@@ -128,6 +128,10 @@ function Lancamentos() {
   const mainCategories = useMemo(() => categories.filter((c) => !c.parentId), [categories]);
   const subsOf = (mainId: string) =>
     mainId ? categories.filter((c) => c.parentId === mainId) : [];
+  // Com o filtro de Tipo ativo, só categorias daquele tipo aparecem.
+  const filterMains = filters.type
+    ? mainCategories.filter((c) => c.kind === filters.type)
+    : mainCategories;
 
   // Categoria selecionada no filtro: derivada dos filtros ativos (o exato em
   // `categoryId` quando é uma sub; o grupo inteiro em `categoryIds` quando é
@@ -215,6 +219,17 @@ function Lancamentos() {
   const [bulkCenter, setBulkCenter] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkMsg, setBulkMsg] = useState("");
+
+  // Só oferece categorias dos tipos presentes na seleção (receita/despesa).
+  const bulkKinds = useMemo(() => {
+    const ids = new Set(sel.selectedIds);
+    const s = new Set<TransactionType>();
+    for (const t of txs ?? []) if (t.id && ids.has(t.id)) s.add(t.type);
+    return s;
+  }, [txs, sel.selectedIds]);
+  const bulkMains = mainCategories.filter(
+    (c) => bulkKinds.size === 0 || bulkKinds.has(c.kind),
+  );
 
   async function applyBulkEdit() {
     if (!user || sel.count === 0) return;
@@ -447,7 +462,14 @@ function Lancamentos() {
           <FilterField label="Tipo">
             <select
               value={filters.type ?? ""}
-              onChange={(e) => set({ type: (e.target.value || "") as TransactionType | "" })}
+              onChange={(e) =>
+                // Trocar o tipo limpa a categoria (pode não valer para o novo tipo).
+                set({
+                  type: (e.target.value || "") as TransactionType | "",
+                  categoryId: undefined,
+                  categoryIds: undefined,
+                })
+              }
             >
               <option value="">Todos os tipos</option>
               <option value="income">Receita</option>
@@ -474,7 +496,7 @@ function Lancamentos() {
               onChange={(e) => pickFilterCategory(e.target.value)}
             >
               <option value="">Todas as categorias</option>
-              {mainCategories.map((c) => (
+              {filterMains.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
@@ -619,7 +641,7 @@ function Lancamentos() {
                 >
                   <option value="">— não alterar —</option>
                   <option value="__clear__">— limpar (nenhuma) —</option>
-                  {mainCategories.map((c) => (
+                  {bulkMains.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name} ({TYPE_LABELS[c.kind]})
                     </option>
