@@ -310,6 +310,16 @@ function Conciliacao() {
         </div>
       )}
 
+      {summary && account && (
+        <p className="muted" style={{ fontSize: "0.82rem", marginTop: "-0.25rem" }}>
+          Cálculo do saldo atual: saldo inicial da conta ({brl(account.initialBalance ?? 0)}) +
+          todos os lançamentos ({brl(summary.currentBalance - (account.initialBalance ?? 0))}) ={" "}
+          {brl(summary.currentBalance)} — o mesmo cálculo do Dashboard. Se este valor diferir do
+          banco por uma quantia fixa todos os dias, o saldo inicial é que precisa de ajuste: use a
+          Conferência em “Sincronizar Cora” (botão “Ajustar saldo inicial”).
+        </p>
+      )}
+
       {summary &&
         dashConfirmed != null &&
         Math.round((dashConfirmed - summary.currentBalance) * 100) !== 0 && (
