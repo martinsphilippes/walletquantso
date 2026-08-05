@@ -158,6 +158,42 @@ function CoraSync() {
       ? Math.round((endBalance - walletAtEnd) * 100) / 100
       : null;
 
+  async function deleteWalletOnlyOne(id: string) {
+    if (!user) return;
+    setBusy(true);
+    setError("");
+    try {
+      await removeTransaction(user.uid, id);
+      setResult("Lançamento sem correspondência no banco excluído.");
+      setTxs(await listTransactions(user.uid));
+    } catch (err) {
+      setError(`Falha ao excluir: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteWalletOnlyAll() {
+    if (!user || !comparison || comparison.walletOnly.length === 0) return;
+    setBusy(true);
+    setError("");
+    try {
+      let n = 0;
+      for (const t of comparison.walletOnly) {
+        if (t.id) {
+          await removeTransaction(user.uid, t.id);
+          n++;
+        }
+      }
+      setResult(`${n} lançamento(s) sem correspondência no banco excluído(s).`);
+      setTxs(await listTransactions(user.uid));
+    } catch (err) {
+      setError(`Falha ao excluir: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function deleteDuplicates() {
     if (!user || !comparison || comparison.duplicates.length === 0) return;
     setBusy(true);
@@ -467,16 +503,27 @@ function CoraSync() {
                 Só na Wallet ({comparison.walletOnly.length})
               </h3>
               <p className="muted" style={{ marginTop: 0, fontSize: "0.85rem" }}>
-                Lançamentos desta conta que não aparecem no extrato do Cora neste
-                período — confira se são desta conta mesmo ou se a data/valor difere.
+                Lançamentos desta conta que <strong>não existem no extrato do banco</strong>{" "}
+                neste período (vieram da importação antiga ou de baixas com valor/data
+                divergente). Se o banco é a fonte da verdade, podem ser excluídos.
               </p>
+              <button
+                style={{ background: "var(--err)", marginBottom: "0.6rem" }}
+                disabled={busy}
+                onClick={deleteWalletOnlyAll}
+              >
+                {busy ? "Excluindo…" : `Excluir todos os ${comparison.walletOnly.length}`}
+              </button>
               <MiniList
                 rows={comparison.walletOnly.map((d) => ({
                   key: d.id ?? d.dedupHash,
                   date: d.date,
                   label: d.description || "(sem descrição)",
                   amount: signedForAccount(d, accountId),
+                  deletableId: d.id,
                 }))}
+                onDelete={deleteWalletOnlyOne}
+                busy={busy}
               />
             </div>
           )}
@@ -527,8 +574,13 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
 
 function MiniList({
   rows,
+  onDelete,
+  busy,
 }: {
-  rows: Array<{ key: string; date: string; label: string; amount: number }>;
+  rows: Array<{ key: string; date: string; label: string; amount: number; deletableId?: string }>;
+  /** When provided, each row with a deletableId gets an "Excluir" button. */
+  onDelete?: (id: string) => void;
+  busy?: boolean;
 }) {
   const MAX = 60;
   const shown = rows.slice(0, MAX);
@@ -550,6 +602,19 @@ function MiniList({
                 {r.amount >= 0 ? "+" : "-"}
                 {brl(Math.abs(r.amount))}
               </td>
+              {onDelete && (
+                <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>
+                  {r.deletableId && (
+                    <button
+                      style={{ background: "var(--err)", padding: "0.25rem 0.55rem", fontSize: "0.8rem" }}
+                      disabled={busy}
+                      onClick={() => onDelete(r.deletableId!)}
+                    >
+                      Excluir
+                    </button>
+                  )}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
