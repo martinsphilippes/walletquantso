@@ -141,9 +141,35 @@ export function LineChart({ points, width = 520, height = 160 }: {
   const max = Math.max(0, ...values);
   const span = max - min || 1;
   const stepX = points.length > 1 ? (width - pad * 2) / (points.length - 1) : 0;
-  const x = (i: number) => pad + i * stepX;
+  // A single point is centered (a left-stranded dot looks like an empty chart).
+  const x = (i: number) => (points.length > 1 ? pad + i * stepX : width / 2);
   const y = (v: number) => pad + (1 - (v - min) / span) * (height - pad * 2);
   const zeroY = y(0);
+
+  if (points.length === 1) {
+    const p = points[0];
+    return (
+      <div style={{ overflowX: "auto" }}>
+        <svg width={width} height={height} role="img" aria-label="Fluxo de caixa">
+          <line x1={pad} y1={zeroY} x2={width - pad} y2={zeroY} stroke="var(--border)" />
+          <circle cx={width / 2} cy={y(p.value)} r="5" fill="var(--ok)" />
+          <text
+            x={width / 2}
+            y={y(p.value) - 12}
+            textAnchor="middle"
+            fill="var(--text)"
+            fontSize="14"
+            fontWeight="700"
+          >
+            {p.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+          </text>
+          <text x={width / 2} y={height - 8} textAnchor="middle" fill="var(--muted)" fontSize="11">
+            {p.label}
+          </text>
+        </svg>
+      </div>
+    );
+  }
 
   const line = points.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(p.value)}`).join(" ");
   const area = `${line} L ${x(points.length - 1)} ${zeroY} L ${x(0)} ${zeroY} Z`;
@@ -310,7 +336,7 @@ export function ChartSwitcher({
               borderRadius: 6,
               border: "1px solid var(--border)",
               background: k === active ? "var(--accent)" : "transparent",
-              color: k === active ? "#fff" : "var(--muted)",
+              color: k === active ? "var(--accent-ink)" : "var(--muted)",
               cursor: "pointer",
             }}
             aria-pressed={k === active}

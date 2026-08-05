@@ -502,7 +502,7 @@ function Dashboard() {
                   borderRadius: 6,
                   border: "1px solid var(--border)",
                   background: monthMode === m ? "var(--accent)" : "transparent",
-                  color: monthMode === m ? "#fff" : "var(--muted)",
+                  color: monthMode === m ? "var(--accent-ink)" : "var(--muted)",
                   cursor: "pointer",
                 }}
                 aria-pressed={monthMode === m}
@@ -619,7 +619,7 @@ function Dashboard() {
                   borderRadius: 6,
                   border: "1px solid var(--border)",
                   background: fluxoMode === m ? "var(--accent)" : "transparent",
-                  color: fluxoMode === m ? "#fff" : "var(--muted)",
+                  color: fluxoMode === m ? "var(--accent-ink)" : "var(--muted)",
                   cursor: "pointer",
                 }}
                 aria-pressed={fluxoMode === m}
@@ -663,6 +663,25 @@ function Dashboard() {
             <p className="muted">Sem meses no recorte escolhido.</p>
           ) : (
             <LineChart points={cashflow.map((m) => ({ label: monthLabel(m.month), value: m.balance }))} />
+          )}
+          {cashflow.length === 1 && (
+            <div className="stat-row" style={{ marginTop: "0.6rem" }}>
+              <Stat
+                label="Entradas no mês"
+                value={brl(cashflow[0].realizedIn + cashflow[0].plannedIn)}
+                color="var(--ok)"
+              />
+              <Stat
+                label="Saídas no mês"
+                value={brl(cashflow[0].realizedOut + cashflow[0].plannedOut)}
+                color="var(--err)"
+              />
+              <Stat
+                label="Resultado do mês"
+                value={brl(cashflow[0].net)}
+                color={cashflow[0].net >= 0 ? "var(--ok)" : "var(--err)"}
+              />
+            </div>
           )}
           <div
             style={{

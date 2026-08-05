@@ -153,7 +153,7 @@ function Fluxo() {
                   borderRadius: 6,
                   border: "1px solid var(--border)",
                   background: mode === m ? "var(--accent)" : "transparent",
-                  color: mode === m ? "#fff" : "var(--muted)",
+                  color: mode === m ? "var(--accent-ink)" : "var(--muted)",
                   cursor: "pointer",
                 }}
                 aria-pressed={mode === m}

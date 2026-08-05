@@ -300,7 +300,7 @@ function Lancamentos() {
               borderRadius: 999,
               border: "1px solid var(--border)",
               background: active ? "var(--accent)" : "transparent",
-              color: active ? "#fff" : "var(--muted)",
+              color: active ? "var(--accent-ink)" : "var(--muted)",
               cursor: "pointer",
             });
             return (
