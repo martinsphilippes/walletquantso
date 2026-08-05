@@ -18,6 +18,17 @@ function isCsv(name: string): boolean {
   return /\.csv$/i.test(name) || /\.txt$/i.test(name);
 }
 
+/**
+ * Format a spreadsheet Date cell as YYYY-MM-DD using its LOCAL calendar
+ * fields. `toISOString()` converts to UTC first, which can shift the day for
+ * timezone-affected Date objects (the same class of bug as the Cora dates).
+ */
+function localIsoDate(d: Date): string {
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
 /** Read a File into headers + row objects keyed by header. */
 export async function readSpreadsheet(file: File): Promise<ReadResult> {
   if (isCsv(file.name)) return readCsv(file);
@@ -62,7 +73,7 @@ async function readXlsx(file: File): Promise<ReadResult> {
     const row: RawRow = {};
     headers.forEach((h, idx) => {
       const cell = cells[idx];
-      row[h] = cell instanceof Date ? cell.toISOString().slice(0, 10) : cell;
+      row[h] = cell instanceof Date ? localIsoDate(cell) : cell;
     });
     rows.push(row);
   }

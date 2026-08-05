@@ -8,6 +8,7 @@
 
 import type { Bill, Transaction } from "@/types";
 import { remaining } from "@/lib/bills/status";
+import { todayBr } from "@/lib/br/date";
 
 export interface CashFlowMonth {
   /** Bucket month as YYYY-MM. */
@@ -54,7 +55,7 @@ export function projectCashFlow(
   opts: CashFlowOptions = {},
 ): CashFlowMonth[] {
   const openingBalance = opts.openingBalance ?? 0;
-  const today = opts.today ?? new Date().toISOString().slice(0, 10);
+  const today = opts.today ?? todayBr();
   const currentMonth = monthOf(today);
   const monthsAhead = opts.monthsAhead ?? 6;
 

@@ -15,12 +15,12 @@ import { compareWithCora, signedForAccount } from "@/lib/cora/reconcile";
 import { DateParts } from "@/components/DateParts";
 import type { Account, CoraSyncConfig, Transaction } from "@/types";
 import type { NormalizedEntry } from "@/lib/cora/statement";
+import { daysAgoBr } from "@/lib/br/date";
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const brDate = (iso: string) => (iso ? iso.split("-").reverse().join("/") : "—");
-const isoDaysAgo = (days: number) =>
-  new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+const isoDaysAgo = (days: number) => daysAgoBr(days);
 
 export default function CoraPage() {
   return (

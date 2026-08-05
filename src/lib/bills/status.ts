@@ -5,6 +5,7 @@
 // it can never drift out of sync with the payments.
 
 import type { Bill } from "@/types";
+import { todayBr } from "@/lib/br/date";
 
 export type BillStatus = "paid" | "partial" | "overdue" | "open";
 
@@ -46,7 +47,7 @@ function round(n: number): number {
  */
 export function billStatus(
   bill: Pick<Bill, "amount" | "dueDate" | "payments">,
-  today: string = new Date().toISOString().slice(0, 10),
+  today: string = todayBr(),
 ): BillStatus {
   const paid = paidAmount(bill);
   if (paid + 0.005 >= bill.amount && bill.amount > 0) return "paid";
@@ -78,7 +79,7 @@ export interface BillsSummary {
 /** Totals across a list of bills, split by realized vs pending / overdue. */
 export function summarizeBills(
   bills: Array<Pick<Bill, "amount" | "dueDate" | "payments">>,
-  today: string = new Date().toISOString().slice(0, 10),
+  today: string = todayBr(),
 ): BillsSummary {
   let total = 0;
   let outstanding = 0;

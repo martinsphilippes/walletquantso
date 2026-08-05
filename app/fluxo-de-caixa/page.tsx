@@ -8,6 +8,7 @@ import { listBills } from "@/services/bills";
 import { projectCashFlow, type CashFlowMonth } from "@/lib/cashflow/project";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import type { Account, Bill, Transaction } from "@/types";
+import { currentMonthBr } from "@/lib/br/date";
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -69,7 +70,7 @@ function Fluxo() {
     () => accounts.reduce((s, a) => s + (a.initialBalance ?? 0), 0),
     [accounts],
   );
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonth = currentMonthBr();
   const rows = useMemo(
     () => projectCashFlow(txs, bills, { openingBalance: opening, monthsAhead: 6 }),
     [txs, bills, opening],

@@ -8,9 +8,10 @@ import { getAdminDb } from "./firebase-admin";
 import { fetchCoraStatement } from "./cora";
 import { dedupHash } from "@/lib/import/engine";
 import type { CoraSyncConfig } from "@/types";
+import { dateBr, daysAgoBr } from "@/lib/br/date";
 
-const iso = (d: Date) => d.toISOString().slice(0, 10);
-const daysAgo = (n: number) => iso(new Date(Date.now() - n * 86400000));
+const iso = (d: Date) => dateBr(d);
+const daysAgo = (n: number) => daysAgoBr(n);
 
 /** Overlap window (days) re-scanned each run to catch late-posted entries. */
 const OVERLAP_DAYS = 5;

@@ -13,6 +13,7 @@
 
 import type { Account, Bill, Transaction } from "@/types";
 import { paidAmount, remaining } from "@/lib/bills/status";
+import { currentMonthBr } from "@/lib/br/date";
 
 const round = (n: number) => Math.round(n * 100) / 100;
 const monthOf = (iso: string) => iso.slice(0, 7);
@@ -137,7 +138,7 @@ export function monthResult(
   txs: Transaction[],
   payables: Bill[],
   receivables: Bill[],
-  month: string = new Date().toISOString().slice(0, 7),
+  month: string = currentMonthBr(),
 ): MonthResult {
   let income = 0;
   let expense = 0;

@@ -37,10 +37,11 @@ import {
   type BillStatus,
 } from "@/lib/bills/status";
 import type { Account, Bill, BillKind, Category, Contact, CostCenter } from "@/types";
+import { todayBr } from "@/lib/br/date";
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todayBr();
 const brDate = (iso: string) => (iso ? iso.split("-").reverse().join("/") : "—");
 const rid = () =>
   (typeof crypto !== "undefined" && crypto.randomUUID

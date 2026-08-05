@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { parseBrCurrency } from "@/lib/br/parse";
 import type { Account, Category, Contact, CostCenter, TransactionType } from "@/types";
 import type { TransactionInput } from "@/services/transactions";
+import { todayBr } from "@/lib/br/date";
 
 interface Props {
   accounts: Account[];
@@ -65,7 +66,7 @@ export function TransactionForm({
   onSubmit,
   onCancel,
 }: Props) {
-  const initialDate = initial?.date ?? new Date().toISOString().slice(0, 10);
+  const initialDate = initial?.date ?? todayBr();
   const [iy, im, id] = initialDate.split("-").map(Number);
 
   const [type, setType] = useState<TransactionType>(initial?.type ?? "expense");

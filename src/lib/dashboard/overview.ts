@@ -12,6 +12,7 @@
 
 import type { Account, Bill, Transaction } from "@/types";
 import { unmaterializedPaid, remaining } from "@/lib/bills/status";
+import { todayBr } from "@/lib/br/date";
 
 export interface FinancialOverview {
   /** Sum of every account's opening balance. */
@@ -45,7 +46,7 @@ export function computeOverview(
   txs: Transaction[],
   payables: Bill[],
   receivables: Bill[],
-  today: string = new Date().toISOString().slice(0, 10),
+  today: string = todayBr(),
 ): FinancialOverview {
   const initialBalance = round(
     accounts.reduce((sum, a) => sum + (a.initialBalance ?? 0), 0),
