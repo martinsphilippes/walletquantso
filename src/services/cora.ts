@@ -34,12 +34,19 @@ export async function setCoraSyncConfig(
   );
 }
 
+export interface CoraStatementData {
+  entries: NormalizedEntry[];
+  /** Real bank balance (BRL) at the start/end of the period, when provided. */
+  startBalance: number | null;
+  endBalance: number | null;
+}
+
 /** Fetch the normalized Cora statement for a date range via the server route. */
 export async function fetchCoraStatement(
   idToken: string,
   start: string,
   end: string,
-): Promise<NormalizedEntry[]> {
+): Promise<CoraStatementData> {
   const res = await fetch("/api/cora/statement", {
     method: "POST",
     headers: {
@@ -48,9 +55,15 @@ export async function fetchCoraStatement(
     },
     body: JSON.stringify({ start, end }),
   });
-  const json = (await res.json().catch(() => ({}))) as { entries?: NormalizedEntry[]; error?: string };
+  const json = (await res.json().catch(() => ({}))) as Partial<CoraStatementData> & {
+    error?: string;
+  };
   if (!res.ok) throw new Error(json.error || `Falha na sincronização (HTTP ${res.status}).`);
-  return json.entries ?? [];
+  return {
+    entries: json.entries ?? [],
+    startBalance: json.startBalance ?? null,
+    endBalance: json.endBalance ?? null,
+  };
 }
 
 export interface CoraSyncResult {

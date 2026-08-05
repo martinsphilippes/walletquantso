@@ -33,6 +33,9 @@ export interface CoraEntry {
 
 export interface CoraStatementResponse {
   entries?: CoraEntry[];
+  /** Balance snapshots (in cents) at the start/end of the queried period. */
+  start?: { date?: string; balance?: number } | null;
+  end?: { date?: string; balance?: number } | null;
   [key: string]: unknown;
 }
 

@@ -43,7 +43,7 @@ export async function runCoraSync(): Promise<SyncOutcome> {
         : daysAgo(FIRST_RUN_DAYS);
       const end = daysAgo(0);
 
-      const entries = await fetchCoraStatement({ start, end });
+      const { entries } = await fetchCoraStatement({ start, end });
 
       // Existing external ids for this owner (index-free: single where).
       const existing = await db

@@ -127,20 +127,30 @@ async function getToken(cfg: CoraConfig): Promise<string> {
   return json.access_token;
 }
 
+export interface CoraStatementResult {
+  entries: NormalizedEntry[];
+  /** Real account balance (BRL) at the start/end of the period, when provided. */
+  startBalance: number | null;
+  endBalance: number | null;
+}
+
 /**
- * Fetch the account statement for a date range and return normalized movements.
- * Paginates until all entries are collected.
+ * Fetch the account statement for a date range and return normalized movements
+ * plus the period's start/end balances. Paginates until all entries are
+ * collected.
  */
 export async function fetchCoraStatement(range: {
   start: string;
   end: string;
-}): Promise<NormalizedEntry[]> {
+}): Promise<CoraStatementResult> {
   const cfg = readConfig();
   const token = await getToken(cfg);
 
   const perPage = 50;
   let page = 1;
   const all: NormalizedEntry[] = [];
+  let startBalance: number | null = null;
+  let endBalance: number | null = null;
   // Guard against runaway pagination.
   for (let guard = 0; guard < 500; guard++) {
     const qs = new URLSearchParams({
@@ -170,8 +180,12 @@ export async function fetchCoraStatement(range: {
     const parsed = JSON.parse(res.body) as CoraStatementResponse;
     const entries = parsed.entries ?? [];
     all.push(...normalizeCoraStatement({ entries }));
+    if (page === 1) {
+      if (typeof parsed.start?.balance === "number") startBalance = parsed.start.balance / 100;
+      if (typeof parsed.end?.balance === "number") endBalance = parsed.end.balance / 100;
+    }
     if (entries.length < perPage) break;
     page += 1;
   }
-  return all;
+  return { entries: all, startBalance, endBalance };
 }

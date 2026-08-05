@@ -50,10 +50,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "A data inicial deve ser anterior à final." }, { status: 400 });
   }
 
-  // 3. Fetch + normalize the statement.
+  // 3. Fetch + normalize the statement (entries + real start/end balances).
   try {
-    const entries = await fetchCoraStatement({ start, end });
-    return NextResponse.json({ entries });
+    const result = await fetchCoraStatement({ start, end });
+    return NextResponse.json(result);
   } catch (err) {
     if (err instanceof CoraConfigError) {
       return NextResponse.json({ error: err.message }, { status: 503 });
