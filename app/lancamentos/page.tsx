@@ -168,15 +168,15 @@ function Lancamentos() {
     }
   }
 
-  // ── Edição em massa (categoria / centro / contato) ───────────────────────
-  type BulkField = "categoryId" | "costCenterId" | "contactId";
-  const [bulkField, setBulkField] = useState<BulkField>("categoryId");
+  // ── Edição em massa (categoria / centro) — inline na barra de seleção ────
+  type BulkField = "categoryId" | "costCenterId";
+  const [bulkField, setBulkField] = useState<BulkField | null>(null);
   const [bulkValue, setBulkValue] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkMsg, setBulkMsg] = useState("");
 
   async function applyBulkEdit() {
-    if (!user || sel.count === 0) return;
+    if (!user || sel.count === 0 || !bulkField) return;
     if (!bulkValue) {
       setBulkMsg("Escolha o valor a aplicar (ou “— limpar —”).");
       return;
@@ -209,6 +209,7 @@ function Lancamentos() {
           (skipped > 0 ? ` ${skipped} pulado(s) por tipo incompatível com a categoria.` : ""),
       );
       sel.clear();
+      setBulkField(null);
       setBulkValue("");
       await load();
     } catch (err) {
@@ -498,72 +499,91 @@ function Lancamentos() {
             Exportar CSV
           </button>
         </div>
-        <BulkBar sel={sel} onDelete={handleBulkDelete} noun="lançamento" />
-        {sel.count > 0 && (
-          <div
-            style={{
-              display: "flex",
-              gap: "0.6rem",
-              alignItems: "flex-end",
-              flexWrap: "wrap",
-              padding: "0.5rem 0.75rem",
-              marginBottom: "0.75rem",
-              border: "1px solid var(--border)",
-              borderRadius: 8,
-              background: "var(--bg)",
-            }}
-          >
-            <strong style={{ alignSelf: "center" }}>Editar em massa:</strong>
-            <FilterField label="O que alterar">
-              <select
-                value={bulkField}
-                onChange={(e) => {
-                  setBulkField(e.target.value as typeof bulkField);
-                  setBulkValue("");
-                  setBulkMsg("");
-                }}
-              >
-                <option value="categoryId">Categoria</option>
-                <option value="costCenterId">Centro de custo</option>
-                <option value="contactId">Contato</option>
-              </select>
-            </FilterField>
-            <FilterField label="Novo valor">
-              <select value={bulkValue} onChange={(e) => setBulkValue(e.target.value)}>
-                <option value="">— escolha —</option>
-                <option value="__clear__">— limpar (nenhum) —</option>
-                {bulkField === "categoryId" &&
-                  categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({TYPE_LABELS[c.kind]})
-                    </option>
-                  ))}
-                {bulkField === "costCenterId" &&
-                  costCenters.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                {bulkField === "contactId" &&
-                  contacts.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-              </select>
-            </FilterField>
-            <button disabled={bulkBusy} onClick={applyBulkEdit}>
-              {bulkBusy ? "Aplicando…" : `Aplicar a ${sel.count} selecionado(s)`}
-            </button>
-            {bulkMsg && (
-              <span
-                className={`badge ${bulkMsg.startsWith("✅") ? "ok" : "warn"}`}
-                style={{ fontSize: "0.85rem" }}
-              >
-                {bulkMsg}
-              </span>
-            )}
-          </div>
+        <BulkBar
+          sel={sel}
+          onDelete={handleBulkDelete}
+          noun="lançamento"
+          extra={
+            bulkField === null ? (
+              <>
+                <button
+                  style={{ background: "var(--border)" }}
+                  onClick={() => {
+                    setBulkField("categoryId");
+                    setBulkValue("");
+                    setBulkMsg("");
+                  }}
+                >
+                  Editar categoria
+                </button>
+                <button
+                  style={{ background: "var(--border)" }}
+                  onClick={() => {
+                    setBulkField("costCenterId");
+                    setBulkValue("");
+                    setBulkMsg("");
+                  }}
+                >
+                  Editar centro de custo
+                </button>
+                {bulkMsg && (
+                  <span
+                    className={`badge ${bulkMsg.startsWith("✅") ? "ok" : "warn"}`}
+                    style={{ fontSize: "0.85rem" }}
+                  >
+                    {bulkMsg}
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                <span>{bulkField === "categoryId" ? "Nova categoria:" : "Novo centro de custo:"}</span>
+                <select value={bulkValue} onChange={(e) => setBulkValue(e.target.value)}>
+                  <option value="">— escolha —</option>
+                  <option value="__clear__">— limpar (nenhum) —</option>
+                  {bulkField === "categoryId" &&
+                    categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({TYPE_LABELS[c.kind]})
+                      </option>
+                    ))}
+                  {bulkField === "costCenterId" &&
+                    costCenters.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                </select>
+                <button disabled={bulkBusy} onClick={applyBulkEdit}>
+                  {bulkBusy ? "Aplicando…" : `Aplicar a ${sel.count} selecionado(s)`}
+                </button>
+                <button
+                  style={{ background: "var(--border)" }}
+                  disabled={bulkBusy}
+                  onClick={() => {
+                    setBulkField(null);
+                    setBulkValue("");
+                    setBulkMsg("");
+                  }}
+                >
+                  Cancelar
+                </button>
+                {bulkMsg && (
+                  <span
+                    className={`badge ${bulkMsg.startsWith("✅") ? "ok" : "warn"}`}
+                    style={{ fontSize: "0.85rem" }}
+                  >
+                    {bulkMsg}
+                  </span>
+                )}
+              </>
+            )
+          }
+        />
+        {sel.count === 0 && bulkMsg && (
+          <p style={{ marginBottom: "0.75rem" }}>
+            <span className={`badge ${bulkMsg.startsWith("✅") ? "ok" : "warn"}`}>{bulkMsg}</span>
+          </p>
         )}
         {filtered.length === 0 ? (
           <p className="muted">

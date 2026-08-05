@@ -104,12 +104,15 @@ export function BulkBar({
   onDelete,
   busy,
   noun = "item",
+  extra,
 }: {
   sel: BulkSelection;
   onDelete: () => void | Promise<void>;
   busy?: boolean;
   /** Singular noun for the message, e.g. "lançamento", "título", "conta". */
   noun?: string;
+  /** Extra inline actions rendered next to the delete/clear buttons. */
+  extra?: React.ReactNode;
 }) {
   const [confirming, setConfirming] = useState(false);
   useEffect(() => {
@@ -141,6 +144,7 @@ export function BulkBar({
           <button style={{ background: "var(--border)" }} onClick={sel.clear}>
             Limpar seleção
           </button>
+          {extra}
         </>
       ) : (
         <>
