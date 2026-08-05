@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
-import { listAccounts, listTransactions } from "@/services/firestore";
+import { listAccounts, listTransactions, updateAccount } from "@/services/firestore";
 import { listBills, backfillPaymentTransactions } from "@/services/bills";
 import { setReconciled } from "@/services/transactions";
+import { parseBrCurrency } from "@/lib/br/parse";
 import {
   movementFor,
   transactionsForAccount,
@@ -178,6 +179,43 @@ function Conciliacao() {
 
   const [bulkBusy, setBulkBusy] = useState(false);
 
+  // ── Acerto definitivo: digite o saldo real do banco e o app ajusta o saldo
+  // inicial da conta na diferença exata e marca tudo como conciliado. A partir
+  // daí Conciliação, Dashboard e Saldos de caixa mostram o mesmo número.
+  const [bankBalance, setBankBalance] = useState("");
+  const [settling, setSettling] = useState(false);
+
+  async function forceMatchBank() {
+    if (!account?.id || !summary) return;
+    const target = parseBrCurrency(bankBalance);
+    if (target == null) {
+      setError("Informe o saldo real do banco (ex.: 2.020,94).");
+      return;
+    }
+    const delta = Math.round((target - summary.currentBalance) * 100) / 100;
+    setSettling(true);
+    setError("");
+    try {
+      if (delta !== 0) {
+        const newInitial =
+          Math.round(((account.initialBalance ?? 0) + delta) * 100) / 100;
+        await updateAccount(account.id, { initialBalance: newInitial });
+      }
+      // Marca tudo desta conta como conciliado — ponto de partida limpo.
+      const targets = accountTxs.filter((t) => t.id && !t.reconciled);
+      for (const t of targets) await setReconciled(t.id!, true);
+      await load();
+      setBankBalance("");
+      setError(
+        `✅ Acertado: saldo inicial ajustado em ${brl(delta)} e ${targets.length} lançamento(s) conciliado(s). Saldo da conta agora: ${brl(target)}.`,
+      );
+    } catch (err) {
+      setError(`Falha no acerto: ${(err as Error).message}`);
+    } finally {
+      setSettling(false);
+    }
+  }
+
   /** Mark/unmark every currently visible (filtered) row of this account. */
   async function bulkSet(reconciled: boolean) {
     const targets = cf.filtered.filter((t) => t.id && !!t.reconciled !== reconciled);
@@ -314,10 +352,41 @@ function Conciliacao() {
         <p className="muted" style={{ fontSize: "0.82rem", marginTop: "-0.25rem" }}>
           Cálculo do saldo atual: saldo inicial da conta ({brl(account.initialBalance ?? 0)}) +
           todos os lançamentos ({brl(summary.currentBalance - (account.initialBalance ?? 0))}) ={" "}
-          {brl(summary.currentBalance)} — o mesmo cálculo do Dashboard. Se este valor diferir do
-          banco por uma quantia fixa todos os dias, o saldo inicial é que precisa de ajuste: use a
-          Conferência em “Sincronizar Cora” (botão “Ajustar saldo inicial”).
+          {brl(summary.currentBalance)} — o mesmo cálculo do Dashboard.
         </p>
+      )}
+
+      {summary && account && (
+        <div className="panel">
+          <h2 style={{ marginTop: 0 }}>Acertar com o banco (recomeço limpo)</h2>
+          <p className="muted" style={{ fontSize: "0.85rem" }}>
+            Digite o saldo que aparece <strong>agora</strong> no app do banco. O sistema ajusta o
+            saldo inicial da conta na diferença exata e marca tudo como conciliado — Conciliação,
+            Dashboard e Saldos de caixa passam a mostrar esse mesmo valor, e daqui em diante é só
+            lançar normalmente.
+          </p>
+          <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
+            <input
+              placeholder="Ex.: 2.020,94"
+              value={bankBalance}
+              onChange={(e) => setBankBalance(e.target.value)}
+              inputMode="decimal"
+              style={{
+                padding: "0.45rem 0.6rem",
+                borderRadius: 6,
+                border: "1px solid var(--border)",
+                background: "var(--bg)",
+                color: "var(--text)",
+                font: "inherit",
+                width: 150,
+                textAlign: "right",
+              }}
+            />
+            <button disabled={settling || !bankBalance.trim()} onClick={forceMatchBank}>
+              {settling ? "Acertando…" : `Acertar ${account.name} agora`}
+            </button>
+          </div>
+        </div>
       )}
 
       {summary &&
