@@ -24,7 +24,8 @@ const round = (n: number) => Math.round(n * 100) / 100;
 export function signedForAccount(t: Transaction, accountId: string): number {
   if (t.type === "income") return t.accountId === accountId ? t.amount : 0;
   if (t.type === "expense") return t.accountId === accountId ? -t.amount : 0;
-  // transfer: source loses, destination gains
+  // transfer: source loses, destination gains; self-transfer nets to zero
+  if (t.accountId === accountId && t.transferAccountId === accountId) return 0;
   if (t.accountId === accountId) return -t.amount;
   if (t.transferAccountId === accountId) return t.amount;
   return 0;

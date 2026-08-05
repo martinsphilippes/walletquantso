@@ -12,6 +12,9 @@ export function movementFor(t: Transaction, accountId: string): number {
   if (t.type === "income" && t.accountId === accountId) return t.amount;
   if (t.type === "expense" && t.accountId === accountId) return -t.amount;
   if (t.type === "transfer") {
+    // Self-transfer (both sides on the same account) nets to zero — counting
+    // only the outgoing side would wrongly lower this account's balance.
+    if (t.accountId === accountId && t.transferAccountId === accountId) return 0;
     if (t.accountId === accountId) return -t.amount;
     if (t.transferAccountId === accountId) return t.amount;
   }

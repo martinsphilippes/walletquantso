@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
 import { listAccounts, listTransactions } from "@/services/firestore";
+import { listBills, backfillPaymentTransactions } from "@/services/bills";
 import { setReconciled } from "@/services/transactions";
 import {
   movementFor,
@@ -11,7 +12,7 @@ import {
   summarizeClearing,
 } from "@/lib/reconcile/clearing";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
-import type { Account, Transaction } from "@/types";
+import type { Account, Bill, Transaction } from "@/types";
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -32,6 +33,7 @@ function Conciliacao() {
   const { user } = useAuth();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [txs, setTxs] = useState<Transaction[]>([]);
+  const [bills, setBills] = useState<Bill[]>([]);
   const [accountId, setAccountId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -43,9 +45,15 @@ function Conciliacao() {
     setError("");
     setLoading(true);
     try {
-      const [a, t] = await Promise.all([listAccounts(user.uid), listTransactions(user.uid)]);
+      const [a, t, pay, rec] = await Promise.all([
+        listAccounts(user.uid),
+        listTransactions(user.uid),
+        listBills(user.uid, "payable"),
+        listBills(user.uid, "receivable"),
+      ]);
       setAccounts(a);
       setTxs(t);
+      setBills([...pay, ...rec]);
       setAccountId((cur) => cur || a[0]?.id || "");
     } catch (err) {
       setError(`Falha ao carregar: ${(err as Error).message}`);
@@ -74,6 +82,42 @@ function Conciliacao() {
     () => (onlyPending ? accountTxs.filter((t) => !t.reconciled) : accountTxs),
     [accountTxs, onlyPending],
   );
+
+  // Baixas antigas desta conta que ainda não viraram lançamento: o Dashboard
+  // as soma, mas esta tela (que trabalha sobre lançamentos) não as vê — o que
+  // faria o saldo daqui divergir. Detecta e oferece a correção na hora.
+  const unmaterialized = useMemo(() => {
+    let net = 0;
+    let count = 0;
+    const affected: Bill[] = [];
+    for (const b of bills) {
+      let touches = false;
+      for (const p of b.payments ?? []) {
+        if (p.transactionId) continue;
+        if ((p.accountId ?? b.accountId) !== accountId) continue;
+        net += b.kind === "receivable" ? p.amount || 0 : -(p.amount || 0);
+        count++;
+        touches = true;
+      }
+      if (touches) affected.push(b);
+    }
+    return { net: Math.round(net * 100) / 100, count, affected };
+  }, [bills, accountId]);
+
+  const [fixingBaixas, setFixingBaixas] = useState(false);
+  async function materializeBaixas() {
+    setFixingBaixas(true);
+    setError("");
+    try {
+      const created = await backfillPaymentTransactions(unmaterialized.affected);
+      await load();
+      setError(`✅ ${created} baixa(s) transformada(s) em lançamento.`);
+    } catch (err) {
+      setError(`Falha ao corrigir baixas: ${(err as Error).message}`);
+    } finally {
+      setFixingBaixas(false);
+    }
+  }
 
   const origem = (t: Transaction) =>
     t.externalId?.startsWith("cora:") ? "Banco (Cora)" : "App/Importação";
@@ -198,6 +242,20 @@ function Conciliacao() {
           para recomeçar e ir dando baixa item por item.
         </p>
       </div>
+
+      {unmaterialized.count > 0 && (
+        <div className="panel" style={{ borderColor: "var(--warn)" }}>
+          <p style={{ marginTop: 0 }}>
+            ⚠ Esta conta tem <strong>{unmaterialized.count} baixa(s) antiga(s)</strong> de
+            contas a pagar/receber que ainda não viraram lançamento (efeito de{" "}
+            <strong>{brl(unmaterialized.net)}</strong> no saldo). Por isso o saldo desta tela
+            pode diferir do Dashboard.
+          </p>
+          <button disabled={fixingBaixas} onClick={materializeBaixas}>
+            {fixingBaixas ? "Corrigindo…" : "Corrigir agora (criar os lançamentos)"}
+          </button>
+        </div>
+      )}
 
       {summary && (
         <div className="stat-row">

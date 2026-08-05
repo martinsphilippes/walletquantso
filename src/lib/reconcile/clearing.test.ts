@@ -40,6 +40,10 @@ describe("movementFor", () => {
   it("returns 0 for unrelated accounts", () => {
     expect(movementFor(tx({ accountId: "a1" }), "a2")).toBe(0);
   });
+  it("nets a self-transfer (both sides same account) to zero", () => {
+    const t = tx({ type: "transfer", amount: 24.9, accountId: "a1", transferAccountId: "a1" });
+    expect(movementFor(t, "a1")).toBe(0);
+  });
 });
 
 describe("transactionsForAccount", () => {
