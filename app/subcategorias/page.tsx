@@ -3,12 +3,12 @@
 import { LoginGate } from "@/components/LoginGate";
 import { CategoryManager } from "@/components/CategoryManager";
 
-export default function CategoriesPage() {
+export default function SubcategoriesPage() {
   return (
     <>
-      <h1>Categorias</h1>
+      <h1>Subcategorias</h1>
       <LoginGate>
-        <CategoryManager mode="main" />
+        <CategoryManager mode="sub" />
       </LoginGate>
     </>
   );
