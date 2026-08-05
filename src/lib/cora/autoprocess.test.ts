@@ -49,7 +49,13 @@ describe("namesMatch", () => {
   it("matches by two shared significant tokens, ignoring case/accents/noise", () => {
     expect(namesMatch("PIX GABRIEL CHAVES", "Gabriel Chaves - Comissionamento")).toBe(true);
   });
-  it("matches a single long identity token", () => {
+  it("NÃO casa só pelo primeiro nome: Gabriel Domingues ≠ Gabriel Chaves", () => {
+    expect(namesMatch("PIX GABRIEL DOMINGUES", "Gabriel Chaves - Comissionamento")).toBe(false);
+  });
+  it("NÃO casa nomes totalmente diferentes (Fábio Vilela ≠ Marcelo Lins)", () => {
+    expect(namesMatch("PIX FABIO VILELA", "ID1000 Marcelo Lins Silva - Rita Chaves")).toBe(false);
+  });
+  it("still matches a single-token company name (CEMIG)", () => {
     expect(namesMatch("Mensalidade CEMIG agosto", "CEMIG")).toBe(true);
   });
   it("does not match unrelated names or generic banking words", () => {
@@ -59,19 +65,46 @@ describe("namesMatch", () => {
 });
 
 describe("planAutoProcess", () => {
-  it("merges duplicate pairs, preserving the Meu Dinheiro record", () => {
-    const e = entry({ externalId: "cora:a" });
+  it("merges duplicate pairs (same name), preserving the Meu Dinheiro record", () => {
+    const e = entry({ externalId: "cora:a", description: "PIX GABRIEL CHAVES" });
     const coraCopy = tx({ externalId: "cora:a" });
-    const original = tx({ description: "do Meu Dinheiro", categoryId: "cat1" });
+    const original = tx({ description: "Gabriel Chaves mensal", categoryId: "cat1" });
     const [a] = planAutoProcess([e], [coraCopy, original], [], ACC);
     expect(a).toMatchObject({ kind: "merge", keep: original, removeId: coraCopy.id });
   });
 
-  it("links an existing unlinked lançamento instead of creating another", () => {
-    const e = entry({ externalId: "cora:b", amount: 55, type: "income", date: "2026-08-02" });
-    const original = tx({ type: "income", amount: 55, date: "2026-08-02" });
+  it("links an existing unlinked lançamento with similar name instead of creating", () => {
+    const e = entry({
+      externalId: "cora:b",
+      amount: 55,
+      type: "income",
+      date: "2026-08-02",
+      description: "PIX CONCATRO PRISCILLA",
+    });
+    const original = tx({
+      type: "income",
+      amount: 55,
+      date: "2026-08-02",
+      description: "Concatro Priscilla aula",
+    });
     const [a] = planAutoProcess([e], [original], [], ACC);
     expect(a).toMatchObject({ kind: "link", keep: original });
+  });
+
+  it("NÃO adota lançamento de outra pessoa só por ter mesma data e valor", () => {
+    const e = entry({
+      externalId: "cora:f",
+      amount: 16,
+      date: "2026-08-05",
+      description: "PIX FABIO VILELA",
+    });
+    const other = tx({
+      amount: 16,
+      date: "2026-08-05",
+      description: "ID1000 Marcelo Lins Silva - Rita Chaves",
+    });
+    const [a] = planAutoProcess([e], [other], [], ACC);
+    expect(a).toMatchObject({ kind: "create" });
   });
 
   it("skips movements already linked on the right account", () => {
@@ -96,9 +129,9 @@ describe("planAutoProcess", () => {
   });
 
   it("prefers merging into the Meu Dinheiro twin even when the copy is on another account", () => {
-    const e = entry({ externalId: "cora:e", amount: 80 });
+    const e = entry({ externalId: "cora:e", amount: 80, description: "PIX RITA CHAVES" });
     const copyOnC6 = tx({ externalId: "cora:e", amount: 80, accountId: "c6" });
-    const original = tx({ amount: 80, description: "original MD" });
+    const original = tx({ amount: 80, description: "Rita Chaves salário" });
     const [a] = planAutoProcess([e], [copyOnC6, original], [], ACC);
     expect(a).toMatchObject({ kind: "merge", keep: original, removeId: copyOnC6.id });
   });
@@ -109,6 +142,13 @@ describe("planAutoProcess", () => {
     const near = bill({ description: "Gabriel Chaves - Comissionamento", dueDate: "2026-08-05" });
     const [a] = planAutoProcess([e], [], [far, near], ACC);
     expect(a).toMatchObject({ kind: "settleBill", bill: near });
+  });
+
+  it("NÃO quita título de outra pessoa com mesmo primeiro nome", () => {
+    const e = entry({ description: "PIX GABRIEL DOMINGUES", amount: 500 });
+    const b = bill({ description: "Gabriel Chaves - Comissionamento", amount: 500 });
+    const [a] = planAutoProcess([e], [], [b], ACC);
+    expect(a).toMatchObject({ kind: "create" });
   });
 
   it("creates a new lançamento when nothing matches (and never bill-matches credits)", () => {

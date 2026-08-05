@@ -6,12 +6,16 @@
 //   • merge   — the movement exists twice: the original (Meu Dinheiro, richer
 //     classification) AND a copy imported from Cora. The original is preserved
 //     and stamped with the bank id; the Cora copy is removed.
-//   • link    — an existing lançamento (same date, value and direction, not yet
-//     linked to the bank) is adopted as the bank movement: stamped with the
-//     bank id and marked reconciled. Nothing is created.
+//   • link    — an existing lançamento (same date, value, direction AND a
+//     similar name, not yet linked to the bank) is adopted as the bank
+//     movement: stamped with the bank id. Nothing is created.
 //   • settleBill — a DEBIT with a name similar to an open payable: the título
 //     keeps its name/classification, assumes the bank value and is settled.
 //   • create  — no counterpart anywhere: a new lançamento is created.
+//
+// Identity matters: value+date alone never identify a counterpart — two
+// different PIX of the same amount on the same day would cross-match. Every
+// adoption/settlement therefore also requires name similarity (namesMatch).
 //
 // All routed lançamentos end up reconciled (the bank statement is the source).
 
@@ -39,8 +43,11 @@ export function nameTokens(s: string): Set<string> {
 }
 
 /**
- * Flexible name similarity: true when the two names share at least two
- * significant tokens, or a single longer one (>= 5 chars, e.g. a company name).
+ * Name similarity for identifying a counterpart. Rule: at least TWO shared
+ * significant tokens (nome + sobrenome) — "Gabriel Domingues" must NOT match
+ * "Gabriel Chaves". The only exception is when one of the sides has a single
+ * significant token (e.g. a company like "CEMIG"): then that token must be
+ * shared and reasonably long (>= 5 chars).
  */
 export function namesMatch(a: string, b: string): boolean {
   const ta = nameTokens(a);
@@ -54,7 +61,11 @@ export function namesMatch(a: string, b: string): boolean {
       if (t.length >= 5) hasLong = true;
     }
   }
-  return shared >= 2 || (shared === 1 && hasLong);
+  if (shared >= 2) return true;
+  // Single-token side (company-style name): its one token must match, and be
+  // long enough to carry identity.
+  const minSide = Math.min(ta.size, tb.size);
+  return minSide === 1 && shared === 1 && hasLong;
 }
 
 export type AutoAction =
@@ -116,9 +127,14 @@ export function planAutoProcess(
     list.push(t);
     twins.set(key, list);
   }
-  const popTwin = (key: string): Transaction | null => {
+  // Adoption requires identity: same (date|amount|dir) AND similar name.
+  // Value+date alone would cross-match unrelated movements of the same amount.
+  const popTwin = (key: string, entryDescription: string): Transaction | null => {
     const list = twins.get(key);
-    return list && list.length > 0 ? (list.shift() as Transaction) : null;
+    if (!list || list.length === 0) return null;
+    const i = list.findIndex((t) => namesMatch(entryDescription, t.description ?? ""));
+    if (i < 0) return null;
+    return list.splice(i, 1)[0];
   };
 
   const consumedBills = new Set<string>();
@@ -130,7 +146,7 @@ export function planAutoProcess(
   for (const entry of ordered) {
     const key = `${entry.date}|${entry.amount}|${entry.type === "income" ? "C" : "D"}`;
     const linked = byExternal.get(entry.externalId) ?? null;
-    const twin = popTwin(key);
+    const twin = popTwin(key, entry.description);
 
     if (linked && twin) {
       // Duplicate pair: preserve the original (Meu Dinheiro), drop the copy.
