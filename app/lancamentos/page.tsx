@@ -14,6 +14,7 @@ import {
   createTransaction,
   updateTransaction,
   removeTransaction,
+  bulkPatchTransactions,
   type TransactionInput,
 } from "@/services/transactions";
 import { TransactionForm } from "@/components/TransactionForm";
@@ -164,6 +165,56 @@ function Lancamentos() {
       await load();
     } catch (err) {
       setError(`Falha ao excluir: ${(err as Error).message}`);
+    }
+  }
+
+  // ── Edição em massa (categoria / centro / contato) ───────────────────────
+  type BulkField = "categoryId" | "costCenterId" | "contactId";
+  const [bulkField, setBulkField] = useState<BulkField>("categoryId");
+  const [bulkValue, setBulkValue] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState("");
+
+  async function applyBulkEdit() {
+    if (!user || sel.count === 0) return;
+    if (!bulkValue) {
+      setBulkMsg("Escolha o valor a aplicar (ou “— limpar —”).");
+      return;
+    }
+    const value = bulkValue === "__clear__" ? null : bulkValue;
+    const byId = new Map((txs ?? []).map((t) => [t.id!, t]));
+
+    // Categoria tem tipo (receita/despesa): aplica só onde o tipo combina.
+    let targetIds = sel.selectedIds;
+    let skipped = 0;
+    if (bulkField === "categoryId" && value) {
+      const cat = categories.find((c) => c.id === value);
+      if (cat) {
+        targetIds = sel.selectedIds.filter((id) => byId.get(id)?.type === cat.kind);
+        skipped = sel.selectedIds.length - targetIds.length;
+      }
+    }
+    if (targetIds.length === 0) {
+      setBulkMsg("Nenhum dos selecionados é compatível com essa categoria (tipo diferente).");
+      return;
+    }
+
+    setBulkBusy(true);
+    setBulkMsg("");
+    setError("");
+    try {
+      await bulkPatchTransactions(user.uid, targetIds, { [bulkField]: value });
+      setBulkMsg(
+        `✅ ${targetIds.length} lançamento(s) atualizado(s).` +
+          (skipped > 0 ? ` ${skipped} pulado(s) por tipo incompatível com a categoria.` : ""),
+      );
+      sel.clear();
+      setBulkValue("");
+      await load();
+    } catch (err) {
+      setBulkMsg(`❌ Falha ao aplicar: ${(err as Error).message}`);
+    } finally {
+      setBulkBusy(false);
     }
   }
 
@@ -448,6 +499,72 @@ function Lancamentos() {
           </button>
         </div>
         <BulkBar sel={sel} onDelete={handleBulkDelete} noun="lançamento" />
+        {sel.count > 0 && (
+          <div
+            style={{
+              display: "flex",
+              gap: "0.6rem",
+              alignItems: "flex-end",
+              flexWrap: "wrap",
+              padding: "0.5rem 0.75rem",
+              marginBottom: "0.75rem",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              background: "var(--bg)",
+            }}
+          >
+            <strong style={{ alignSelf: "center" }}>Editar em massa:</strong>
+            <FilterField label="O que alterar">
+              <select
+                value={bulkField}
+                onChange={(e) => {
+                  setBulkField(e.target.value as typeof bulkField);
+                  setBulkValue("");
+                  setBulkMsg("");
+                }}
+              >
+                <option value="categoryId">Categoria</option>
+                <option value="costCenterId">Centro de custo</option>
+                <option value="contactId">Contato</option>
+              </select>
+            </FilterField>
+            <FilterField label="Novo valor">
+              <select value={bulkValue} onChange={(e) => setBulkValue(e.target.value)}>
+                <option value="">— escolha —</option>
+                <option value="__clear__">— limpar (nenhum) —</option>
+                {bulkField === "categoryId" &&
+                  categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({TYPE_LABELS[c.kind]})
+                    </option>
+                  ))}
+                {bulkField === "costCenterId" &&
+                  costCenters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                {bulkField === "contactId" &&
+                  contacts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+              </select>
+            </FilterField>
+            <button disabled={bulkBusy} onClick={applyBulkEdit}>
+              {bulkBusy ? "Aplicando…" : `Aplicar a ${sel.count} selecionado(s)`}
+            </button>
+            {bulkMsg && (
+              <span
+                className={`badge ${bulkMsg.startsWith("✅") ? "ok" : "warn"}`}
+                style={{ fontSize: "0.85rem" }}
+              >
+                {bulkMsg}
+              </span>
+            )}
+          </div>
+        )}
         {filtered.length === 0 ? (
           <p className="muted">
             {txs.length === 0

@@ -141,6 +141,27 @@ export function setReconciled(id: string, reconciled: boolean): Promise<void> {
   return updateDoc(doc(db, COLLECTIONS.transactions, id), { reconciled });
 }
 
+/**
+ * Apply the same classification patch (categoria / centro de custo / contato)
+ * to many transactions at once. Only the given fields change; one audit entry
+ * records the batch.
+ */
+export async function bulkPatchTransactions(
+  ownerId: string,
+  ids: string[],
+  patch: Partial<Pick<Transaction, "categoryId" | "costCenterId" | "contactId">>,
+): Promise<void> {
+  for (const id of ids) {
+    await updateDoc(doc(db, COLLECTIONS.transactions, id), patch as Record<string, unknown>);
+  }
+  await appendAudit({
+    ownerId,
+    action: "manual_update",
+    details: { bulk: true, count: ids.length, patch },
+    at: Date.now(),
+  });
+}
+
 /** Delete a transaction. */
 export async function removeTransaction(ownerId: string, id: string): Promise<void> {
   const now = Date.now();
