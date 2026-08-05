@@ -63,6 +63,7 @@ function buildRecord(ownerId: string, input: TransactionInput, createdAt: number
 export function buildBillPaymentTransaction(
   bill: Bill,
   payment: BillPayment,
+  extra?: { externalId?: string | null; reconciled?: boolean },
 ): Transaction {
   const accountId = payment.accountId ?? bill.accountId ?? "";
   const type: TransactionType = bill.kind === "receivable" ? "income" : "expense";
@@ -83,6 +84,7 @@ export function buildBillPaymentTransaction(
     billId: bill.id ?? null,
     billPaymentId: payment.id,
     notes: bill.kind === "receivable" ? "Baixa de conta a receber" : "Baixa de conta a pagar",
+    externalId: extra?.externalId ?? null,
     dedupHash: dedupHash({
       date: payment.date,
       amount: payment.amount,
@@ -91,6 +93,7 @@ export function buildBillPaymentTransaction(
     }),
     createdAt: Date.now(),
   };
+  if (extra?.reconciled) record.reconciled = true;
   return record;
 }
 

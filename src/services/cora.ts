@@ -4,12 +4,20 @@
 // statement, then saves the movements as lançamentos, skipping any that were
 // already imported (dedup by the Cora entry id stored in `externalId`).
 
-import { addDoc, collection, doc, getDoc, setDoc } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { COLLECTIONS, listTransactions } from "./firestore";
+import { listBills, addPayment } from "./bills";
+import { removeTransaction } from "./transactions";
 import { dedupHash } from "@/lib/import/engine";
+import { planAutoProcess } from "@/lib/cora/autoprocess";
 import type { CoraSyncConfig, Transaction } from "@/types";
 import type { NormalizedEntry } from "@/lib/cora/statement";
+
+const rid = () =>
+  (typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
 /** Read the owner's Cora auto-sync config (null when never configured). */
 export async function getCoraSyncConfig(uid: string): Promise<CoraSyncConfig | null> {
@@ -69,6 +77,115 @@ export async function fetchCoraStatement(
 export interface CoraSyncResult {
   created: number;
   skipped: number;
+}
+
+export interface AutoProcessResult {
+  /** New lançamentos created. */
+  created: number;
+  /** Duplicate pairs resolved (Meu Dinheiro preserved, Cora copy removed). */
+  merged: number;
+  /** Existing lançamentos adopted (stamped with the bank id). */
+  linked: number;
+  /** Payables settled at the bank value. */
+  settled: number;
+  /** Already processed in earlier runs. */
+  skipped: number;
+}
+
+/**
+ * Route every bank movement to its destination automatically:
+ * preserve/stamp Meu Dinheiro records, settle name-matching payables at the
+ * bank value, create what's missing. Everything ends reconciled and linked to
+ * the bank id, so re-running is safe (idempotent).
+ */
+export async function autoProcessCora(
+  ownerId: string,
+  accountId: string,
+  entries: NormalizedEntry[],
+): Promise<AutoProcessResult> {
+  const [txs, payables] = await Promise.all([
+    listTransactions(ownerId),
+    listBills(ownerId, "payable"),
+  ]);
+  const plan = planAutoProcess(entries, txs, payables, accountId);
+
+  const result: AutoProcessResult = { created: 0, merged: 0, linked: 0, settled: 0, skipped: 0 };
+  const now = Date.now();
+
+  for (const action of plan) {
+    switch (action.kind) {
+      case "skip":
+        result.skipped++;
+        break;
+
+      case "merge":
+        // Preserve the Meu Dinheiro record: stamp it with the bank id and drop
+        // the Cora-imported copy.
+        await removeTransaction(ownerId, action.removeId);
+        await updateDoc(doc(db, COLLECTIONS.transactions, action.keep.id!), {
+          externalId: action.entry.externalId,
+          reconciled: true,
+        });
+        result.merged++;
+        break;
+
+      case "link":
+        await updateDoc(doc(db, COLLECTIONS.transactions, action.keep.id!), {
+          externalId: action.entry.externalId,
+          reconciled: true,
+        });
+        result.linked++;
+        break;
+
+      case "settleBill":
+        // Título keeps its name/classification, assumes the bank value, closes.
+        await addPayment(
+          action.bill.id!,
+          {
+            id: rid(),
+            date: action.entry.date,
+            amount: action.entry.amount,
+            accountId,
+          },
+          { settle: true, externalId: action.entry.externalId, reconciled: true },
+        );
+        result.settled++;
+        break;
+
+      case "create": {
+        const e = action.entry;
+        const record: Transaction = {
+          ownerId,
+          date: e.date,
+          amount: e.amount,
+          type: e.type,
+          description: e.description,
+          accountId,
+          categoryId: null,
+          transferAccountId: null,
+          costCenterId: null,
+          contactId: null,
+          installment: null,
+          installmentGroupId: null,
+          importBatchId: null,
+          externalId: e.externalId,
+          reconciled: true,
+          dedupHash: dedupHash({
+            date: e.date,
+            amount: e.amount,
+            description: e.description,
+            account: accountId,
+          }),
+          createdAt: now,
+        };
+        await addDoc(collection(db, COLLECTIONS.transactions), record);
+        result.created++;
+        break;
+      }
+    }
+  }
+
+  return result;
 }
 
 /**

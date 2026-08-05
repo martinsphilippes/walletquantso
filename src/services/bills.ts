@@ -78,14 +78,17 @@ export async function settleBillAtPaid(id: string): Promise<void> {
 export async function addPayment(
   id: string,
   payment: BillPayment,
-  opts?: { settle?: boolean },
+  opts?: { settle?: boolean; externalId?: string | null; reconciled?: boolean },
 ): Promise<void> {
   const snap = await getDoc(doc(db, COLLECTIONS.bills, id));
   if (!snap.exists()) throw new Error("Título não encontrado.");
   const bill = { id, ...(snap.data() as Bill) };
 
   // Materialize the cash movement as a transaction so it shows in Lançamentos.
-  const txRecord = buildBillPaymentTransaction(bill, payment);
+  const txRecord = buildBillPaymentTransaction(bill, payment, {
+    externalId: opts?.externalId ?? null,
+    reconciled: opts?.reconciled,
+  });
   const txRef = await addDoc(collection(db, COLLECTIONS.transactions), txRecord);
 
   // Record the settlement on the bill. If this fails, roll back the transaction

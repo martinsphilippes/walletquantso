@@ -7,7 +7,7 @@ import { listAccounts, listTransactions, updateAccount } from "@/services/firest
 import { removeTransaction } from "@/services/transactions";
 import {
   fetchCoraStatement,
-  commitCoraEntries,
+  autoProcessCora,
   getCoraSyncConfig,
   setCoraSyncConfig,
 } from "@/services/cora";
@@ -96,24 +96,27 @@ function CoraSync() {
     }
   }
 
-  async function importAll() {
+  async function processAll() {
     if (!user || !entries) return;
     if (!accountId) {
-      setError("Selecione a conta onde os lançamentos serão criados.");
+      setError("Selecione a conta antes de distribuir os lançamentos.");
       return;
     }
     setBusy(true);
     setError("");
     try {
-      const r = await commitCoraEntries(user.uid, accountId, entries);
-      setResult(
-        `Importados ${r.created} lançamento(s).` +
-          (r.skipped > 0 ? ` ${r.skipped} já existiam (ignorados).` : ""),
-      );
+      const r = await autoProcessCora(user.uid, accountId, entries);
+      const parts: string[] = [];
+      if (r.created > 0) parts.push(`${r.created} lançamento(s) novo(s)`);
+      if (r.merged + r.linked > 0)
+        parts.push(`${r.merged + r.linked} vinculado(s) ao que já existia (preservados)`);
+      if (r.settled > 0) parts.push(`${r.settled} conta(s) a pagar quitada(s) pelo valor do banco`);
+      if (r.skipped > 0) parts.push(`${r.skipped} já processado(s) antes`);
+      setResult(`Distribuição concluída: ${parts.join(" · ") || "nada a fazer"}.`);
       // Refresh the wallet side so the conferência below updates.
       setTxs(await listTransactions(user.uid));
     } catch (err) {
-      setError(`Falha ao importar: ${(err as Error).message}`);
+      setError(`Falha ao distribuir: ${(err as Error).message}`);
     } finally {
       setBusy(false);
     }
@@ -292,10 +295,15 @@ function CoraSync() {
             <span className="muted">
               {entries.length} movimentação(ões) · entradas {brl(totalIn)} · saídas {brl(totalOut)}
             </span>
-            <button disabled={busy} onClick={importAll}>
-              {busy ? "Importando…" : `Importar ${entries.length} lançamento(s)`}
+            <button disabled={busy} onClick={processAll}>
+              {busy ? "Distribuindo…" : `Distribuir ${entries.length} automaticamente`}
             </button>
           </div>
+          <p className="muted" style={{ marginTop: 0, fontSize: "0.82rem" }}>
+            O que já existe no app é preservado e apenas vinculado ao banco; saídas
+            com nome parecido a uma conta a pagar em aberto quitam o título pelo
+            valor do banco; o restante vira lançamento novo. Tudo entra conciliado.
+          </p>
           <div style={{ overflowX: "auto" }}>
             <table>
               <thead>
