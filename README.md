@@ -146,8 +146,9 @@ Para a Wallet importar sozinha, de tempos em tempos, sem abrir a tela:
    `FIREBASE_SERVICE_ACCOUNT` (permite a gravação server-side).
 2. Defina `CRON_SECRET` na Vercel (um valor aleatório longo) — protege o
    agendador.
-3. O agendamento já está em `vercel.json` (a cada 3 horas; em planos gratuitos a
-   Vercel roda ~1x/dia). Faça um novo deploy.
+3. O agendamento já está em `vercel.json` (diário, 09:00 UTC = 06:00 de
+   Brasília — o plano gratuito da Vercel permite crons no máximo 1x/dia).
+   Faça um novo deploy.
 4. Na tela **Sincronizar Cora**, escolha a conta e marque **“Ativar
    sincronização automática”**. A partir daí o cron busca as novas
    movimentações e cria os lançamentos, sem duplicar.
