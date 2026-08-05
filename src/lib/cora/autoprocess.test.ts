@@ -88,6 +88,13 @@ describe("planAutoProcess", () => {
     expect(a).toMatchObject({ kind: "move", keep: wrongAccount });
   });
 
+  it("fixes a linked lançamento whose date drifted (old UTC-shifted import)", () => {
+    const e = entry({ externalId: "cora:tz", date: "2026-07-28" });
+    const shifted = tx({ externalId: "cora:tz", date: "2026-07-29" });
+    const [a] = planAutoProcess([e], [shifted], [], ACC);
+    expect(a).toMatchObject({ kind: "move", keep: shifted });
+  });
+
   it("prefers merging into the Meu Dinheiro twin even when the copy is on another account", () => {
     const e = entry({ externalId: "cora:e", amount: 80 });
     const copyOnC6 = tx({ externalId: "cora:e", amount: 80, accountId: "c6" });

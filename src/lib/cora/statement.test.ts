@@ -52,4 +52,14 @@ describe("normalizeCoraStatement", () => {
   it("handles an empty statement", () => {
     expect(normalizeCoraStatement({})).toEqual([]);
   });
+
+  it("uses Brazil's timezone for the date (a night movement stays on its local day)", () => {
+    // 28/07 at 21:30 in Brazil = 29/07 00:30 UTC — must come out as 28/07.
+    const res = {
+      entries: [entry({ id: "n", type: "CREDIT", amount: 300000, createdAt: "2026-07-29T00:30:00+00" })],
+    };
+    const [out] = normalizeCoraStatement(res);
+    expect(out.date).toBe("2026-07-28");
+    expect(out.amount).toBe(3000);
+  });
 });

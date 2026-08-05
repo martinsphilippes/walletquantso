@@ -133,7 +133,6 @@ export async function autoProcessCora(
         await removeTransaction(ownerId, action.removeId);
         await updateDoc(doc(db, COLLECTIONS.transactions, action.keep.id!), {
           externalId: action.entry.externalId,
-          reconciled: true,
         });
         result.merged++;
         break;
@@ -141,16 +140,15 @@ export async function autoProcessCora(
       case "link":
         await updateDoc(doc(db, COLLECTIONS.transactions, action.keep.id!), {
           externalId: action.entry.externalId,
-          reconciled: true,
         });
         result.linked++;
         break;
 
       case "move":
-        // The bank movement belongs to this account; fix the lançamento's account.
+        // The bank movement belongs to this account/date; fix the lançamento.
         await updateDoc(doc(db, COLLECTIONS.transactions, action.keep.id!), {
           accountId,
-          reconciled: true,
+          date: action.entry.date,
         });
         result.moved++;
         break;
@@ -165,7 +163,7 @@ export async function autoProcessCora(
             amount: action.entry.amount,
             accountId,
           },
-          { settle: true, externalId: action.entry.externalId, reconciled: true },
+          { settle: true, externalId: action.entry.externalId },
         );
         result.settled++;
         break;
@@ -187,7 +185,6 @@ export async function autoProcessCora(
           installmentGroupId: null,
           importBatchId: null,
           externalId: e.externalId,
-          reconciled: true,
           dedupHash: dedupHash({
             date: e.date,
             amount: e.amount,

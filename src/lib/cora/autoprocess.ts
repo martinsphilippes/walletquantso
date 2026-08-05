@@ -61,7 +61,7 @@ export type AutoAction =
   | { kind: "skip"; entry: NormalizedEntry }
   | { kind: "merge"; entry: NormalizedEntry; keep: Transaction; removeId: string }
   | { kind: "link"; entry: NormalizedEntry; keep: Transaction }
-  /** Linked lançamento sits on the wrong account — move it to the right one. */
+  /** Linked lançamento has the wrong account and/or date — fix it in place. */
   | { kind: "move"; entry: NormalizedEntry; keep: Transaction }
   | { kind: "settleBill"; entry: NormalizedEntry; bill: Bill }
   | { kind: "create"; entry: NormalizedEntry };
@@ -136,9 +136,9 @@ export function planAutoProcess(
       // Duplicate pair: preserve the original (Meu Dinheiro), drop the copy.
       actions.push({ kind: "merge", entry, keep: twin, removeId: linked.id! });
     } else if (linked) {
-      if (signedForAccount(linked, accountId) === 0) {
-        // Linked, but on the wrong account (e.g. imported with another account
-        // selected). Move it to the account this statement belongs to.
+      if (signedForAccount(linked, accountId) === 0 || linked.date !== entry.date) {
+        // Linked, but with the wrong account (imported with another account
+        // selected) and/or the wrong date (old UTC-shifted imports). Fix it.
         actions.push({ kind: "move", entry, keep: linked });
       } else {
         actions.push({ kind: "skip", entry });

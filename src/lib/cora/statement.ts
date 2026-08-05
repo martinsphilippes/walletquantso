@@ -54,6 +54,30 @@ export interface NormalizedEntry {
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
+/**
+ * Date (YYYY-MM-DD) of a Cora timestamp in Brazil's timezone. Cora returns
+ * UTC timestamps with a short offset ("2026-07-29T01:30:00+00") that
+ * JavaScript's Date cannot parse, and taking the date straight from the string
+ * shifts any night-time movement to the next day — so we normalize the offset
+ * and convert to America/Sao_Paulo before extracting the day.
+ */
+export function brDateOf(isoTimestamp: string): string {
+  let s = (isoTimestamp || "").trim();
+  // Normalize short offsets: "+0000" → "+00:00", then "+00" → "+00:00".
+  s = s.replace(/([+-]\d{2})(\d{2})$/, "$1:$2").replace(/([+-]\d{2})$/, "$1:00");
+  // No timezone info at all → per the API docs, timestamps are UTC.
+  if (!/([zZ]|[+-]\d{2}:\d{2})$/.test(s)) s += "Z";
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return (isoTimestamp || "").slice(0, 10);
+  // en-CA formats as YYYY-MM-DD.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
 /** Best-effort human description from a Cora entry. */
 export function describeEntry(entry: CoraEntry): string {
   const t = entry.transaction;
@@ -76,7 +100,7 @@ export function normalizeCoraStatement(res: CoraStatementResponse): NormalizedEn
     if (amount <= 0) continue;
     out.push({
       externalId: `cora:${entry.id}`,
-      date: (entry.createdAt || "").slice(0, 10),
+      date: brDateOf(entry.createdAt || ""),
       amount,
       type: entry.type === "CREDIT" ? "income" : "expense",
       description: describeEntry(entry),

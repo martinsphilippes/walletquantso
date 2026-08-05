@@ -303,7 +303,8 @@ function CoraSync() {
           <p className="muted" style={{ marginTop: 0, fontSize: "0.82rem" }}>
             O que já existe no app é preservado e apenas vinculado ao banco; saídas
             com nome parecido a uma conta a pagar em aberto quitam o título pelo
-            valor do banco; o restante vira lançamento novo. Tudo entra conciliado.
+            valor do banco; o restante vira lançamento novo. A conciliação fica
+            manual por enquanto (nada é marcado automaticamente).
           </p>
           <div style={{ overflowX: "auto" }}>
             <table>
