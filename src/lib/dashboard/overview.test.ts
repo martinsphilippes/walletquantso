@@ -143,6 +143,31 @@ describe("computeOverview", () => {
     expect(o.toReceive).toBe(50);
   });
 
+  it("applies a date window: realizadas by movement date, bills by due date, saldo up to the end", () => {
+    const o = computeOverview(
+      [account(100)],
+      [
+        tx("income", 200, { date: "2026-07-10" }), // antes do período (conta no saldo)
+        tx("income", 50, { date: "2026-08-02" }), // dentro
+        tx("expense", 30, { date: "2026-08-03" }), // dentro
+        tx("expense", 999, { date: "2026-09-01" }), // depois (fora de tudo)
+      ],
+      [bill("payable", 40, "2026-08-20"), bill("payable", 70, "2026-09-20")],
+      [bill("receivable", 80, "2026-08-15")],
+      TODAY,
+      { from: "2026-08-01", to: "2026-08-31" },
+    );
+    expect(o.realizedIncome).toBe(50);
+    expect(o.realizedExpense).toBe(30);
+    // saldo até 31/08: 100 + 200 + 50 − 30
+    expect(o.currentBalance).toBe(320);
+    // títulos que VENCEM no período
+    expect(o.toPay).toBe(40);
+    expect(o.toReceive).toBe(80);
+    expect(o.pendingCount).toBe(2);
+    expect(o.projectedBalance).toBe(360);
+  });
+
   it("does not double count a payment already materialized as a transaction", () => {
     // The baixa is now a real income transaction; the receivable's payment
     // carries its transactionId. Only one of them must count.

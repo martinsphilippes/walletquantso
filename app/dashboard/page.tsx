@@ -25,6 +25,7 @@ import { transactionsToCsv } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
 import { filterTransactions, type DashboardFilters } from "@/lib/dashboard/filter";
 import { computeOverview } from "@/lib/dashboard/overview";
+import { todayBr, currentMonthBr, daysAgoBr } from "@/lib/br/date";
 import { computeCashBalances, monthResult, type MonthMode } from "@/lib/dashboard/cash";
 import {
   receitasPorCategoria,
@@ -130,9 +131,17 @@ function Dashboard() {
     load();
   }, [load]);
 
+  // Período dos indicadores do topo (vazio = histórico inteiro).
+  const [dashFrom, setDashFrom] = useState("");
+  const [dashTo, setDashTo] = useState("");
+
   const overview = useMemo(
-    () => computeOverview(accounts, txs ?? [], payables, receivables),
-    [accounts, txs, payables, receivables],
+    () =>
+      computeOverview(accounts, txs ?? [], payables, receivables, undefined, {
+        from: dashFrom || undefined,
+        to: dashTo || undefined,
+      }),
+    [accounts, txs, payables, receivables, dashFrom, dashTo],
   );
 
   const cash = useMemo(
@@ -331,6 +340,65 @@ function Dashboard() {
   return (
     <>
       {error && <p className="badge err">{error}</p>}
+
+      {/* Período dos indicadores do topo */}
+      <div className="panel" style={{ padding: "0.75rem 1rem" }}>
+        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+          <strong style={{ alignSelf: "center" }}>Período dos indicadores</strong>
+          <FilterField label="Data inicial (de)">
+            <input
+              type="date"
+              value={dashFrom}
+              onChange={(e) => setDashFrom(e.target.value)}
+              style={fieldStyle}
+            />
+          </FilterField>
+          <FilterField label="Data final (até)">
+            <input
+              type="date"
+              value={dashTo}
+              onChange={(e) => setDashTo(e.target.value)}
+              style={fieldStyle}
+            />
+          </FilterField>
+          <button
+            style={{ background: "var(--border)" }}
+            onClick={() => {
+              setDashFrom(`${currentMonthBr()}-01`);
+              setDashTo(todayBr());
+            }}
+          >
+            Este mês
+          </button>
+          <button
+            style={{ background: "var(--border)" }}
+            onClick={() => {
+              setDashFrom(daysAgoBr(30));
+              setDashTo(todayBr());
+            }}
+          >
+            Últimos 30 dias
+          </button>
+          {(dashFrom || dashTo) && (
+            <button
+              style={{ background: "var(--border)" }}
+              onClick={() => {
+                setDashFrom("");
+                setDashTo("");
+              }}
+            >
+              Tudo (limpar)
+            </button>
+          )}
+        </div>
+        {(dashFrom || dashTo) && (
+          <p className="muted" style={{ marginBottom: 0, fontSize: "0.82rem" }}>
+            Receitas/despesas realizadas <strong>no período</strong>; a pagar/receber e
+            pendentes que <strong>vencem no período</strong>; saldo atual{" "}
+            <strong>até a data final</strong>.
+          </p>
+        )}
+      </div>
 
       {/* Situação atual (contas + títulos) */}
       <div className="stat-row">
