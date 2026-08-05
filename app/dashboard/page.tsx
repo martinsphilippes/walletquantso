@@ -25,7 +25,7 @@ import { transactionsToCsv } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
 import { filterTransactions, type DashboardFilters } from "@/lib/dashboard/filter";
 import { computeOverview } from "@/lib/dashboard/overview";
-import { computeCashBalances, monthResult } from "@/lib/dashboard/cash";
+import { computeCashBalances, monthResult, type MonthMode } from "@/lib/dashboard/cash";
 import {
   receitasPorCategoria,
   despesasPorCategoria,
@@ -140,9 +140,28 @@ function Dashboard() {
     [accounts, txs, payables, receivables],
   );
 
+  // Projetada × Realizada no "Resultado do mês" (a escolha fica gravada).
+  const [monthMode, setMonthMode] = useState<MonthMode>("projected");
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("wq.monthMode") as MonthMode | null;
+      if (saved === "projected" || saved === "realized") setMonthMode(saved);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const chooseMonthMode = (m: MonthMode) => {
+    setMonthMode(m);
+    try {
+      localStorage.setItem("wq.monthMode", m);
+    } catch {
+      /* ignore */
+    }
+  };
+
   const month = useMemo(
-    () => monthResult(txs ?? [], payables, receivables),
-    [txs, payables, receivables],
+    () => monthResult(txs ?? [], payables, receivables, undefined, monthMode),
+    [txs, payables, receivables, monthMode],
   );
 
   const recentTxs = useMemo(() => (txs ?? []).slice(0, 5), [txs]);
@@ -360,7 +379,37 @@ function Dashboard() {
       >
         <div className="panel">
           <h2 style={{ marginBottom: 0 }}>Resultado do mês</h2>
-          <p className="muted" style={{ marginTop: 2 }}>Situação projetada</p>
+          <div style={{ display: "flex", gap: 6, margin: "6px 0 10px" }}>
+            {(
+              [
+                ["projected", "Projetada"],
+                ["realized", "Realizada"],
+              ] as Array<[MonthMode, string]>
+            ).map(([m, label]) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => chooseMonthMode(m)}
+                style={{
+                  padding: "0.2rem 0.7rem",
+                  fontSize: "0.78rem",
+                  borderRadius: 6,
+                  border: "1px solid var(--border)",
+                  background: monthMode === m ? "var(--accent)" : "transparent",
+                  color: monthMode === m ? "#fff" : "var(--muted)",
+                  cursor: "pointer",
+                }}
+                aria-pressed={monthMode === m}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="muted" style={{ marginTop: 0, fontSize: "0.8rem" }}>
+            {monthMode === "projected"
+              ? "Projetada: o realizado + títulos em aberto que vencem no mês."
+              : "Realizada: somente o que de fato entrou e saiu no mês."}
+          </p>
           <ChartSwitcher
             storageKey="wq.chart.resultadoMes"
             kinds={["bar", "donut"]}

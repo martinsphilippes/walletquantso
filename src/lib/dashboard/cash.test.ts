@@ -149,6 +149,20 @@ describe("monthResult", () => {
     expect(r.result).toBe(200);
   });
 
+  it("mode 'realized' counts only money that actually moved in the month", () => {
+    const r = monthResult(
+      [tx("income", 200, { date: "2026-08-05" })],
+      [bill("payable", 100, "2026-08-15")], // open — projected only
+      [bill("receivable", 300, "2026-08-10", [{ amount: 100, date: "2026-08-02" }])],
+      "2026-08",
+      "realized",
+    );
+    // 200 (tx) + 100 (settled part); the open 200 remaining and the open payable are out.
+    expect(r.income).toBe(300);
+    expect(r.expense).toBe(0);
+    expect(r.result).toBe(300);
+  });
+
   it("ignores bills due in other months", () => {
     const r = monthResult([], [bill("payable", 100, "2026-09-15")], [], "2026-08");
     expect(r.expense).toBe(0);

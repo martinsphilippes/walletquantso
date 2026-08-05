@@ -130,15 +130,22 @@ export interface MonthResult {
 }
 
 /**
- * Projected result for a given month (defaults to the current month): what is
- * expected to move in/out, combining realized movements dated in the month with
- * the still-open remainder of bills due in the month.
+ * "projected": realized movements in the month PLUS the still-open remainder of
+ * bills due in the month (what the month is expected to close at).
+ * "realized": only money that actually moved in the month.
+ */
+export type MonthMode = "projected" | "realized";
+
+/**
+ * Result for a given month (defaults to the current month). By default returns
+ * the projected view; pass mode "realized" for the actual cash movement only.
  */
 export function monthResult(
   txs: Transaction[],
   payables: Bill[],
   receivables: Bill[],
   month: string = currentMonthBr(),
+  mode: MonthMode = "projected",
 ): MonthResult {
   let income = 0;
   let expense = 0;
@@ -152,12 +159,12 @@ export function monthResult(
   for (const b of receivables) {
     for (const p of b.payments)
       if (!p.transactionId && monthOf(p.date) === month) income += p.amount || 0;
-    if (monthOf(b.dueDate) === month) income += remaining(b);
+    if (mode === "projected" && monthOf(b.dueDate) === month) income += remaining(b);
   }
   for (const b of payables) {
     for (const p of b.payments)
       if (!p.transactionId && monthOf(p.date) === month) expense += p.amount || 0;
-    if (monthOf(b.dueDate) === month) expense += remaining(b);
+    if (mode === "projected" && monthOf(b.dueDate) === month) expense += remaining(b);
   }
 
   income = round(income);
