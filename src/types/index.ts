@@ -164,6 +164,12 @@ export interface Transaction {
   tags?: string[];
   /** Id of the import batch that created this record (for undo/audit). */
   importBatchId?: string | null;
+  /**
+   * Stable external id when this entry mirrors a record from an outside system
+   * (e.g. a Cora bank statement entry: "cora:ent_..."). Used to avoid importing
+   * the same bank movement twice on repeated syncs.
+   */
+  externalId?: string | null;
   /** Stable hash of natural key fields, used for duplicate detection. */
   dedupHash: string;
   createdAt: number;

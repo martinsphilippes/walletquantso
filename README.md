@@ -112,6 +112,31 @@ direto no navegador, sem instalar o Firebase CLI:
 Depois de conectado, **todo commit enviado ao `main` publica automaticamente**
 uma nova versão na Vercel — não é preciso repetir os passos acima.
 
+## Integração com o banco Cora (Sincronizar Cora)
+
+A tela **“Sincronizar Cora”** busca as movimentações da sua conta Cora e cria os
+lançamentos automaticamente (com deduplicação — rodar de novo no mesmo período
+não duplica). A API do Cora exige **mTLS** (certificado + chave), por isso a
+chamada acontece no servidor (rota `app/api/cora/statement`), nunca no navegador.
+
+Passo a passo:
+
+1. **No Cora** (portal do desenvolvedor → Integrações / Integração direta):
+   gere o **Client ID**, o **certificado** (`.pem`) e a **chave privada**
+   (`.key`) com permissão de consulta de extrato (escopo `account`).
+2. **Converta o certificado e a chave para base64** (uma linha):
+   `base64 -w0 certificate.pem` e `base64 -w0 private-key.key`.
+3. **Na Vercel** (Project → Settings → Environment Variables), cadastre:
+   `CORA_CLIENT_ID`, `CORA_CERT_BASE64`, `CORA_KEY_BASE64`, `FIREBASE_PROJECT_ID`
+   (o mesmo do Firebase) e, opcionalmente, `CORA_BASE_URL`, `CORA_SCOPE` e
+   `CORA_ALLOWED_EMAIL` (trava a integração ao seu e-mail). Veja `.env.example`.
+4. **Faça um novo deploy** para as variáveis entrarem em vigor.
+5. No app, abra **Sincronizar Cora**, escolha a **conta** de destino e o
+   **período**, clique em **Buscar no Cora** e depois em **Importar**.
+
+Segurança: o certificado/chave ficam só no servidor (Vercel), nunca no
+repositório nem no navegador; você nunca usa a senha do internet banking.
+
 ## Estrutura principal das pastas
 
 ```

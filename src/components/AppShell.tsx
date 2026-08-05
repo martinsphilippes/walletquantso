@@ -30,6 +30,7 @@ const NAV: NavEntry[] = [
   { label: "Pessoas e contatos", href: "/contatos", icon: "☺" },
   { label: "Relatórios", href: "/reports", icon: "▧" },
   { label: "Importação de dados", href: "/import", icon: "⤓" },
+  { label: "Sincronizar Cora", href: "/cora", icon: "⟳" },
   { label: "Auditoria", href: "/auditoria", icon: "◷" },
   { label: "Configurações", href: "/configuracoes", icon: "⚙" },
 ];
