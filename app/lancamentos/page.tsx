@@ -168,33 +168,36 @@ function Lancamentos() {
     }
   }
 
-  // ── Edição em massa (categoria / centro) — inline na barra de seleção ────
-  type BulkField = "categoryId" | "costCenterId";
-  const [bulkField, setBulkField] = useState<BulkField | null>(null);
-  const [bulkValue, setBulkValue] = useState("");
+  // ── Edição em massa (categoria + centro juntos) — inline na barra ────────
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkCat, setBulkCat] = useState("");
+  const [bulkCenter, setBulkCenter] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkMsg, setBulkMsg] = useState("");
 
   async function applyBulkEdit() {
-    if (!user || sel.count === 0 || !bulkField) return;
-    if (!bulkValue) {
-      setBulkMsg("Escolha o valor a aplicar (ou “— limpar —”).");
+    if (!user || sel.count === 0) return;
+    if (!bulkCat && !bulkCenter) {
+      setBulkMsg("Escolha a categoria e/ou o centro de custo a aplicar.");
       return;
     }
-    const value = bulkValue === "__clear__" ? null : bulkValue;
+    const ids = sel.selectedIds;
     const byId = new Map((txs ?? []).map((t) => [t.id!, t]));
 
     // Categoria tem tipo (receita/despesa): aplica só onde o tipo combina.
-    let targetIds = sel.selectedIds;
+    const catValue = bulkCat === "__clear__" ? null : bulkCat || undefined;
+    let catIds = ids;
     let skipped = 0;
-    if (bulkField === "categoryId" && value) {
-      const cat = categories.find((c) => c.id === value);
+    if (bulkCat && catValue) {
+      const cat = categories.find((c) => c.id === catValue);
       if (cat) {
-        targetIds = sel.selectedIds.filter((id) => byId.get(id)?.type === cat.kind);
-        skipped = sel.selectedIds.length - targetIds.length;
+        catIds = ids.filter((id) => byId.get(id)?.type === cat.kind);
+        skipped = ids.length - catIds.length;
       }
     }
-    if (targetIds.length === 0) {
+    const centerValue = bulkCenter === "__clear__" ? null : bulkCenter || undefined;
+
+    if (!bulkCenter && bulkCat && catIds.length === 0) {
       setBulkMsg("Nenhum dos selecionados é compatível com essa categoria (tipo diferente).");
       return;
     }
@@ -203,14 +206,21 @@ function Lancamentos() {
     setBulkMsg("");
     setError("");
     try {
-      await bulkPatchTransactions(user.uid, targetIds, { [bulkField]: value });
+      if (bulkCenter) {
+        await bulkPatchTransactions(user.uid, ids, { costCenterId: centerValue ?? null });
+      }
+      if (bulkCat && catIds.length > 0) {
+        await bulkPatchTransactions(user.uid, catIds, { categoryId: catValue ?? null });
+      }
+      const updated = bulkCenter ? ids.length : catIds.length;
       setBulkMsg(
-        `✅ ${targetIds.length} lançamento(s) atualizado(s).` +
-          (skipped > 0 ? ` ${skipped} pulado(s) por tipo incompatível com a categoria.` : ""),
+        `✅ ${updated} lançamento(s) atualizado(s).` +
+          (skipped > 0 ? ` Categoria não aplicada em ${skipped} por tipo incompatível.` : ""),
       );
       sel.clear();
-      setBulkField(null);
-      setBulkValue("");
+      setBulkOpen(false);
+      setBulkCat("");
+      setBulkCenter("");
       await load();
     } catch (err) {
       setBulkMsg(`❌ Falha ao aplicar: ${(err as Error).message}`);
@@ -504,27 +514,18 @@ function Lancamentos() {
           onDelete={handleBulkDelete}
           noun="lançamento"
           extra={
-            bulkField === null ? (
+            !bulkOpen ? (
               <>
                 <button
                   style={{ background: "var(--border)" }}
                   onClick={() => {
-                    setBulkField("categoryId");
-                    setBulkValue("");
+                    setBulkOpen(true);
+                    setBulkCat("");
+                    setBulkCenter("");
                     setBulkMsg("");
                   }}
                 >
-                  Editar categoria
-                </button>
-                <button
-                  style={{ background: "var(--border)" }}
-                  onClick={() => {
-                    setBulkField("costCenterId");
-                    setBulkValue("");
-                    setBulkMsg("");
-                  }}
-                >
-                  Editar centro de custo
+                  Editar categoria e centro de custo
                 </button>
                 {bulkMsg && (
                   <span
@@ -537,22 +538,25 @@ function Lancamentos() {
               </>
             ) : (
               <>
-                <span>{bulkField === "categoryId" ? "Nova categoria:" : "Novo centro de custo:"}</span>
-                <select value={bulkValue} onChange={(e) => setBulkValue(e.target.value)}>
-                  <option value="">— escolha —</option>
+                <span>Categoria:</span>
+                <select value={bulkCat} onChange={(e) => setBulkCat(e.target.value)}>
+                  <option value="">— não alterar —</option>
+                  <option value="__clear__">— limpar (nenhuma) —</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({TYPE_LABELS[c.kind]})
+                    </option>
+                  ))}
+                </select>
+                <span>Centro de custo:</span>
+                <select value={bulkCenter} onChange={(e) => setBulkCenter(e.target.value)}>
+                  <option value="">— não alterar —</option>
                   <option value="__clear__">— limpar (nenhum) —</option>
-                  {bulkField === "categoryId" &&
-                    categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} ({TYPE_LABELS[c.kind]})
-                      </option>
-                    ))}
-                  {bulkField === "costCenterId" &&
-                    costCenters.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
+                  {costCenters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
                 </select>
                 <button disabled={bulkBusy} onClick={applyBulkEdit}>
                   {bulkBusy ? "Aplicando…" : `Aplicar a ${sel.count} selecionado(s)`}
@@ -561,8 +565,9 @@ function Lancamentos() {
                   style={{ background: "var(--border)" }}
                   disabled={bulkBusy}
                   onClick={() => {
-                    setBulkField(null);
-                    setBulkValue("");
+                    setBulkOpen(false);
+                    setBulkCat("");
+                    setBulkCenter("");
                     setBulkMsg("");
                   }}
                 >
