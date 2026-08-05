@@ -46,6 +46,8 @@ function CoraSync() {
   const [error, setError] = useState("");
   const [result, setResult] = useState("");
   const [syncCfg, setSyncCfg] = useState<CoraSyncConfig | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [distStatus, setDistStatus] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -99,27 +101,37 @@ function CoraSync() {
   async function processAll() {
     if (!user || !entries) return;
     if (!accountId) {
-      setError("Selecione a conta antes de distribuir os lançamentos.");
+      setDistStatus({ ok: false, text: "Selecione a conta antes de distribuir os lançamentos." });
       return;
     }
     setBusy(true);
     setError("");
+    setDistStatus(null);
+    setProgress({ done: 0, total: entries.length });
     try {
-      const r = await autoProcessCora(user.uid, accountId, entries);
+      const r = await autoProcessCora(user.uid, accountId, entries, (done, total) =>
+        setProgress({ done, total }),
+      );
       const parts: string[] = [];
       if (r.created > 0) parts.push(`${r.created} lançamento(s) novo(s)`);
       if (r.merged + r.linked > 0)
         parts.push(`${r.merged + r.linked} vinculado(s) ao que já existia (preservados)`);
-      if (r.moved > 0) parts.push(`${r.moved} movido(s) para esta conta`);
+      if (r.moved > 0) parts.push(`${r.moved} corrigido(s) (conta/data)`);
       if (r.settled > 0) parts.push(`${r.settled} conta(s) a pagar quitada(s) pelo valor do banco`);
-      if (r.skipped > 0) parts.push(`${r.skipped} já processado(s) antes`);
-      setResult(`Distribuição concluída: ${parts.join(" · ") || "nada a fazer"}.`);
+      if (r.skipped > 0) parts.push(`${r.skipped} já estava(m) em dia`);
+      const text = `✅ Distribuição concluída: ${parts.join(" · ") || "nada precisou mudar — tudo já estava em dia"}.`;
+      setDistStatus({ ok: true, text });
+      setResult(text);
       // Refresh the wallet side so the conferência below updates.
       setTxs(await listTransactions(user.uid));
     } catch (err) {
-      setError(`Falha ao distribuir: ${(err as Error).message}`);
+      setDistStatus({
+        ok: false,
+        text: `❌ A distribuição FALHOU: ${(err as Error).message} — nada além do já processado foi gravado; tente de novo.`,
+      });
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   }
 
@@ -297,9 +309,44 @@ function CoraSync() {
               {entries.length} movimentação(ões) · entradas {brl(totalIn)} · saídas {brl(totalOut)}
             </span>
             <button disabled={busy} onClick={processAll}>
-              {busy ? "Distribuindo…" : `Distribuir ${entries.length} automaticamente`}
+              {busy && progress
+                ? `Distribuindo… ${progress.done}/${progress.total}`
+                : busy
+                  ? "Distribuindo…"
+                  : `Distribuir ${entries.length} automaticamente`}
             </button>
           </div>
+
+          {busy && progress && progress.total > 0 && (
+            <div
+              style={{
+                height: 8,
+                background: "var(--border)",
+                borderRadius: 5,
+                overflow: "hidden",
+                marginBottom: "0.75rem",
+              }}
+            >
+              <div
+                style={{
+                  width: `${Math.round((progress.done / progress.total) * 100)}%`,
+                  height: "100%",
+                  background: "var(--accent)",
+                  transition: "width 0.2s",
+                }}
+              />
+            </div>
+          )}
+
+          {distStatus && (
+            <p
+              className={`badge ${distStatus.ok ? "ok" : "err"}`}
+              style={{ display: "block", marginBottom: "0.75rem", fontSize: "0.95rem" }}
+            >
+              {distStatus.text}
+            </p>
+          )}
+
           <p className="muted" style={{ marginTop: 0, fontSize: "0.82rem" }}>
             O que já existe no app é preservado e apenas vinculado ao banco; saídas
             com nome parecido a uma conta a pagar em aberto quitam o título pelo

@@ -104,6 +104,7 @@ export async function autoProcessCora(
   ownerId: string,
   accountId: string,
   entries: NormalizedEntry[],
+  onProgress?: (done: number, total: number) => void,
 ): Promise<AutoProcessResult> {
   const [txs, payables] = await Promise.all([
     listTransactions(ownerId),
@@ -121,7 +122,9 @@ export async function autoProcessCora(
   };
   const now = Date.now();
 
+  let done = 0;
   for (const action of plan) {
+    onProgress?.(done, plan.length);
     switch (action.kind) {
       case "skip":
         result.skipped++;
@@ -198,6 +201,8 @@ export async function autoProcessCora(
         break;
       }
     }
+    done++;
+    onProgress?.(done, plan.length);
   }
 
   return result;
