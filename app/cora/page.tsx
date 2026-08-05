@@ -45,13 +45,23 @@ function CoraSync() {
 
   const load = useCallback(async () => {
     if (!user) return;
-    const [a, cfg] = await Promise.all([
-      listAccounts(user.uid),
-      getCoraSyncConfig(user.uid),
-    ]);
-    setAccounts(a);
-    setSyncCfg(cfg);
-    setAccountId((cur) => cur || cfg?.accountId || a[0]?.id || "");
+    // Load accounts first and never let the sync-config read (which fails when
+    // the doc doesn't exist yet / rules are older) break the account selector.
+    try {
+      const a = await listAccounts(user.uid);
+      setAccounts(a);
+      setAccountId((cur) => cur || a[0]?.id || "");
+    } catch (err) {
+      setError(`Falha ao carregar contas: ${(err as Error).message}`);
+    }
+    try {
+      const cfg = await getCoraSyncConfig(user.uid);
+      setSyncCfg(cfg);
+      if (cfg?.accountId) setAccountId((cur) => cur || cfg.accountId);
+    } catch {
+      // Sem config ainda (ou regras antigas) — o painel fica desativado.
+      setSyncCfg(null);
+    }
   }, [user]);
 
   useEffect(() => {

@@ -76,9 +76,10 @@ service cloud.firestore {
 
     // Cora auto-sync config, one doc per owner (doc id = uid). The owner manages
     // it from the app; the scheduled job reads/writes it via the Admin SDK,
-    // which bypasses these rules.
+    // which bypasses these rules. Access is keyed on the doc id (= uid) so that
+    // reading a not-yet-created config is allowed instead of denied.
     match /coraSync/{uid} {
-      allow read, delete: if ownsExisting();
+      allow read, delete: if isSignedIn() && request.auth.uid == uid;
       allow create, update: if ownsIncoming() && uid == request.auth.uid;
     }
 
