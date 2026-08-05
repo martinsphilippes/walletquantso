@@ -40,6 +40,7 @@ function CoraSync() {
   const [start, setStart] = useState(isoDaysAgo(30));
   const [end, setEnd] = useState(isoDaysAgo(0));
   const [entries, setEntries] = useState<NormalizedEntry[] | null>(null);
+  const [startBalance, setStartBalance] = useState<number | null>(null);
   const [endBalance, setEndBalance] = useState<number | null>(null);
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [busy, setBusy] = useState(false);
@@ -80,6 +81,7 @@ function CoraSync() {
     setError("");
     setResult("");
     setEntries(null);
+    setStartBalance(null);
     setEndBalance(null);
     try {
       const idToken = await user.getIdToken();
@@ -88,6 +90,7 @@ function CoraSync() {
         listTransactions(user.uid),
       ]);
       setEntries(found.entries);
+      setStartBalance(found.startBalance);
       setEndBalance(found.endBalance);
       setTxs(allTxs);
       if (found.entries.length === 0) setResult("Nenhuma movimentação no período.");
@@ -153,9 +156,24 @@ function CoraSync() {
     return Math.round(bal * 100) / 100;
   }, [account, txs, accountId, end]);
 
+  /** Wallet balance of the account BEFORE the start of the queried period. */
+  const walletAtStart = useMemo(() => {
+    if (!account) return null;
+    let bal = account.initialBalance ?? 0;
+    for (const t of txs) {
+      if (t.date < start) bal += signedForAccount(t, accountId);
+    }
+    return Math.round(bal * 100) / 100;
+  }, [account, txs, accountId, start]);
+
   const balanceDiff =
     endBalance != null && walletAtEnd != null
       ? Math.round((endBalance - walletAtEnd) * 100) / 100
+      : null;
+
+  const startDiff =
+    startBalance != null && walletAtStart != null
+      ? Math.round((startBalance - walletAtStart) * 100) / 100
       : null;
 
   async function deleteWalletOnlyOne(id: string) {
@@ -445,24 +463,57 @@ function CoraSync() {
             />
           </div>
 
+          {startBalance != null && walletAtStart != null && (
+            <div style={{ marginTop: "0.75rem" }}>
+              <div className="stat-row">
+                <Stat
+                  label={`Saldo real no Cora no início (${brDate(start)})`}
+                  value={brl(startBalance)}
+                />
+                <Stat label="Wallet até a véspera" value={brl(walletAtStart)} />
+                <Stat
+                  label="Diferença no início"
+                  value={brl(startDiff ?? 0)}
+                  color={startDiff === 0 ? "var(--ok)" : "var(--err)"}
+                />
+              </div>
+            </div>
+          )}
+
           {endBalance != null && walletAtEnd != null && (
             <div style={{ marginTop: "0.75rem" }}>
               <div className="stat-row">
-                <Stat label={`Saldo real no Cora (${brDate(end)})`} value={brl(endBalance)} />
+                <Stat label={`Saldo real no Cora no fim (${brDate(end)})`} value={brl(endBalance)} />
                 <Stat label="Saldo da conta na Wallet" value={brl(walletAtEnd)} />
                 <Stat
-                  label="Diferença de saldo"
+                  label="Diferença no fim"
                   value={brl(balanceDiff ?? 0)}
                   color={balanceDiff === 0 ? "var(--ok)" : "var(--err)"}
                 />
               </div>
+
+              {startDiff != null && balanceDiff != null && (
+                <p
+                  className={`badge ${balanceDiff === 0 ? "ok" : "warn"}`}
+                  style={{ display: "block", fontSize: "0.88rem" }}
+                >
+                  {balanceDiff === 0
+                    ? "✅ O saldo bate com o banco."
+                    : startDiff !== 0 && Math.abs(balanceDiff - startDiff) < 0.005
+                      ? `🔎 A diferença de ${brl(startDiff)} JÁ EXISTIA antes de ${brDate(start)} e o período está limpo — o problema está em lançamentos antigos ou no saldo inicial. Amplie a data inicial para investigar, ou use o botão abaixo para acertar o saldo.`
+                      : startDiff !== 0
+                        ? `🔎 Parte da diferença (${brl(startDiff)}) vem de ANTES de ${brDate(start)} e o restante nasce dentro do período — confira as listas abaixo e depois amplie a data inicial.`
+                        : `🔎 O início do período batia; a diferença de ${brl(balanceDiff)} nasce DENTRO do período — confira as listas abaixo (duplicatas / só na Wallet / só no Cora).`}
+                </p>
+              )}
+
               {balanceDiff !== 0 && balanceDiff != null && (
                 <p style={{ marginBottom: 0 }}>
                   <button disabled={busy} onClick={adjustInitialBalance}>
                     Ajustar saldo inicial para bater com o Cora ({brl(balanceDiff)})
                   </button>{" "}
                   <span className="muted" style={{ fontSize: "0.82rem" }}>
-                    Dica: exclua as duplicatas abaixo primeiro, depois ajuste o saldo.
+                    Dica: resolva duplicatas/“Só na Wallet” primeiro, depois ajuste o saldo.
                   </span>
                 </p>
               )}
