@@ -32,3 +32,20 @@ export function currentMonthBr(): string {
 export function daysAgoBr(days: number): string {
   return dateBr(new Date(Date.now() - days * 86400000));
 }
+
+/**
+ * First/last day of a month relative to today in Brazil (offset 0 = this
+ * month, -1 = last month, +1 = next month). `base` (YYYY-MM-DD) is for tests.
+ */
+export function monthRangeBr(
+  offset = 0,
+  base: string = todayBr(),
+): { from: string; to: string } {
+  const [y, m] = base.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + offset, 1));
+  const yy = d.getUTCFullYear();
+  const mm = d.getUTCMonth() + 1;
+  const lastDay = new Date(Date.UTC(yy, mm, 0)).getUTCDate();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return { from: `${yy}-${pad(mm)}-01`, to: `${yy}-${pad(mm)}-${pad(lastDay)}` };
+}

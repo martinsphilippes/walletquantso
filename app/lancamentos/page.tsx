@@ -20,6 +20,7 @@ import { TransactionForm } from "@/components/TransactionForm";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import { FilterField } from "@/components/FilterField";
+import { todayBr, daysAgoBr, monthRangeBr } from "@/lib/br/date";
 import { transactionsToCsv } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
 import {
@@ -283,6 +284,51 @@ function Lancamentos() {
 
       <div className="panel">
         <h2>Filtros</h2>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: "0.75rem" }}>
+          {(() => {
+            const presets: Array<{ label: string; from: string; to: string }> = [
+              { label: "Este mês", ...monthRangeBr(0) },
+              { label: "Mês passado", ...monthRangeBr(-1) },
+              { label: "Próximo mês", ...monthRangeBr(1) },
+              { label: "30 dias", from: daysAgoBr(30), to: todayBr() },
+              { label: "60 dias", from: daysAgoBr(60), to: todayBr() },
+              { label: "90 dias", from: daysAgoBr(90), to: todayBr() },
+            ];
+            const chip = (active: boolean): React.CSSProperties => ({
+              padding: "0.25rem 0.75rem",
+              fontSize: "0.8rem",
+              borderRadius: 999,
+              border: "1px solid var(--border)",
+              background: active ? "var(--accent)" : "transparent",
+              color: active ? "#fff" : "var(--muted)",
+              cursor: "pointer",
+            });
+            return (
+              <>
+                {presets.map((p) => {
+                  const active = filters.from === p.from && filters.to === p.to;
+                  return (
+                    <button
+                      key={p.label}
+                      type="button"
+                      style={chip(active)}
+                      onClick={() => set({ from: p.from, to: p.to })}
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  style={chip(!filters.from && !filters.to)}
+                  onClick={() => set({ from: undefined, to: undefined })}
+                >
+                  Tudo
+                </button>
+              </>
+            );
+          })()}
+        </div>
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
           <FilterField label="Buscar descrição">
             <input
