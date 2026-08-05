@@ -74,6 +74,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
           ))}
         </nav>
+        <div
+          className="label muted"
+          style={{ padding: "0.5rem 1rem", fontSize: "0.7rem", marginTop: "auto" }}
+          title="Versão do app em execução (build publicado)"
+        >
+          Versão {process.env.NEXT_PUBLIC_BUILD_SHA} · {process.env.NEXT_PUBLIC_BUILD_TIME}
+        </div>
       </aside>
 
       <div className="main-col">
