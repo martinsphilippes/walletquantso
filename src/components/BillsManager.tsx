@@ -194,6 +194,9 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     () => categories.filter((c) => !c.parentId && c.kind === billCatKind),
     [categories, billCatKind],
   );
+  // O centro dita a linha: com centro escolhido, só categorias daquele centro.
+  const mainsForCenter = (centerId: string) =>
+    mainCategories.filter((c) => !centerId || (c.costCenterId ?? "") === centerId);
   const subsOf = (mainId: string) =>
     mainId ? categories.filter((c) => c.parentId === mainId) : [];
   // Categoria pertence a um centro de custo: escolher a categoria puxa o
@@ -603,6 +606,30 @@ export function BillsManager({ kind }: { kind: BillKind }) {
               ))}
             </select>
           </Field>
+          <Field label="Centro de custo">
+            <select
+              value={creating.costCenterId}
+              onChange={(e) => {
+                const id = e.target.value;
+                // Trocar o centro invalida categoria/sub que não são dele.
+                const keepCat =
+                  !id || (centerForCategory(creating.categoryId) ?? "") === id;
+                setCreating({
+                  ...creating,
+                  costCenterId: id,
+                  categoryId: keepCat ? creating.categoryId : "",
+                  subcategoryId: keepCat ? creating.subcategoryId : "",
+                });
+              }}
+            >
+              <option value="">Centro…</option>
+              {costCenters.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </Field>
           <Field label="Categoria">
             <select
               value={creating.categoryId}
@@ -611,12 +638,13 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                   ...creating,
                   categoryId: e.target.value,
                   subcategoryId: "",
-                  costCenterId: centerForCategory(e.target.value) ?? creating.costCenterId,
+                  costCenterId:
+                    creating.costCenterId || (centerForCategory(e.target.value) ?? ""),
                 })
               }
             >
               <option value="">Categoria…</option>
-              {mainCategories.map((c) => (
+              {mainsForCenter(creating.costCenterId).map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
@@ -645,19 +673,6 @@ export function BillsManager({ kind }: { kind: BillKind }) {
             >
               <option value="">{contactLabel}…</option>
               {contacts.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Centro">
-            <select
-              value={creating.costCenterId}
-              onChange={(e) => setCreating({ ...creating, costCenterId: e.target.value })}
-            >
-              <option value="">Centro…</option>
-              {costCenters.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
@@ -985,6 +1000,30 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                   ))}
                                 </select>
                               </Field>
+                              <Field label="Centro de custo">
+                                <select
+                                  value={draft.costCenterId}
+                                  onChange={(e) => {
+                                    const id = e.target.value;
+                                    const keepCat =
+                                      !id ||
+                                      (centerForCategory(draft.categoryId) ?? "") === id;
+                                    setDraft({
+                                      ...draft,
+                                      costCenterId: id,
+                                      categoryId: keepCat ? draft.categoryId : "",
+                                      subcategoryId: keepCat ? draft.subcategoryId : "",
+                                    });
+                                  }}
+                                >
+                                  <option value="">—</option>
+                                  {costCenters.map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                      {c.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </Field>
                               <Field label="Categoria">
                                 <select
                                   value={draft.categoryId}
@@ -994,12 +1033,13 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                       categoryId: e.target.value,
                                       subcategoryId: "",
                                       costCenterId:
-                                        centerForCategory(e.target.value) ?? draft.costCenterId,
+                                        draft.costCenterId ||
+                                        (centerForCategory(e.target.value) ?? ""),
                                     })
                                   }
                                 >
                                   <option value="">—</option>
-                                  {mainCategories.map((c) => (
+                                  {mainsForCenter(draft.costCenterId).map((c) => (
                                     <option key={c.id} value={c.id}>
                                       {c.name}
                                     </option>
@@ -1023,19 +1063,6 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                   </select>
                                 </Field>
                               )}
-                              <Field label="Centro">
-                                <select
-                                  value={draft.costCenterId}
-                                  onChange={(e) => setDraft({ ...draft, costCenterId: e.target.value })}
-                                >
-                                  <option value="">—</option>
-                                  {costCenters.map((c) => (
-                                    <option key={c.id} value={c.id}>
-                                      {c.name}
-                                    </option>
-                                  ))}
-                                </select>
-                              </Field>
                               <Field label="Nº documento">
                                 <input
                                   value={draft.documentNumber}

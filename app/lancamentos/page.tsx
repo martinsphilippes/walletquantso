@@ -128,10 +128,12 @@ function Lancamentos() {
   const mainCategories = useMemo(() => categories.filter((c) => !c.parentId), [categories]);
   const subsOf = (mainId: string) =>
     mainId ? categories.filter((c) => c.parentId === mainId) : [];
-  // Com o filtro de Tipo ativo, só categorias daquele tipo aparecem.
-  const filterMains = filters.type
-    ? mainCategories.filter((c) => c.kind === filters.type)
-    : mainCategories;
+  // Com Tipo ativo, só categorias daquele tipo; com Centro ativo, só as dele.
+  const filterMains = mainCategories.filter(
+    (c) =>
+      (!filters.type || c.kind === filters.type) &&
+      (!filters.costCenterId || (c.costCenterId ?? "") === filters.costCenterId),
+  );
 
   // Categoria selecionada no filtro: derivada dos filtros ativos (o exato em
   // `categoryId` quando é uma sub; o grupo inteiro em `categoryIds` quando é
@@ -490,6 +492,28 @@ function Lancamentos() {
               ))}
             </select>
           </FilterField>
+          {costCenters.length > 0 && (
+            <FilterField label="Centro de custo">
+              <select
+                value={filters.costCenterId ?? ""}
+                onChange={(e) =>
+                  // Trocar o centro limpa a categoria (pode não ser dele).
+                  set({
+                    costCenterId: e.target.value || undefined,
+                    categoryId: undefined,
+                    categoryIds: undefined,
+                  })
+                }
+              >
+                <option value="">Todos os centros</option>
+                {costCenters.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </FilterField>
+          )}
           <FilterField label="Categoria">
             <select
               value={fCatMain}
@@ -515,21 +539,6 @@ function Lancamentos() {
               >
                 <option value="">Todas</option>
                 {subsOf(fCatMain).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </FilterField>
-          )}
-          {costCenters.length > 0 && (
-            <FilterField label="Centro de custo">
-              <select
-                value={filters.costCenterId ?? ""}
-                onChange={(e) => set({ costCenterId: e.target.value || undefined })}
-              >
-                <option value="">Todos os centros</option>
-                {costCenters.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
@@ -624,6 +633,30 @@ function Lancamentos() {
               </>
             ) : (
               <>
+                <span>Centro de custo:</span>
+                <select
+                  value={bulkCenter}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setBulkCenter(id);
+                    // Trocar o centro invalida categoria/sub que não são dele.
+                    if (id && id !== "__clear__" && bulkCat && bulkCat !== "__clear__") {
+                      const cc = effectiveCostCenterId(catById.get(bulkCat), catById);
+                      if (cc !== id) {
+                        setBulkCat("");
+                        setBulkSub("");
+                      }
+                    }
+                  }}
+                >
+                  <option value="">— não alterar —</option>
+                  <option value="__clear__">— limpar (nenhum) —</option>
+                  {costCenters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
                 <span>Categoria:</span>
                 <select
                   value={bulkCat}
@@ -631,21 +664,30 @@ function Lancamentos() {
                     const id = e.target.value;
                     setBulkCat(id);
                     setBulkSub("");
-                    // Categoria pertence a um centro: sugerir o centro dela.
-                    const cc =
-                      id && id !== "__clear__"
-                        ? effectiveCostCenterId(catById.get(id), catById)
-                        : null;
-                    if (cc) setBulkCenter(cc);
+                    // Sem centro escolhido, a categoria ainda sugere o dela.
+                    if (!bulkCenter) {
+                      const cc =
+                        id && id !== "__clear__"
+                          ? effectiveCostCenterId(catById.get(id), catById)
+                          : null;
+                      if (cc) setBulkCenter(cc);
+                    }
                   }}
                 >
                   <option value="">— não alterar —</option>
                   <option value="__clear__">— limpar (nenhuma) —</option>
-                  {bulkMains.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({TYPE_LABELS[c.kind]})
-                    </option>
-                  ))}
+                  {bulkMains
+                    .filter(
+                      (c) =>
+                        !bulkCenter ||
+                        bulkCenter === "__clear__" ||
+                        (c.costCenterId ?? "") === bulkCenter,
+                    )
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({TYPE_LABELS[c.kind]})
+                      </option>
+                    ))}
                 </select>
                 {bulkCat && bulkCat !== "__clear__" && subsOf(bulkCat).length > 0 && (
                   <>
@@ -660,16 +702,6 @@ function Lancamentos() {
                     </select>
                   </>
                 )}
-                <span>Centro de custo:</span>
-                <select value={bulkCenter} onChange={(e) => setBulkCenter(e.target.value)}>
-                  <option value="">— não alterar —</option>
-                  <option value="__clear__">— limpar (nenhum) —</option>
-                  {costCenters.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
                 <button disabled={bulkBusy} onClick={applyBulkEdit}>
                   {bulkBusy ? "Aplicando…" : `Aplicar a ${sel.count} selecionado(s)`}
                 </button>

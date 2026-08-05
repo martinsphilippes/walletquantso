@@ -137,9 +137,13 @@ export function TransactionForm({
     }
   }
 
-  // Só categorias principais no campo Categoria; subcategorias no campo próprio.
+  // O centro de custo dita a linha: escolhido o centro, só aparecem categorias
+  // daquele centro; escolhida a categoria, só as subcategorias dela.
   const mainCategories = categories.filter(
-    (c) => !c.parentId && (c.kind === type || type === "transfer"),
+    (c) =>
+      !c.parentId &&
+      (c.kind === type || type === "transfer") &&
+      (!costCenterId || (c.costCenterId ?? "") === costCenterId),
   );
   const subOptions = categoryId
     ? categories.filter((c) => c.parentId === categoryId)
@@ -149,13 +153,26 @@ export function TransactionForm({
     [categories],
   );
 
-  // Categoria pertence a um centro de custo: ao escolher a categoria, o centro
-  // vem junto automaticamente (continua editável).
+  // Trocar o centro invalida categoria/sub que não pertencem a ele.
+  function pickCenter(id: string) {
+    setCostCenterId(id);
+    if (id && categoryId) {
+      const cc = effectiveCostCenterId(catById.get(categoryId), catById);
+      if (cc !== id) {
+        setCategoryId("");
+        setSubcategoryId("");
+      }
+    }
+  }
+
+  // Sem centro escolhido, a categoria ainda pode puxá-lo automaticamente.
   function pickCategory(id: string) {
     setCategoryId(id);
     setSubcategoryId("");
-    const cc = effectiveCostCenterId(id ? catById.get(id) : undefined, catById);
-    if (cc) setCostCenterId(cc);
+    if (!costCenterId) {
+      const cc = effectiveCostCenterId(id ? catById.get(id) : undefined, catById);
+      if (cc) setCostCenterId(cc);
+    }
   }
 
   return (
@@ -267,6 +284,19 @@ export function TransactionForm({
       </div>
 
       <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginTop: "0.75rem" }}>
+        {costCenters.length > 0 && (
+          <label style={col}>
+            <span className="muted">Centro de custo</span>
+            <select value={costCenterId ?? ""} onChange={(e) => pickCenter(e.target.value)}>
+              <option value="">— nenhum —</option>
+              {costCenters.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {type !== "transfer" && (
           <label style={col}>
             <span className="muted">Categoria</span>
@@ -286,19 +316,6 @@ export function TransactionForm({
             <select value={subcategoryId} onChange={(e) => setSubcategoryId(e.target.value)}>
               <option value="">— nenhuma —</option>
               {subOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        {costCenters.length > 0 && (
-          <label style={col}>
-            <span className="muted">Centro de custo</span>
-            <select value={costCenterId ?? ""} onChange={(e) => setCostCenterId(e.target.value)}>
-              <option value="">— nenhum —</option>
-              {costCenters.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
