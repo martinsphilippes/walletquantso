@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
-import { listAccounts, listTransactions, updateAccount } from "@/services/firestore";
+import { listAccounts, listTransactions } from "@/services/firestore";
 import { listBills, backfillPaymentTransactions } from "@/services/bills";
-import { setReconciled } from "@/services/transactions";
+import { createTransaction, setReconciled } from "@/services/transactions";
 import { parseBrCurrency } from "@/lib/br/parse";
+import { todayBr } from "@/lib/br/date";
 import {
   movementFor,
   transactionsForAccount,
@@ -186,7 +187,7 @@ function Conciliacao() {
   const [settling, setSettling] = useState(false);
 
   async function forceMatchBank() {
-    if (!account?.id || !summary) return;
+    if (!user || !account?.id || !summary) return;
     const target = parseBrCurrency(bankBalance);
     if (target == null) {
       setError("Informe o saldo real do banco (ex.: 2.020,94).");
@@ -196,10 +197,18 @@ function Conciliacao() {
     setSettling(true);
     setError("");
     try {
+      // O acerto vira um LANÇAMENTO visível ("Ajuste de saldo"), não uma
+      // mudança escondida no saldo inicial — dá para ver, rastrear e excluir.
       if (delta !== 0) {
-        const newInitial =
-          Math.round(((account.initialBalance ?? 0) + delta) * 100) / 100;
-        await updateAccount(account.id, { initialBalance: newInitial });
+        const id = await createTransaction(user.uid, {
+          date: todayBr(),
+          amount: Math.abs(delta),
+          type: delta > 0 ? "income" : "expense",
+          description: "Ajuste de saldo — acerto com o banco (conciliação)",
+          accountId: account.id,
+          notes: `Sistema mostrava ${brl(summary.currentBalance)}; banco informou ${brl(target)}.`,
+        });
+        await setReconciled(id, true);
       }
       // Marca tudo desta conta como conciliado — ponto de partida limpo.
       const targets = accountTxs.filter((t) => t.id && !t.reconciled);
@@ -207,7 +216,9 @@ function Conciliacao() {
       await load();
       setBankBalance("");
       setError(
-        `✅ Acertado: saldo inicial ajustado em ${brl(delta)} e ${targets.length} lançamento(s) conciliado(s). Saldo da conta agora: ${brl(target)}.`,
+        delta === 0
+          ? `✅ Nada a ajustar: o sistema já estava em ${brl(target)}. ${targets.length} lançamento(s) marcado(s) como conciliado(s).`
+          : `✅ Acertado: criado o lançamento "Ajuste de saldo" de ${brl(delta)} e ${targets.length} lançamento(s) conciliado(s). Saldo da conta agora: ${brl(target)}.`,
       );
     } catch (err) {
       setError(`Falha no acerto: ${(err as Error).message}`);
@@ -360,10 +371,11 @@ function Conciliacao() {
         <div className="panel">
           <h2 style={{ marginTop: 0 }}>Acertar com o banco (recomeço limpo)</h2>
           <p className="muted" style={{ fontSize: "0.85rem" }}>
-            Digite o saldo que aparece <strong>agora</strong> no app do banco. O sistema ajusta o
-            saldo inicial da conta na diferença exata e marca tudo como conciliado — Conciliação,
-            Dashboard e Saldos de caixa passam a mostrar esse mesmo valor, e daqui em diante é só
-            lançar normalmente.
+            Digite o saldo que aparece <strong>agora</strong> no app do banco. O sistema cria um
+            lançamento visível de <strong>"Ajuste de saldo"</strong> com a diferença exata (fica
+            fixado na conta — dá para ver em Lançamentos e excluir para desfazer) e marca tudo
+            como conciliado. Conciliação, Dashboard e Saldos de caixa passam a mostrar esse mesmo
+            valor.
           </p>
           <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
             <input
