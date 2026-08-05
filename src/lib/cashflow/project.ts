@@ -32,6 +32,12 @@ export interface CashFlowOptions {
   today?: string;
   /** Always include at least this many future months. Default 6. */
   monthsAhead?: number;
+  /**
+   * "projected" (default): realized + open bills due per month.
+   * "realized": only money that actually moved — bills are ignored and no
+   * future months are appended (the balance is the real cash trajectory).
+   */
+  mode?: "projected" | "realized";
 }
 
 const monthOf = (iso: string) => iso.slice(0, 7);
@@ -57,7 +63,8 @@ export function projectCashFlow(
   const openingBalance = opts.openingBalance ?? 0;
   const today = opts.today ?? todayBr();
   const currentMonth = monthOf(today);
-  const monthsAhead = opts.monthsAhead ?? 6;
+  const mode = opts.mode ?? "projected";
+  const monthsAhead = mode === "realized" ? 0 : (opts.monthsAhead ?? 6);
 
   const rows = new Map<string, CashFlowMonth>();
   const ensure = (month: string): CashFlowMonth => {
@@ -77,6 +84,7 @@ export function projectCashFlow(
   }
 
   for (const b of bills) {
+    if (mode === "realized") break; // realized view: bills don't enter the flow
     const rem = remaining(b);
     if (rem <= 0) continue;
     // Overdue obligations belong to "now", not to a past month.

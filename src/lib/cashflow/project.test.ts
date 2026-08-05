@@ -93,4 +93,16 @@ describe("projectCashFlow", () => {
     expect(jun.balance).toBe(1200); // 1000 + 200
     expect(jul.balance).toBe(1100); // 1200 - 100
   });
+
+  it("mode 'realized' ignores bills and appends no future months", () => {
+    const rows = projectCashFlow(
+      [tx({ date: "2025-06-01", type: "income", amount: 200 })],
+      [bill({ kind: "payable", amount: 100, dueDate: "2025-07-10" })],
+      { ...opts, mode: "realized" },
+    );
+    expect(rows.map((r) => r.month)).toEqual(["2025-06"]);
+    const jun = rows[0];
+    expect(jun.plannedOut).toBe(0);
+    expect(jun.balance).toBe(1200); // só o realizado
+  });
 });

@@ -71,9 +71,44 @@ function Fluxo() {
     [accounts],
   );
   const currentMonth = currentMonthBr();
+
+  // Projetado × Realizado (a escolha fica gravada) + recorte de mês/ano.
+  const [mode, setMode] = useState<"projected" | "realized">("projected");
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("wq.fluxoMode");
+      if (saved === "projected" || saved === "realized") setMode(saved);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const chooseMode = (m: "projected" | "realized") => {
+    setMode(m);
+    try {
+      localStorage.setItem("wq.fluxoMode", m);
+    } catch {
+      /* ignore */
+    }
+  };
+  const [selYear, setSelYear] = useState("");
+  const [selMonth, setSelMonth] = useState("");
+
+  const allRows = useMemo(
+    () => projectCashFlow(txs, bills, { openingBalance: opening, monthsAhead: 6, mode }),
+    [txs, bills, opening, mode],
+  );
+  const years = useMemo(
+    () => [...new Set(allRows.map((r) => r.month.slice(0, 4)))].sort(),
+    [allRows],
+  );
   const rows = useMemo(
-    () => projectCashFlow(txs, bills, { openingBalance: opening, monthsAhead: 6 }),
-    [txs, bills, opening],
+    () =>
+      allRows.filter(
+        (r) =>
+          (!selYear || r.month.slice(0, 4) === selYear) &&
+          (!selMonth || r.month.slice(5, 7) === selMonth),
+      ),
+    [allRows, selYear, selMonth],
   );
 
   const filterDefs: ColFilterDef<CashFlowMonth>[] = [
@@ -99,10 +134,93 @@ function Fluxo() {
     <>
       {error && <p className="badge err">{error}</p>}
 
+      <div className="panel" style={{ padding: "0.75rem 1rem" }}>
+        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            {(
+              [
+                ["projected", "Projetado"],
+                ["realized", "Realizado"],
+              ] as Array<["projected" | "realized", string]>
+            ).map(([m, label]) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => chooseMode(m)}
+                style={{
+                  padding: "0.25rem 0.8rem",
+                  fontSize: "0.82rem",
+                  borderRadius: 6,
+                  border: "1px solid var(--border)",
+                  background: mode === m ? "var(--accent)" : "transparent",
+                  color: mode === m ? "#fff" : "var(--muted)",
+                  cursor: "pointer",
+                }}
+                aria-pressed={mode === m}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <label style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }}>
+            <span className="muted" style={{ fontSize: "0.75rem" }}>Mês</span>
+            <select value={selMonth} onChange={(e) => setSelMonth(e.target.value)}>
+              <option value="">Todos</option>
+              {MONTHS.map((m, i) => (
+                <option key={m} value={String(i + 1).padStart(2, "0")}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }}>
+            <span className="muted" style={{ fontSize: "0.75rem" }}>Ano</span>
+            <select value={selYear} onChange={(e) => setSelYear(e.target.value)}>
+              <option value="">Todos</option>
+              {years.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            style={{ background: "var(--border)" }}
+            onClick={() => {
+              setSelMonth(currentMonth.slice(5, 7));
+              setSelYear(currentMonth.slice(0, 4));
+            }}
+          >
+            Este mês
+          </button>
+          <button
+            style={{ background: "var(--border)" }}
+            onClick={() => {
+              setSelMonth("");
+              setSelYear(currentMonth.slice(0, 4));
+            }}
+          >
+            Este ano
+          </button>
+          {(selMonth || selYear) && (
+            <button
+              style={{ background: "var(--border)" }}
+              onClick={() => {
+                setSelMonth("");
+                setSelYear("");
+              }}
+            >
+              Tudo (limpar)
+            </button>
+          )}
+        </div>
+      </div>
+
       <p className="muted">
-        Saldo inicial das contas: <strong>{brl(opening)}</strong>. As colunas
-        “Previsto” usam o valor em aberto das contas a pagar e a receber; títulos
-        vencidos e não quitados aparecem no mês atual.
+        Saldo inicial das contas: <strong>{brl(opening)}</strong>.{" "}
+        {mode === "projected"
+          ? "Projetado: as colunas “Previsto” usam o valor em aberto das contas a pagar e a receber; títulos vencidos e não quitados aparecem no mês atual."
+          : "Realizado: somente o dinheiro que de fato entrou e saiu — títulos em aberto não entram, e o saldo é a trajetória real do caixa."}
       </p>
 
       <div className="panel">
@@ -119,7 +237,9 @@ function Fluxo() {
                   <th style={{ textAlign: "right" }}>Previsto +</th>
                   <th style={{ textAlign: "right" }}>Previsto −</th>
                   <th style={{ textAlign: "right" }}>Resultado</th>
-                  <th style={{ textAlign: "right" }}>Saldo projetado</th>
+                  <th style={{ textAlign: "right" }}>
+                    {mode === "projected" ? "Saldo projetado" : "Saldo realizado"}
+                  </th>
                 </tr>
                 <FilterRow defs={filterDefs} cf={cf} />
               </thead>
