@@ -138,7 +138,7 @@ export async function fetchCoraStatement(range: {
   const cfg = readConfig();
   const token = await getToken(cfg);
 
-  const perPage = 100;
+  const perPage = 50;
   let page = 1;
   const all: NormalizedEntry[] = [];
   // Guard against runaway pagination.
@@ -148,13 +148,24 @@ export async function fetchCoraStatement(range: {
       end: range.end,
       page: String(page),
       perPage: String(perPage),
+      // Skip server-side aggregation totals — we don't use them and they make
+      // the query heavier (a cause of gateway timeouts on large periods).
+      aggr: "false",
     });
-    const res = await request(`${cfg.baseUrl}/bank-statement/statement?${qs}`, cfg, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-    });
-    if (res.status < 200 || res.status >= 300) {
-      throw new Error(`Falha ao consultar o extrato Cora (HTTP ${res.status}). ${res.body.slice(0, 300)}`);
+    // Cora's gateway occasionally times out (502/503/504); retry briefly.
+    let res: HttpResult | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      res = await request(`${cfg.baseUrl}/bank-statement/statement?${qs}`, cfg, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      });
+      if (res.status < 500) break;
+      await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+    }
+    if (!res || res.status < 200 || res.status >= 300) {
+      throw new Error(
+        `Falha ao consultar o extrato Cora (HTTP ${res?.status}). ${res?.body.slice(0, 300) ?? ""}`,
+      );
     }
     const parsed = JSON.parse(res.body) as CoraStatementResponse;
     const entries = parsed.entries ?? [];
