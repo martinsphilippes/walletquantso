@@ -232,32 +232,37 @@ export function TransactionForm({
             style={f}
           />
         </label>
-        <label style={col}>
+        <div style={{ ...col, flex: "1 1 260px" }}>
           <span className="muted">{type === "transfer" ? "Conta de origem" : "Conta"}</span>
-          <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-            <option value="">— selecione —</option>
+          <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
             {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
+              <button
+                key={a.id}
+                type="button"
+                style={accountCard(accountId === a.id)}
+                onClick={() => setAccountId(a.id!)}
+              >
                 {a.name}
-              </option>
+              </button>
             ))}
-          </select>
-        </label>
+          </div>
+        </div>
         {type === "transfer" && (
-          <label style={col}>
+          <div style={{ ...col, flex: "1 1 260px" }}>
             <span className="muted">Conta de destino</span>
-            <select
-              value={transferAccountId ?? ""}
-              onChange={(e) => setTransferAccountId(e.target.value)}
-            >
-              <option value="">— selecione —</option>
+            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
               {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
+                <button
+                  key={a.id}
+                  type="button"
+                  style={accountCard(transferAccountId === a.id)}
+                  onClick={() => setTransferAccountId(a.id!)}
+                >
                   {a.name}
-                </option>
+                </button>
               ))}
-            </select>
-          </label>
+            </div>
+          </div>
         )}
       </div>
 
@@ -343,6 +348,18 @@ export function TransactionForm({
 }
 
 const col: React.CSSProperties = { display: "flex", flexDirection: "column", gap: "0.2rem", flex: "1 1 160px" };
+
+/** Card clicável de conta (em vez de select): destaque na conta escolhida. */
+const accountCard = (active: boolean): React.CSSProperties => ({
+  padding: "0.45rem 0.9rem",
+  borderRadius: 8,
+  border: active ? "2px solid var(--accent)" : "1px solid var(--border)",
+  background: active ? "var(--accent)" : "var(--panel)",
+  color: active ? "var(--accent-ink)" : "var(--text)",
+  font: "inherit",
+  fontWeight: active ? 700 : 400,
+  cursor: "pointer",
+});
 const f: React.CSSProperties = {
   padding: "0.35rem 0.5rem",
   borderRadius: 6,
