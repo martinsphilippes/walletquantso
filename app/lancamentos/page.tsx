@@ -22,6 +22,7 @@ import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/Col
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import { FilterField } from "@/components/FilterField";
 import { todayBr, daysAgoBr, monthRangeBr } from "@/lib/br/date";
+import { loadPeriod, savePreset, saveCustomPeriod } from "@/lib/period-presets";
 import { effectiveCostCenterId } from "@/lib/categories/tree";
 import { transactionsToCsv } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
@@ -68,6 +69,15 @@ function Lancamentos() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [error, setError] = useState("");
   const [filters, setFilters] = useState<DashboardFilters>({});
+
+  // A última escolha de período fica gravada e volta aplicada na próxima
+  // visita ("Este mês" reabre no mês corrente; datas manuais voltam exatas).
+  useEffect(() => {
+    const p = loadPeriod("wq.lanc.period");
+    if (p && (p.from || p.to)) {
+      setFilters((prev) => ({ ...prev, from: p.from || undefined, to: p.to || undefined }));
+    }
+  }, []);
   const [form, setForm] = useState<
     | { mode: "new" }
     | { mode: "edit"; tx: Transaction }
@@ -409,13 +419,13 @@ function Lancamentos() {
         <h2>Filtros</h2>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: "0.75rem" }}>
           {(() => {
-            const presets: Array<{ label: string; from: string; to: string }> = [
-              { label: "Este mês", ...monthRangeBr(0) },
-              { label: "Mês passado", ...monthRangeBr(-1) },
-              { label: "Próximo mês", ...monthRangeBr(1) },
-              { label: "30 dias", from: daysAgoBr(30), to: todayBr() },
-              { label: "60 dias", from: daysAgoBr(60), to: todayBr() },
-              { label: "90 dias", from: daysAgoBr(90), to: todayBr() },
+            const presets: Array<{ label: string; preset: string; from: string; to: string }> = [
+              { label: "Este mês", preset: "month0", ...monthRangeBr(0) },
+              { label: "Mês passado", preset: "month-1", ...monthRangeBr(-1) },
+              { label: "Próximo mês", preset: "month+1", ...monthRangeBr(1) },
+              { label: "30 dias", preset: "days30", from: daysAgoBr(30), to: todayBr() },
+              { label: "60 dias", preset: "days60", from: daysAgoBr(60), to: todayBr() },
+              { label: "90 dias", preset: "days90", from: daysAgoBr(90), to: todayBr() },
             ];
             const chip = (active: boolean): React.CSSProperties => ({
               padding: "0.25rem 0.75rem",
@@ -435,7 +445,10 @@ function Lancamentos() {
                       key={p.label}
                       type="button"
                       style={chip(active)}
-                      onClick={() => set({ from: p.from, to: p.to })}
+                      onClick={() => {
+                        set({ from: p.from, to: p.to });
+                        savePreset("wq.lanc.period", p.preset);
+                      }}
                     >
                       {p.label}
                     </button>
@@ -444,7 +457,10 @@ function Lancamentos() {
                 <button
                   type="button"
                   style={chip(!filters.from && !filters.to)}
-                  onClick={() => set({ from: undefined, to: undefined })}
+                  onClick={() => {
+                    set({ from: undefined, to: undefined });
+                    savePreset("wq.lanc.period", "all");
+                  }}
                 >
                   Tudo
                 </button>
@@ -565,7 +581,10 @@ function Lancamentos() {
             <input
               type="date"
               value={filters.from ?? ""}
-              onChange={(e) => set({ from: e.target.value || undefined })}
+              onChange={(e) => {
+                set({ from: e.target.value || undefined });
+                saveCustomPeriod("wq.lanc.period", e.target.value, filters.to ?? "");
+              }}
               style={fieldStyle}
             />
           </FilterField>
@@ -573,12 +592,21 @@ function Lancamentos() {
             <input
               type="date"
               value={filters.to ?? ""}
-              onChange={(e) => set({ to: e.target.value || undefined })}
+              onChange={(e) => {
+                set({ to: e.target.value || undefined });
+                saveCustomPeriod("wq.lanc.period", filters.from ?? "", e.target.value);
+              }}
               style={fieldStyle}
             />
           </FilterField>
           {activeFilterCount > 0 && (
-            <button style={{ background: "var(--border)" }} onClick={() => setFilters({})}>
+            <button
+              style={{ background: "var(--border)" }}
+              onClick={() => {
+                setFilters({});
+                savePreset("wq.lanc.period", "all");
+              }}
+            >
               Limpar
             </button>
           )}

@@ -26,6 +26,7 @@ import { downloadText } from "@/lib/export/download";
 import { filterTransactions, type DashboardFilters } from "@/lib/dashboard/filter";
 import { computeOverview } from "@/lib/dashboard/overview";
 import { todayBr, currentMonthBr, daysAgoBr, monthRangeBr } from "@/lib/br/date";
+import { loadPeriod, savePreset, saveCustomPeriod } from "@/lib/period-presets";
 import { computeCashBalances, monthResult, type MonthMode } from "@/lib/dashboard/cash";
 import {
   receitasPorCategoria,
@@ -132,9 +133,17 @@ function Dashboard() {
     load();
   }, [load]);
 
-  // Período dos indicadores do topo (vazio = histórico inteiro).
+  // Período dos indicadores do topo (vazio = histórico inteiro). A última
+  // escolha fica gravada e volta aplicada na próxima visita.
   const [dashFrom, setDashFrom] = useState("");
   const [dashTo, setDashTo] = useState("");
+  useEffect(() => {
+    const p = loadPeriod("wq.dash.period");
+    if (p) {
+      setDashFrom(p.from);
+      setDashTo(p.to);
+    }
+  }, []);
 
   const overview = useMemo(
     () =>
@@ -199,6 +208,13 @@ function Dashboard() {
   // Lançamentos entram pela data; títulos, pelo vencimento.
   const [bdFrom, setBdFrom] = useState("");
   const [bdTo, setBdTo] = useState("");
+  useEffect(() => {
+    const p = loadPeriod("wq.bd.period");
+    if (p) {
+      setBdFrom(p.from);
+      setBdTo(p.to);
+    }
+  }, []);
   const inBdRange = useCallback(
     (d: string) => (!bdFrom || d >= bdFrom) && (!bdTo || d <= bdTo),
     [bdFrom, bdTo],
@@ -425,7 +441,10 @@ function Dashboard() {
             <input
               type="date"
               value={dashFrom}
-              onChange={(e) => setDashFrom(e.target.value)}
+              onChange={(e) => {
+                setDashFrom(e.target.value);
+                saveCustomPeriod("wq.dash.period", e.target.value, dashTo);
+              }}
               style={fieldStyle}
             />
           </FilterField>
@@ -433,7 +452,10 @@ function Dashboard() {
             <input
               type="date"
               value={dashTo}
-              onChange={(e) => setDashTo(e.target.value)}
+              onChange={(e) => {
+                setDashTo(e.target.value);
+                saveCustomPeriod("wq.dash.period", dashFrom, e.target.value);
+              }}
               style={fieldStyle}
             />
           </FilterField>
@@ -442,6 +464,7 @@ function Dashboard() {
             onClick={() => {
               setDashFrom(`${currentMonthBr()}-01`);
               setDashTo(todayBr());
+              savePreset("wq.dash.period", "thisMonthToToday");
             }}
           >
             Este mês
@@ -451,6 +474,7 @@ function Dashboard() {
             onClick={() => {
               setDashFrom(daysAgoBr(30));
               setDashTo(todayBr());
+              savePreset("wq.dash.period", "days30");
             }}
           >
             Últimos 30 dias
@@ -461,6 +485,7 @@ function Dashboard() {
               onClick={() => {
                 setDashFrom("");
                 setDashTo("");
+                savePreset("wq.dash.period", "all");
               }}
             >
               Tudo (limpar)
@@ -857,13 +882,13 @@ function Dashboard() {
           <strong style={{ alignSelf: "center" }}>Período dos gráficos</strong>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignSelf: "center" }}>
             {(() => {
-              const presets: Array<{ label: string; from: string; to: string }> = [
-                { label: "Este mês", ...monthRangeBr(0) },
-                { label: "Mês passado", ...monthRangeBr(-1) },
-                { label: "Próximo mês", ...monthRangeBr(1) },
-                { label: "30 dias", from: daysAgoBr(30), to: todayBr() },
-                { label: "60 dias", from: daysAgoBr(60), to: todayBr() },
-                { label: "90 dias", from: daysAgoBr(90), to: todayBr() },
+              const presets: Array<{ label: string; preset: string; from: string; to: string }> = [
+                { label: "Este mês", preset: "month0", ...monthRangeBr(0) },
+                { label: "Mês passado", preset: "month-1", ...monthRangeBr(-1) },
+                { label: "Próximo mês", preset: "month+1", ...monthRangeBr(1) },
+                { label: "30 dias", preset: "days30", from: daysAgoBr(30), to: todayBr() },
+                { label: "60 dias", preset: "days60", from: daysAgoBr(60), to: todayBr() },
+                { label: "90 dias", preset: "days90", from: daysAgoBr(90), to: todayBr() },
               ];
               const chip = (active: boolean): React.CSSProperties => ({
                 padding: "0.25rem 0.75rem",
@@ -886,6 +911,7 @@ function Dashboard() {
                         onClick={() => {
                           setBdFrom(p.from);
                           setBdTo(p.to);
+                          savePreset("wq.bd.period", p.preset);
                         }}
                       >
                         {p.label}
@@ -898,6 +924,7 @@ function Dashboard() {
                     onClick={() => {
                       setBdFrom("");
                       setBdTo("");
+                      savePreset("wq.bd.period", "all");
                     }}
                   >
                     Tudo
@@ -910,7 +937,10 @@ function Dashboard() {
             <input
               type="date"
               value={bdFrom}
-              onChange={(e) => setBdFrom(e.target.value)}
+              onChange={(e) => {
+                setBdFrom(e.target.value);
+                saveCustomPeriod("wq.bd.period", e.target.value, bdTo);
+              }}
               style={fieldStyle}
             />
           </FilterField>
@@ -918,7 +948,10 @@ function Dashboard() {
             <input
               type="date"
               value={bdTo}
-              onChange={(e) => setBdTo(e.target.value)}
+              onChange={(e) => {
+                setBdTo(e.target.value);
+                saveCustomPeriod("wq.bd.period", bdFrom, e.target.value);
+              }}
               style={fieldStyle}
             />
           </FilterField>
