@@ -11,11 +11,17 @@ import { remaining, unmaterializedPaid } from "@/lib/bills/status";
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
-// The projected contribution of a bill = its still-open remainder plus any
-// settled part not yet materialized as a transaction. The materialized part is
-// counted through the transactions loop, so this avoids double counting while
-// keeping older (non-materialized) baixas fully represented.
-const billValue = (b: Bill) => remaining(b) + unmaterializedPaid(b);
+/**
+ * "projected" (default): realized movements + the open remainder of bills.
+ * "realized": only money that actually moved.
+ */
+export type BreakdownMode = "projected" | "realized";
+
+// A bill's contribution. Projected = still-open remainder + settled part not
+// yet materialized as a transaction (the materialized part is counted through
+// the transactions loop — no double counting). Realized drops the remainder.
+const billValue = (b: Bill, mode: BreakdownMode) =>
+  mode === "realized" ? unmaterializedPaid(b) : remaining(b) + unmaterializedPaid(b);
 
 export interface Slice {
   /** Grouping id, or null when the record has no category/center. */
@@ -54,11 +60,12 @@ export function receitasPorCategoria(
   txs: Transaction[],
   receivables: Bill[],
   categories: Category[],
+  mode: BreakdownMode = "projected",
 ): Slice[] {
   const names = nameMap(categories);
   const entries: Array<{ key: string | null; value: number }> = [];
   for (const t of txs) if (t.type === "income") entries.push({ key: t.categoryId ?? null, value: t.amount });
-  for (const b of receivables) entries.push({ key: b.categoryId ?? null, value: billValue(b) });
+  for (const b of receivables) entries.push({ key: b.categoryId ?? null, value: billValue(b, mode) });
   return group(entries, names, "Sem categoria");
 }
 
@@ -67,11 +74,12 @@ export function despesasPorCategoria(
   txs: Transaction[],
   payables: Bill[],
   categories: Category[],
+  mode: BreakdownMode = "projected",
 ): Slice[] {
   const names = nameMap(categories);
   const entries: Array<{ key: string | null; value: number }> = [];
   for (const t of txs) if (t.type === "expense") entries.push({ key: t.categoryId ?? null, value: t.amount });
-  for (const b of payables) entries.push({ key: b.categoryId ?? null, value: billValue(b) });
+  for (const b of payables) entries.push({ key: b.categoryId ?? null, value: billValue(b, mode) });
   return group(entries, names, "Sem categoria");
 }
 
@@ -80,11 +88,12 @@ export function receitasPorCentro(
   txs: Transaction[],
   receivables: Bill[],
   costCenters: CostCenter[],
+  mode: BreakdownMode = "projected",
 ): Slice[] {
   const names = nameMap(costCenters);
   const entries: Array<{ key: string | null; value: number }> = [];
   for (const t of txs) if (t.type === "income") entries.push({ key: t.costCenterId ?? null, value: t.amount });
-  for (const b of receivables) entries.push({ key: b.costCenterId ?? null, value: billValue(b) });
+  for (const b of receivables) entries.push({ key: b.costCenterId ?? null, value: billValue(b, mode) });
   return group(entries, names, "Sem centro");
 }
 
@@ -93,11 +102,12 @@ export function despesasPorCentro(
   txs: Transaction[],
   payables: Bill[],
   costCenters: CostCenter[],
+  mode: BreakdownMode = "projected",
 ): Slice[] {
   const names = nameMap(costCenters);
   const entries: Array<{ key: string | null; value: number }> = [];
   for (const t of txs) if (t.type === "expense") entries.push({ key: t.costCenterId ?? null, value: t.amount });
-  for (const b of payables) entries.push({ key: b.costCenterId ?? null, value: billValue(b) });
+  for (const b of payables) entries.push({ key: b.costCenterId ?? null, value: billValue(b, mode) });
   return group(entries, names, "Sem centro");
 }
 
@@ -115,6 +125,7 @@ export function resultadosPorCentro(
   payables: Bill[],
   receivables: Bill[],
   costCenters: CostCenter[],
+  mode: BreakdownMode = "projected",
 ): CentroResult[] {
   const names = nameMap(costCenters);
   const rows = new Map<string | null, { receitas: number; despesas: number }>();
@@ -131,8 +142,8 @@ export function resultadosPorCentro(
     if (t.type === "income") ensure(t.costCenterId ?? null).receitas += t.amount;
     else if (t.type === "expense") ensure(t.costCenterId ?? null).despesas += t.amount;
   }
-  for (const b of receivables) ensure(b.costCenterId ?? null).receitas += billValue(b);
-  for (const b of payables) ensure(b.costCenterId ?? null).despesas += billValue(b);
+  for (const b of receivables) ensure(b.costCenterId ?? null).receitas += billValue(b, mode);
+  for (const b of payables) ensure(b.costCenterId ?? null).despesas += billValue(b, mode);
 
   const result: CentroResult[] = [];
   for (const [id, v] of rows) {

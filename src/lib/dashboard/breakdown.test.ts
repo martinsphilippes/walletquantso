@@ -97,6 +97,28 @@ describe("por centro (pizzas)", () => {
   });
 });
 
+describe("modo realizado", () => {
+  it("conta só o que movimentou: lançamentos + baixas não materializadas, sem o em aberto", () => {
+    const centers = [center("k1", "Familia")];
+    const partial = bill("receivable", 300, {
+      costCenterId: "k1",
+      payments: [
+        { id: "p1", date: "2026-08-01", amount: 100 }, // baixa antiga, sem lançamento
+        { id: "p2", date: "2026-08-02", amount: 50, transactionId: "tx-x" }, // já é lançamento
+      ],
+    });
+    const slices = receitasPorCentro(
+      [tx("income", 200, { costCenterId: "k1" })],
+      [partial],
+      centers,
+      "realized",
+    );
+    // 200 (lançamento) + 100 (baixa não materializada); os 150 em aberto ficam fora
+    // e os 50 materializados viriam por um lançamento próprio (não duplicam aqui).
+    expect(slices).toEqual([{ id: "k1", label: "Familia", value: 300 }]);
+  });
+});
+
 describe("resultadosPorCentro", () => {
   it("computes receitas, despesas and resultado per cost center", () => {
     const centers = [center("k1", "Familia"), center("k2", "Loja")];

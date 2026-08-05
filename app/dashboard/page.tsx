@@ -34,6 +34,7 @@ import {
   despesasPorCentro,
   resultadosPorCentro,
   type Slice,
+  type BreakdownMode,
 } from "@/lib/dashboard/breakdown";
 import { ChartSwitcher, LineChart, PALETTE } from "@/components/charts";
 import { projectCashFlow } from "@/lib/cashflow/project";
@@ -175,25 +176,44 @@ function Dashboard() {
 
   const recentTxs = useMemo(() => (txs ?? []).slice(0, 5), [txs]);
 
+  // Projetada × Realizada nos painéis de categoria/centro (escolha gravada).
+  const [bdMode, setBdMode] = useState<BreakdownMode>("projected");
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("wq.breakdownMode") as BreakdownMode | null;
+      if (saved === "projected" || saved === "realized") setBdMode(saved);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const chooseBdMode = (m: BreakdownMode) => {
+    setBdMode(m);
+    try {
+      localStorage.setItem("wq.breakdownMode", m);
+    } catch {
+      /* ignore */
+    }
+  };
+
   const receitasCat = useMemo(
-    () => receitasPorCategoria(txs ?? [], receivables, categories),
-    [txs, receivables, categories],
+    () => receitasPorCategoria(txs ?? [], receivables, categories, bdMode),
+    [txs, receivables, categories, bdMode],
   );
   const despesasCat = useMemo(
-    () => despesasPorCategoria(txs ?? [], payables, categories),
-    [txs, payables, categories],
+    () => despesasPorCategoria(txs ?? [], payables, categories, bdMode),
+    [txs, payables, categories, bdMode],
   );
   const receitasCentro = useMemo(
-    () => receitasPorCentro(txs ?? [], receivables, costCenters),
-    [txs, receivables, costCenters],
+    () => receitasPorCentro(txs ?? [], receivables, costCenters, bdMode),
+    [txs, receivables, costCenters, bdMode],
   );
   const despesasCentro = useMemo(
-    () => despesasPorCentro(txs ?? [], payables, costCenters),
-    [txs, payables, costCenters],
+    () => despesasPorCentro(txs ?? [], payables, costCenters, bdMode),
+    [txs, payables, costCenters, bdMode],
   );
   const centros = useMemo(
-    () => resultadosPorCentro(txs ?? [], payables, receivables, costCenters),
-    [txs, payables, receivables, costCenters],
+    () => resultadosPorCentro(txs ?? [], payables, receivables, costCenters, bdMode),
+    [txs, payables, receivables, costCenters, bdMode],
   );
   const costCenterName = useMemo(
     () => new Map(costCenters.map((c) => [c.id!, c.name])),
@@ -823,7 +843,7 @@ function Dashboard() {
       >
         <div className="panel">
           <h2 style={{ marginBottom: 0 }}>Receitas por categoria</h2>
-          <p className="muted" style={{ marginTop: 2 }}>Situação projetada</p>
+          <BreakdownToggle mode={bdMode} onChange={chooseBdMode} />
           {receitasCat.length === 0 ? (
             <p className="muted">Sem receitas para exibir.</p>
           ) : (
@@ -849,7 +869,7 @@ function Dashboard() {
 
         <div className="panel">
           <h2 style={{ marginBottom: 0 }}>Despesas por categoria</h2>
-          <p className="muted" style={{ marginTop: 2 }}>Situação projetada</p>
+          <BreakdownToggle mode={bdMode} onChange={chooseBdMode} />
           {despesasCat.length === 0 ? (
             <p className="muted">Sem despesas para exibir.</p>
           ) : (
@@ -877,7 +897,7 @@ function Dashboard() {
       {/* Resultados por centros (situação projetada) */}
       <div className="panel">
         <h2 style={{ marginBottom: 0 }}>Resultados por centros</h2>
-        <p className="muted" style={{ marginTop: 2 }}>Situação projetada</p>
+        <BreakdownToggle mode={bdMode} onChange={chooseBdMode} />
         {centros.length === 0 ? (
           <p className="muted">Nenhum centro de custo com movimento.</p>
         ) : (
@@ -944,7 +964,7 @@ function Dashboard() {
       >
         <div className="panel">
           <h2 style={{ marginBottom: 0 }}>Receitas por centro</h2>
-          <p className="muted" style={{ marginTop: 2 }}>Situação projetada</p>
+          <BreakdownToggle mode={bdMode} onChange={chooseBdMode} />
           {receitasCentro.length === 0 ? (
             <p className="muted">Sem receitas para exibir.</p>
           ) : (
@@ -962,7 +982,7 @@ function Dashboard() {
 
         <div className="panel">
           <h2 style={{ marginBottom: 0 }}>Despesas por centro</h2>
-          <p className="muted" style={{ marginTop: 2 }}>Situação projetada</p>
+          <BreakdownToggle mode={bdMode} onChange={chooseBdMode} />
           {despesasCentro.length === 0 ? (
             <p className="muted">Sem despesas para exibir.</p>
           ) : (
@@ -1158,6 +1178,51 @@ function Dashboard() {
         )}
       </div>
     </>
+  );
+}
+
+/** Pill pair + subtitle used by the category/center breakdown panels. */
+function BreakdownToggle({
+  mode,
+  onChange,
+}: {
+  mode: BreakdownMode;
+  onChange: (m: BreakdownMode) => void;
+}) {
+  return (
+    <div style={{ margin: "4px 0 8px" }}>
+      <div style={{ display: "flex", gap: 6 }}>
+        {(
+          [
+            ["projected", "Projetada"],
+            ["realized", "Realizada"],
+          ] as Array<[BreakdownMode, string]>
+        ).map(([m, label]) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => onChange(m)}
+            style={{
+              padding: "0.15rem 0.65rem",
+              fontSize: "0.75rem",
+              borderRadius: 6,
+              border: "1px solid var(--border)",
+              background: mode === m ? "var(--accent)" : "transparent",
+              color: mode === m ? "var(--accent-ink)" : "var(--muted)",
+              cursor: "pointer",
+            }}
+            aria-pressed={mode === m}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="muted" style={{ margin: "4px 0 0", fontSize: "0.78rem" }}>
+        {mode === "projected"
+          ? "Situação projetada (realizado + títulos em aberto)"
+          : "Situação realizada (somente o que movimentou)"}
+      </p>
+    </div>
   );
 }
 
