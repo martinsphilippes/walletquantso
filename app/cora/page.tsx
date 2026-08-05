@@ -4,9 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
 import { listAccounts } from "@/services/firestore";
-import { fetchCoraStatement, commitCoraEntries } from "@/services/cora";
+import {
+  fetchCoraStatement,
+  commitCoraEntries,
+  getCoraSyncConfig,
+  setCoraSyncConfig,
+} from "@/services/cora";
 import { DateParts } from "@/components/DateParts";
-import type { Account } from "@/types";
+import type { Account, CoraSyncConfig } from "@/types";
 import type { NormalizedEntry } from "@/lib/cora/statement";
 
 const brl = (n: number) =>
@@ -36,12 +41,17 @@ function CoraSync() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState("");
+  const [syncCfg, setSyncCfg] = useState<CoraSyncConfig | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
-    const a = await listAccounts(user.uid);
+    const [a, cfg] = await Promise.all([
+      listAccounts(user.uid),
+      getCoraSyncConfig(user.uid),
+    ]);
     setAccounts(a);
-    setAccountId((cur) => cur || a[0]?.id || "");
+    setSyncCfg(cfg);
+    setAccountId((cur) => cur || cfg?.accountId || a[0]?.id || "");
   }, [user]);
 
   useEffect(() => {
@@ -83,6 +93,29 @@ function CoraSync() {
       setEntries(null);
     } catch (err) {
       setError(`Falha ao importar: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleAutoSync(enabled: boolean) {
+    if (!user) return;
+    if (enabled && !accountId) {
+      setError("Selecione a conta de destino antes de ativar a sincronização automática.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await setCoraSyncConfig(user.uid, { enabled, accountId });
+      setSyncCfg(await getCoraSyncConfig(user.uid));
+      setResult(
+        enabled
+          ? "Sincronização automática ativada. A Wallet vai buscar as novas movimentações do Cora periodicamente."
+          : "Sincronização automática desativada.",
+      );
+    } catch (err) {
+      setError(`Falha ao salvar: ${(err as Error).message}`);
     } finally {
       setBusy(false);
     }
@@ -130,6 +163,38 @@ function CoraSync() {
             {busy ? "Buscando…" : "Buscar no Cora"}
           </button>
         </div>
+      </div>
+
+      <div className="panel">
+        <h2 style={{ marginTop: 0 }}>Sincronização automática</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Quando ativada, a Wallet busca sozinha as novas movimentações do Cora
+          de tempos em tempos e cria os lançamentos na conta escolhida acima —
+          sem você precisar abrir esta tela.
+        </p>
+        <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <input
+            type="checkbox"
+            checked={!!syncCfg?.enabled}
+            disabled={busy}
+            onChange={(e) => toggleAutoSync(e.target.checked)}
+          />
+          <span>
+            <strong>Ativar sincronização automática</strong>
+            {syncCfg?.accountId && accounts.length > 0 && (
+              <span className="muted">
+                {" "}— conta:{" "}
+                {accounts.find((a) => a.id === syncCfg.accountId)?.name ?? "—"}
+              </span>
+            )}
+          </span>
+        </label>
+        {syncCfg?.lastRunAt && (
+          <p className="muted" style={{ fontSize: "0.82rem", marginBottom: 0 }}>
+            Última execução: {new Date(syncCfg.lastRunAt).toLocaleString("pt-BR")}
+            {syncCfg.lastResult ? ` — ${syncCfg.lastResult}` : ""}
+          </p>
+        )}
       </div>
 
       {entries && entries.length > 0 && (

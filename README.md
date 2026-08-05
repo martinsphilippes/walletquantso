@@ -137,6 +137,21 @@ Passo a passo:
 Segurança: o certificado/chave ficam só no servidor (Vercel), nunca no
 repositório nem no navegador; você nunca usa a senha do internet banking.
 
+### Sincronização automática (opcional)
+
+Para a Wallet importar sozinha, de tempos em tempos, sem abrir a tela:
+
+1. **Firebase** → Configurações do projeto → **Contas de serviço** → **Gerar nova
+   chave privada**. Cadastre o JSON (em uma linha) na Vercel como
+   `FIREBASE_SERVICE_ACCOUNT` (permite a gravação server-side).
+2. Defina `CRON_SECRET` na Vercel (um valor aleatório longo) — protege o
+   agendador.
+3. O agendamento já está em `vercel.json` (a cada 3 horas; em planos gratuitos a
+   Vercel roda ~1x/dia). Faça um novo deploy.
+4. Na tela **Sincronizar Cora**, escolha a conta e marque **“Ativar
+   sincronização automática”**. A partir daí o cron busca as novas
+   movimentações e cria os lançamentos, sem duplicar.
+
 ## Estrutura principal das pastas
 
 ```

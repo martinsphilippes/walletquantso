@@ -216,6 +216,25 @@ export interface ImportBatch {
   revertedAt?: number | null;
 }
 
+/**
+ * Per-owner configuration for the scheduled Cora auto-sync. Document id is the
+ * owner uid. Managed from the app; read/written by the scheduled job (Admin).
+ */
+export interface CoraSyncConfig {
+  ownerId: string;
+  /** When true, the scheduled job imports new movements for this owner. */
+  enabled: boolean;
+  /** Account the imported lançamentos are attributed to. */
+  accountId: string;
+  /** ISO date (YYYY-MM-DD) of the latest movement already imported. */
+  lastSyncedDate?: string | null;
+  /** Timestamp of the last successful run. */
+  lastRunAt?: number | null;
+  /** Last run's outcome message (for display/debug). */
+  lastResult?: string | null;
+  updatedAt: number;
+}
+
 /** Append-only audit record. */
 export interface AuditEntry {
   id?: string;

@@ -8,6 +8,7 @@
 
 import { getApps, initializeApp, cert } from "firebase-admin/app";
 import { getAuth, type DecodedIdToken } from "firebase-admin/auth";
+import { getFirestore, type Firestore } from "firebase-admin/firestore";
 
 function ensureApp() {
   if (getApps().length) return;
@@ -24,6 +25,20 @@ function ensureApp() {
     );
   }
   initializeApp({ projectId });
+}
+
+/**
+ * Firestore via the Admin SDK — needed for server-side writes (scheduled sync).
+ * Requires FIREBASE_SERVICE_ACCOUNT to be set; throws with a clear message if not.
+ */
+export function getAdminDb(): Firestore {
+  if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+    throw new Error(
+      "Sincronização automática requer FIREBASE_SERVICE_ACCOUNT (service account do Firebase) configurado no servidor.",
+    );
+  }
+  ensureApp();
+  return getFirestore();
 }
 
 /** Verify a Firebase ID token and return its decoded claims (throws if invalid). */

@@ -4,12 +4,35 @@
 // statement, then saves the movements as lançamentos, skipping any that were
 // already imported (dedup by the Cora entry id stored in `externalId`).
 
-import { addDoc, collection } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { COLLECTIONS, listTransactions } from "./firestore";
 import { dedupHash } from "@/lib/import/engine";
-import type { Transaction } from "@/types";
+import type { CoraSyncConfig, Transaction } from "@/types";
 import type { NormalizedEntry } from "@/lib/cora/statement";
+
+/** Read the owner's Cora auto-sync config (null when never configured). */
+export async function getCoraSyncConfig(uid: string): Promise<CoraSyncConfig | null> {
+  const snap = await getDoc(doc(db, "coraSync", uid));
+  return snap.exists() ? (snap.data() as CoraSyncConfig) : null;
+}
+
+/** Enable/disable the scheduled auto-sync and set the destination account. */
+export async function setCoraSyncConfig(
+  uid: string,
+  patch: { enabled: boolean; accountId: string },
+): Promise<void> {
+  await setDoc(
+    doc(db, "coraSync", uid),
+    {
+      ownerId: uid,
+      enabled: patch.enabled,
+      accountId: patch.accountId,
+      updatedAt: Date.now(),
+    },
+    { merge: true },
+  );
+}
 
 /** Fetch the normalized Cora statement for a date range via the server route. */
 export async function fetchCoraStatement(
