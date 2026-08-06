@@ -19,6 +19,9 @@ import {
 import { listClients, createClient, updateClient, removeClient } from "@/services/clients";
 import { createBill } from "@/services/bills";
 import { computeCharge, chargeDescription, type ChargeInput } from "@/lib/clients/billing";
+import { zonesFromMatrix } from "@/lib/clients/zones";
+import * as XLSX from "xlsx";
+import Papa from "papaparse";
 import { parseBrCurrency } from "@/lib/br/parse";
 import { DateParts } from "@/components/DateParts";
 import { todayBr } from "@/lib/br/date";
@@ -30,6 +33,25 @@ const rid = () =>
   (typeof crypto !== "undefined" && crypto.randomUUID
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
+/** Lê a planilha (Excel/CSV) como matriz de células, sem interpretar nada. */
+async function readMatrix(file: File): Promise<unknown[][]> {
+  if (/\.(csv|txt)$/i.test(file.name)) {
+    const text = await file.text();
+    const parsed = Papa.parse<string[]>(text, { skipEmptyLines: "greedy", delimiter: "" });
+    return parsed.data as unknown[][];
+  }
+  const buffer = await file.arrayBuffer();
+  const wb = XLSX.read(buffer);
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  if (!sheet) return [];
+  return XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+    header: 1,
+    raw: true,
+    defval: "",
+    blankrows: false,
+  });
+}
 
 export default function ClientesPage() {
   return (
@@ -104,6 +126,46 @@ function Clientes() {
   const [draft, setDraft] = useState<Draft>(emptyDraft());
   const [confirmDelId, setConfirmDelId] = useState<string | null>(null);
 
+  // Importação da tabela de bairros a partir de Excel/CSV.
+  const [importMsg, setImportMsg] = useState("");
+
+  async function importZones(file: File) {
+    setImportMsg("");
+    try {
+      const matrix = await readMatrix(file);
+      const { zones, skipped } = zonesFromMatrix(matrix);
+      if (zones.length === 0) {
+        setImportMsg(
+          "Nenhum bairro reconhecido. A planilha precisa de uma coluna com o nome e outra com o valor.",
+        );
+        return;
+      }
+      // Junta com o que já está no formulário, sem duplicar nomes.
+      const existing = new Set(
+        draft.zones.filter((z) => z.name.trim()).map((z) => z.name.trim().toLowerCase()),
+      );
+      const added = zones.filter((z) => !existing.has(z.name.toLowerCase()));
+      setDraft({
+        ...draft,
+        zones: [
+          ...draft.zones.filter((z) => z.name.trim()),
+          ...added.map((z) => ({
+            id: rid(),
+            name: z.name,
+            price: String(z.price).replace(".", ","),
+          })),
+        ],
+      });
+      const parts = [`✅ ${added.length} bairro(s) importado(s)`];
+      if (zones.length - added.length > 0)
+        parts.push(`${zones.length - added.length} já existia(m)`);
+      if (skipped > 0) parts.push(`${skipped} linha(s) ignorada(s)`);
+      setImportMsg(parts.join(" · "));
+    } catch (err) {
+      setImportMsg(`❌ Falha ao ler a planilha: ${(err as Error).message}`);
+    }
+  }
+
   // Painel "Gerar título" (um cliente por vez).
   const [chargingId, setChargingId] = useState<string | null>(null);
   const [morning, setMorning] = useState("");
@@ -146,12 +208,14 @@ function Clientes() {
   function startCreate() {
     setEditingId(null);
     setDraft(emptyDraft());
+    setImportMsg("");
     setFormOpen(true);
   }
 
   function startEdit(c: Client) {
     setEditingId(c.id!);
     setDraft(draftFromClient(c));
+    setImportMsg("");
     setFormOpen(true);
   }
 
@@ -350,7 +414,37 @@ function Clientes() {
 
             <h3 style={{ marginBottom: "0.25rem" }}>Tabela de bairros (entregas) — opcional</h3>
             <p className="muted" style={{ marginTop: 0, fontSize: "0.82rem" }}>
-              Cada bairro tem um preço de entrega pré-definido.
+              Cada bairro tem um preço de entrega pré-definido. Você pode digitar um a um ou
+              importar uma planilha (Excel/CSV) com uma coluna de nomes e outra de valores.
+            </p>
+            <p style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
+              <label
+                style={{
+                  display: "inline-block",
+                  padding: "0.45rem 0.9rem",
+                  borderRadius: 8,
+                  border: "1px solid var(--border)",
+                  background: "var(--border)",
+                  cursor: "pointer",
+                }}
+              >
+                📄 Importar planilha de bairros
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv,.txt"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) importZones(f);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              {importMsg && (
+                <span className={`badge ${importMsg.startsWith("✅") ? "ok" : "warn"}`}>
+                  {importMsg}
+                </span>
+              )}
             </p>
             {draft.zones.map((z, i) => (
               <div
