@@ -16,9 +16,9 @@ interface Props {
   submitLabel: string;
   busy?: boolean;
   /**
-   * Fast-entry mode: after saving, the form stays open and keeps the selected
-   * classification fields (tipo, data, conta, categoria, centro, contato),
-   * clearing only the value, description and notes so the next entry is quick.
+   * Fast-entry mode: after saving, the form stays open with EVERY field still
+   * filled (a ready-to-edit duplicate of what was just saved); the value comes
+   * back focused and selected so typing replaces it.
    */
   quickEntry?: boolean;
   onSubmit: (input: TransactionInput) => void;
@@ -127,13 +127,13 @@ export function TransactionForm({
     });
 
     if (quickEntry) {
-      // Keep the classification fields; clear only what changes per entry.
-      setAmount("");
-      setDescription("");
-      setNotes("");
+      // Duplicação rápida: TUDO permanece preenchido para o próximo
+      // lançamento (descrição, valor, data, conta, classificação, notas) —
+      // o usuário ajusta só o que mudar. O valor volta focado e selecionado,
+      // então digitar já substitui.
       setError("");
-      // Refocus the value field for the next quick entry.
       amountRef.current?.focus();
+      amountRef.current?.select();
     }
   }
 
@@ -356,7 +356,7 @@ export function TransactionForm({
         </button>
         {quickEntry && (
           <span className="muted" style={{ marginLeft: "0.75rem", fontSize: "0.8rem" }}>
-            As seleções ficam fixas para o próximo lançamento.
+            Após salvar, tudo fica preenchido para o próximo — ajuste só o que mudar.
           </span>
         )}
       </p>
