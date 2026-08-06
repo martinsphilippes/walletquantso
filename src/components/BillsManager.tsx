@@ -257,11 +257,22 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     { key: "status", type: "select", value: (b) => STATUS_LABELS[billStatus(b, t)] },
     { key: "amount", value: (b) => brl(b.amount), align: "right" },
     { key: "remaining", value: (b) => brl(remaining(b)), align: "right" },
+    { key: "cumulative", type: "none" },
     { key: "actions", type: "none" },
   ];
   const cf = useColumnFilters(visible, colDefs);
 
   const sel = useBulkSelect(cf.filtered, (b) => b.id);
+
+  // Soma corrente do "em aberto" na ordem exibida (vencimento): a linha N
+  // mostra quanto é preciso ter em caixa para honrar todos os títulos até ela.
+  const cumulative = useMemo(() => {
+    let acc = 0;
+    return cf.filtered.map((b) => {
+      acc = Math.round((acc + remaining(b)) * 100) / 100;
+      return acc;
+    });
+  }, [cf.filtered]);
 
   async function bulkDelete() {
     if (sel.count === 0) return;
@@ -856,12 +867,15 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                   <th>Status</th>
                   <th style={{ textAlign: "right" }}>Valor</th>
                   <th style={{ textAlign: "right" }}>Em aberto</th>
+                  <th style={{ textAlign: "right" }} title="Soma de todos os títulos em aberto até esta linha, na ordem de vencimento.">
+                    Acumulado
+                  </th>
                   <th></th>
                 </tr>
                 <FilterRow defs={colDefs} cf={cf} />
               </thead>
               <tbody>
-                {cf.filtered.map((b) => {
+                {cf.filtered.map((b, rowIndex) => {
                   const status = billStatus(b, t);
                   const rem = remaining(b);
                   const paid = paidAmount(b);
@@ -902,6 +916,16 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                           }}
                         >
                           {brl(rem)}
+                        </td>
+                        <td
+                          style={{
+                            textAlign: "right",
+                            whiteSpace: "nowrap",
+                            fontWeight: 600,
+                            color: isPayable ? "var(--err)" : "var(--ok)",
+                          }}
+                        >
+                          {brl(cumulative[rowIndex])}
                         </td>
                         <td style={{ whiteSpace: "nowrap" }}>
                           {rem > 0 && (
@@ -947,7 +971,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
 
                       {paying && (
                         <tr key={`${b.id}-pay`}>
-                          <td colSpan={10} style={subRowStyle}>
+                          <td colSpan={11} style={subRowStyle}>
                             <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
                               <strong>{settleLabel}:</strong>
                               <select
@@ -993,7 +1017,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
 
                       {editing && (
                         <tr key={`${b.id}-edit`}>
-                          <td colSpan={10} style={subRowStyle}>
+                          <td colSpan={11} style={subRowStyle}>
                             <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "flex-end" }}>
                               <Field label="Descrição">
                                 <input
@@ -1122,7 +1146,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
 
                       {paid > 0 && (
                         <tr key={`${b.id}-hist`}>
-                          <td colSpan={10} style={{ ...subRowStyle, paddingTop: 0 }}>
+                          <td colSpan={11} style={{ ...subRowStyle, paddingTop: 0 }}>
                             <span className="muted" style={{ fontSize: "0.8rem" }}>
                               Baixas:{" "}
                               {b.payments.map((p) => (
