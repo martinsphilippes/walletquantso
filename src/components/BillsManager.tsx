@@ -274,6 +274,22 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     });
   }, [cf.filtered]);
 
+  // Soma dos títulos selecionados, exibida na barra de seleção.
+  const selSum = useMemo(() => {
+    const ids = new Set(sel.selectedIds);
+    let amount = 0;
+    let open = 0;
+    for (const b of cf.filtered) {
+      if (!b.id || !ids.has(b.id)) continue;
+      amount += b.amount;
+      open += remaining(b);
+    }
+    return {
+      amount: Math.round(amount * 100) / 100,
+      open: Math.round(open * 100) / 100,
+    };
+  }, [cf.filtered, sel.selectedIds]);
+
   async function bulkDelete() {
     if (sel.count === 0) return;
     setBusy(true);
@@ -846,7 +862,24 @@ export function BillsManager({ kind }: { kind: BillKind }) {
             Títulos quitados saem daqui e aparecem em Lançamentos (use Status → “Pago” para revê-los).
           </span>
         </div>
-        <BulkBar sel={sel} onDelete={bulkDelete} busy={busy} noun="título" />
+        <BulkBar
+          sel={sel}
+          onDelete={bulkDelete}
+          busy={busy}
+          noun="título"
+          extra={
+            <span
+              className="badge"
+              style={{
+                background: "var(--border)",
+                color: "var(--text)",
+                fontWeight: 700,
+              }}
+            >
+              Soma: {brl(selSum.amount)} · Em aberto: {brl(selSum.open)}
+            </span>
+          }
+        />
         {visible.length === 0 ? (
           <p className="muted">
             {bills.length === 0
