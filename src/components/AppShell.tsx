@@ -21,6 +21,7 @@ const NAV: NavEntry[] = [
   { label: "Lançamentos", href: "/lancamentos", icon: "≡" },
   { label: "Contas a pagar", href: "/contas-a-pagar", icon: "↑" },
   { label: "Contas a receber", href: "/contas-a-receber", icon: "↓" },
+  { label: "Clientes", href: "/clientes", icon: "✦" },
   { label: "Conciliação", href: "/conciliacao", icon: "⇄" },
   { label: "Fluxo de caixa", href: "/fluxo-de-caixa", icon: "∿" },
   { label: "Contas financeiras", href: "/accounts", icon: "▤" },

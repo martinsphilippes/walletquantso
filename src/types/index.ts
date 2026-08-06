@@ -47,6 +47,38 @@ export interface Category {
   createdAt: number;
 }
 
+/** Bairro com preço de entrega pré-definido (tabela de um cliente). */
+export interface DeliveryZone {
+  id: string;
+  name: string;
+  price: number;
+}
+
+/**
+ * Cliente do negócio de entregas, com as regras de cobrança dele. Qualquer
+ * combinação pode estar ativa ao mesmo tempo:
+ *  • diária  — um motoboy disponível em um turno (manhã/tarde), valor fixo;
+ *  • entrega — preço por bairro, conforme a tabela `zones`;
+ *  • percentual — % sobre o faturamento entregue (ex.: fábrica paga 12%).
+ * Os vínculos padrão preenchem o título a receber gerado.
+ */
+export interface Client {
+  id?: string;
+  ownerId: string;
+  name: string;
+  /** Valor de UMA diária (um motoboy em um turno). null = não cobra diária. */
+  dailyRate?: number | null;
+  /** Percentual sobre o faturamento entregue (ex.: 12 = 12%). */
+  revenuePercent?: number | null;
+  /** Tabela de bairros para cobrança por entrega. */
+  zones?: DeliveryZone[];
+  contactId?: string | null;
+  accountId?: string | null;
+  categoryId?: string | null;
+  costCenterId?: string | null;
+  createdAt: number;
+}
+
 /** A cost center / project (centro de custo / projeto). */
 export interface CostCenter {
   id?: string;
