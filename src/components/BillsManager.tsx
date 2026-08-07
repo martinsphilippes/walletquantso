@@ -478,13 +478,34 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     }
   }
 
-  async function del(b: Bill) {
-    if (!confirm(`Excluir o título "${b.description}"?`)) return;
+  // ── Exclusão com opção de série: além do título, dá para excluir os
+  // "iguais futuros" — mesma série (parcelas/repetições) ou mesma descrição,
+  // vencendo desta data em diante e ainda sem nenhuma baixa.
+  const [confirmDelId, setConfirmDelId] = useState<string | null>(null);
+
+  const baseDesc = (s: string) =>
+    s.replace(/\s*\(\d+\/\d+\)\s*$/, "").trim().toLowerCase();
+
+  function futureSiblings(b: Bill): Bill[] {
+    return (bills ?? []).filter(
+      (o) =>
+        o.id !== b.id &&
+        paidAmount(o) === 0 &&
+        o.dueDate >= b.dueDate &&
+        (b.installmentGroupId
+          ? o.installmentGroupId === b.installmentGroupId
+          : baseDesc(o.description) === baseDesc(b.description)),
+    );
+  }
+
+  async function deleteBills(targets: Bill[]) {
     setBusy(true);
     setError("");
     try {
-      await removeBill(b.id!);
+      for (const x of targets) if (x.id) await removeBill(x.id);
+      setConfirmDelId(null);
       await load();
+      setError(`✅ ${targets.length} título(s) excluído(s).`);
     } catch (err) {
       setError(`Falha ao excluir: ${(err as Error).message}`);
     } finally {
@@ -1079,12 +1100,77 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                           </button>{" "}
                           <button
                             style={{ background: "var(--err)", padding: "0.3rem 0.6rem" }}
-                            onClick={() => del(b)}
+                            onClick={() => {
+                              setEditingId(null);
+                              setPayingId(null);
+                              setPartialId(null);
+                              setConfirmDelId(b.id!);
+                            }}
                           >
                             Excluir
                           </button>
                         </td>
                       </tr>
+
+                      {confirmDelId === b.id && (
+                        <tr key={`${b.id}-del`}>
+                          <td colSpan={11} style={subRowStyle}>
+                            {(() => {
+                              const siblings = futureSiblings(b);
+                              const total =
+                                Math.round(
+                                  (remaining(b) +
+                                    siblings.reduce((s, x) => s + remaining(x), 0)) * 100,
+                                ) / 100;
+                              return (
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    gap: "0.6rem",
+                                    flexWrap: "wrap",
+                                    alignItems: "center",
+                                  }}
+                                >
+                                  <span>
+                                    Excluir <strong>"{b.description}"</strong>?
+                                    {siblings.length > 0 && (
+                                      <span className="muted">
+                                        {" "}
+                                        Há {siblings.length} título(s) igual(is) com vencimento
+                                        desta data em diante (sem baixa).
+                                      </span>
+                                    )}
+                                  </span>
+                                  <button
+                                    style={{ background: "var(--err)" }}
+                                    disabled={busy}
+                                    onClick={() => deleteBills([b])}
+                                  >
+                                    Excluir só este
+                                  </button>
+                                  {siblings.length > 0 && (
+                                    <button
+                                      style={{ background: "var(--err)" }}
+                                      disabled={busy}
+                                      title={`Exclui este título e os ${siblings.length} iguais futuros (total em aberto ${brl(total)}).`}
+                                      onClick={() => deleteBills([b, ...siblings])}
+                                    >
+                                      Excluir este + {siblings.length} futuros
+                                    </button>
+                                  )}
+                                  <button
+                                    style={{ background: "var(--border)" }}
+                                    disabled={busy}
+                                    onClick={() => setConfirmDelId(null)}
+                                  >
+                                    Cancelar
+                                  </button>
+                                </div>
+                              );
+                            })()}
+                          </td>
+                        </tr>
+                      )}
 
                       {partialId === b.id && (
                         <tr key={`${b.id}-partial`}>
