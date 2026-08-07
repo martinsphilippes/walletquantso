@@ -492,8 +492,85 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     }
   }
 
+  // ── Receber/Pagar parcialmente: divide o título. O valor informado quita o
+  // título original (com lançamento no caixa) e o que falta vira um título
+  // novo "— Resíduo", que continua na lista para acompanhamento.
+  const [partialId, setPartialId] = useState<string | null>(null);
+  const [partialAmount, setPartialAmount] = useState("");
+  const [partialDate, setPartialDate] = useState(today());
+  const [partialAccount, setPartialAccount] = useState("");
+
+  function startPartial(b: Bill) {
+    setEditingId(null);
+    setPayingId(null);
+    setPartialId(b.id!);
+    setPartialAmount("");
+    setPartialDate(today());
+    setPartialAccount(b.accountId ?? "");
+  }
+
+  async function confirmPartial(b: Bill) {
+    if (!user || !b.id) return;
+    const v = parseBrCurrency(partialAmount);
+    const rem = remaining(b);
+    if (v == null || v <= 0) {
+      setError(`Informe o valor ${isPayable ? "pago" : "recebido"}.`);
+      return;
+    }
+    if (v >= rem) {
+      setError(
+        `O valor parcial deve ser menor que o em aberto (${brl(rem)}). Para o total, use "${settleLabel}".`,
+      );
+      return;
+    }
+    const residual = Math.round((rem - v) * 100) / 100;
+    setBusy(true);
+    setError("");
+    try {
+      // 1. Título novo com o resíduo (sem empilhar "— Resíduo" duas vezes).
+      const baseDesc = b.description.replace(/\s*—\s*Resíduo$/i, "");
+      const residualId = await createBill({
+        ownerId: user.uid,
+        kind,
+        payments: [],
+        createdAt: Date.now(),
+        description: `${baseDesc} — Resíduo`,
+        amount: residual,
+        dueDate: b.dueDate,
+        competenceDate: b.competenceDate ?? b.dueDate,
+        documentNumber: String(nextDocumentNumber(bills ?? [])),
+        contactId: b.contactId ?? null,
+        categoryId: b.categoryId ?? null,
+        costCenterId: b.costCenterId ?? null,
+        accountId: b.accountId ?? null,
+        notes: `Resíduo de "${b.description}" — ${isPayable ? "pago" : "recebido"} ${brl(v)} em ${brDate(partialDate)}.`,
+      });
+      // 2. Quita o título original pelo valor informado (gera o lançamento).
+      try {
+        await addPayment(
+          b.id,
+          { id: rid(), date: partialDate, amount: v, accountId: partialAccount || b.accountId || null },
+          { settle: true },
+        );
+      } catch (err) {
+        await removeBill(residualId).catch(() => {});
+        throw err;
+      }
+      setPartialId(null);
+      await load();
+      setError(
+        `✅ ${isPayable ? "Pago" : "Recebido"} ${brl(v)} — título quitado nesse valor; resíduo de ${brl(residual)} criado e segue na lista.`,
+      );
+    } catch (err) {
+      setError(`Falha no ${isPayable ? "pagamento" : "recebimento"} parcial: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function startPay(b: Bill) {
     setEditingId(null);
+    setPartialId(null);
     setPayingId(b.id!);
     setPayAmount(String(remaining(b)).replace(".", ","));
     setPayDate(today());
@@ -966,6 +1043,13 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                               <button className="btn-primary" onClick={() => startPay(b)}>
                                 {settleLabel}
                               </button>{" "}
+                              <button
+                                style={{ background: "var(--border)", padding: "0.3rem 0.6rem" }}
+                                title={`Divide o título: o valor ${isPayable ? "pago" : "recebido"} quita o original e o restante vira um título "— Resíduo" que continua na lista.`}
+                                onClick={() => startPartial(b)}
+                              >
+                                {settleLabel} parcialmente
+                              </button>{" "}
                             </>
                           )}
                           {paid > 0 && rem > 0 && (
@@ -1001,6 +1085,56 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                           </button>
                         </td>
                       </tr>
+
+                      {partialId === b.id && (
+                        <tr key={`${b.id}-partial`}>
+                          <td colSpan={11} style={subRowStyle}>
+                            <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
+                              <strong>{isPayable ? "Pagamento parcial" : "Recebimento parcial"}:</strong>
+                              <input
+                                placeholder={`Valor ${isPayable ? "pago" : "recebido"} (R$)`}
+                                value={partialAmount}
+                                onChange={(e) => setPartialAmount(e.target.value)}
+                                inputMode="decimal"
+                                style={{ ...fieldStyle, width: 130, textAlign: "right" }}
+                              />
+                              <DateParts value={partialDate} onChange={setPartialDate} />
+                              <select
+                                value={partialAccount}
+                                onChange={(e) => setPartialAccount(e.target.value)}
+                              >
+                                <option value="">Conta…</option>
+                                {accounts.map((a) => (
+                                  <option key={a.id} value={a.id}>
+                                    {a.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <button disabled={busy} onClick={() => confirmPartial(b)}>
+                                {busy ? "Processando…" : "Confirmar"}
+                              </button>
+                              <button
+                                style={{ background: "var(--border)" }}
+                                onClick={() => setPartialId(null)}
+                              >
+                                Cancelar
+                              </button>
+                              <span className="muted" style={{ fontSize: "0.78rem", flexBasis: "100%" }}>
+                                {(() => {
+                                  const v = parseBrCurrency(partialAmount) ?? 0;
+                                  const residual =
+                                    v > 0 && v < rem
+                                      ? Math.round((rem - v) * 100) / 100
+                                      : null;
+                                  return residual != null
+                                    ? `Este título será quitado em ${brl(v)} e um novo título "${b.description.replace(/\s*—\s*Resíduo$/i, "")} — Resíduo" de ${brl(residual)} continuará na lista.`
+                                    : `Informe um valor menor que o em aberto (${brl(rem)}). O restante vira um título "— Resíduo".`;
+                                })()}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
 
                       {paying && (
                         <tr key={`${b.id}-pay`}>
