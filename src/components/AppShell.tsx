@@ -43,6 +43,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // /rapido é a tela enxuta de celular: sem menu lateral nem topbar.
+  if (pathname.startsWith("/rapido")) {
+    return <>{children}</>;
+  }
+
   const isActive = (href: string) =>
     pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
 
