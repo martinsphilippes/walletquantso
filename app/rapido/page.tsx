@@ -18,7 +18,11 @@ import {
   listTransactions,
 } from "@/services/firestore";
 import { listBills } from "@/services/bills";
-import { createTransaction } from "@/services/transactions";
+import {
+  createTransaction,
+  updateTransaction,
+  removeTransaction,
+} from "@/services/transactions";
 import { computeCashBalances, monthResult } from "@/lib/dashboard/cash";
 import { effectiveCostCenterId } from "@/lib/categories/tree";
 import { parseBrCurrency } from "@/lib/br/parse";
@@ -110,6 +114,23 @@ function Rapido() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const amountRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLDivElement>(null);
+
+  // Edição/clonagem dos últimos lançamentos direto nesta tela.
+  const [editingTxId, setEditingTxId] = useState<string | null>(null);
+  const [confirmDelTx, setConfirmDelTx] = useState<string | null>(null);
+
+  const accountName = useMemo(
+    () => new Map(accounts.map((a) => [a.id!, a.name])),
+    [accounts],
+  );
+  const recentTxs = useMemo(
+    () =>
+      [...txs]
+        .sort((a, b) => (a.date === b.date ? b.createdAt - a.createdAt : b.date < a.date ? -1 : 1))
+        .slice(0, 8),
+    [txs],
+  );
 
   const catById = useMemo(
     () => new Map(categories.filter((c) => c.id).map((c) => [c.id as string, c])),
@@ -148,6 +169,62 @@ function Rapido() {
     }
   }
 
+  /** Preenche o formulário com os dados de um lançamento (edição/clone). */
+  function fillFrom(t: Transaction) {
+    if (t.type === "transfer") return;
+    setType(t.type);
+    setAmount(
+      t.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    );
+    setDescription(t.description ?? "");
+    setAccountId(t.accountId ?? "");
+    const cat = t.categoryId ? catById.get(t.categoryId) : undefined;
+    setCategoryId(cat?.parentId ?? cat?.id ?? "");
+    setSubcategoryId(cat?.parentId ? (cat.id ?? "") : "");
+    setCostCenterId(t.costCenterId ?? "");
+    setMsg("");
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function startEditTx(t: Transaction) {
+    fillFrom(t);
+    setDate(t.date);
+    setEditingTxId(t.id!);
+  }
+
+  function startCloneTx(t: Transaction) {
+    fillFrom(t);
+    setDate(todayBr());
+    setEditingTxId(null);
+  }
+
+  function resetForm() {
+    setEditingTxId(null);
+    setAmount("");
+    setDescription("");
+    setCategoryId("");
+    setSubcategoryId("");
+    setDate(todayBr());
+    setMsg("");
+  }
+
+  async function deleteTx(t: Transaction) {
+    if (!user || !t.id) return;
+    setSaving(true);
+    setMsg("");
+    try {
+      await removeTransaction(user.uid, t.id);
+      setConfirmDelTx(null);
+      if (editingTxId === t.id) resetForm();
+      await load();
+      setMsg(`✅ Lançamento de ${brl(t.amount)} excluído.`);
+    } catch (err) {
+      setMsg(`❌ Falha ao excluir: ${(err as Error).message}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function save() {
     if (!user) return;
     const value = parseBrCurrency(amount);
@@ -162,7 +239,7 @@ function Rapido() {
     setSaving(true);
     setMsg("");
     try {
-      await createTransaction(user.uid, {
+      const input = {
         date,
         amount: value,
         type,
@@ -172,14 +249,21 @@ function Rapido() {
         categoryId: (subcategoryId || categoryId) || null,
         costCenterId: costCenterId || null,
         contactId: null,
-      });
-      setMsg(`✅ ${type === "expense" ? "Despesa" : "Receita"} de ${brl(value)} lançada.`);
-      // Mantém tudo preenchido (duplicação rápida); valor volta focado.
-      amountRef.current?.focus();
-      amountRef.current?.select();
+      };
+      if (editingTxId) {
+        await updateTransaction(user.uid, editingTxId, input);
+        resetForm();
+        setMsg(`✅ Lançamento atualizado (${brl(value)}).`);
+      } else {
+        await createTransaction(user.uid, input);
+        setMsg(`✅ ${type === "expense" ? "Despesa" : "Receita"} de ${brl(value)} lançada.`);
+        // Mantém tudo preenchido (duplicação rápida); valor volta focado.
+        amountRef.current?.focus();
+        amountRef.current?.select();
+      }
       await load();
     } catch (err) {
-      setMsg(`❌ Falha ao lançar: ${(err as Error).message}`);
+      setMsg(`❌ Falha ao salvar: ${(err as Error).message}`);
     } finally {
       setSaving(false);
     }
@@ -241,8 +325,10 @@ function Rapido() {
       </div>
 
       {/* Lançamento rápido */}
-      <div className="panel" style={{ padding: "0.9rem" }}>
-        <strong style={{ fontSize: "1.05rem" }}>Lançamento rápido</strong>
+      <div className="panel" style={{ padding: "0.9rem" }} ref={formRef}>
+        <strong style={{ fontSize: "1.05rem" }}>
+          {editingTxId ? "Editando lançamento" : "Lançamento rápido"}
+        </strong>
 
         <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.6rem" }}>
           <button
@@ -364,13 +450,126 @@ function Rapido() {
             borderRadius: 10,
           }}
         >
-          {saving ? "Salvando…" : "Salvar lançamento"}
+          {saving ? "Salvando…" : editingTxId ? "Salvar alterações" : "Salvar lançamento"}
         </button>
+        {editingTxId && (
+          <button
+            disabled={saving}
+            onClick={resetForm}
+            style={{
+              width: "100%",
+              marginTop: "0.5rem",
+              padding: "0.7rem",
+              borderRadius: 10,
+              background: "var(--border)",
+            }}
+          >
+            Cancelar edição
+          </button>
+        )}
 
         {msg && (
           <p style={{ marginTop: "0.6rem", marginBottom: 0 }}>
             <span className={`badge ${msg.startsWith("✅") ? "ok" : "warn"}`}>{msg}</span>
           </p>
+        )}
+      </div>
+
+      {/* Últimos lançamentos */}
+      <div className="panel" style={{ padding: "0.9rem" }}>
+        <strong style={{ fontSize: "1.05rem" }}>Últimos lançamentos</strong>
+        {recentTxs.length === 0 ? (
+          <p className="muted">Nenhum lançamento ainda.</p>
+        ) : (
+          recentTxs.map((t) => {
+            const isTransfer = t.type === "transfer";
+            const signed = t.type === "income" ? t.amount : -t.amount;
+            return (
+              <div
+                key={t.id}
+                style={{ borderTop: "1px solid var(--border)", padding: "0.55rem 0" }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "0.5rem",
+                    alignItems: "baseline",
+                  }}
+                >
+                  <span style={{ fontWeight: 600, minWidth: 0, overflowWrap: "anywhere" }}>
+                    {t.description || "—"}
+                  </span>
+                  <span
+                    style={{
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                      color: isTransfer
+                        ? "var(--muted)"
+                        : signed >= 0
+                          ? "var(--ok)"
+                          : "var(--err)",
+                    }}
+                  >
+                    {isTransfer ? "⇄ " : signed >= 0 ? "+" : "-"}
+                    {brl(Math.abs(t.amount))}
+                  </span>
+                </div>
+                <div className="muted" style={{ fontSize: "0.78rem", marginTop: "0.1rem" }}>
+                  {t.date.split("-").reverse().join("/")}
+                  {t.accountId ? ` · ${accountName.get(t.accountId) ?? ""}` : ""}
+                  {isTransfer ? " · transferência" : ""}
+                </div>
+                <div style={{ display: "flex", gap: "0.4rem", marginTop: "0.35rem", flexWrap: "wrap" }}>
+                  {confirmDelTx === t.id ? (
+                    <>
+                      <span className="muted" style={{ fontSize: "0.82rem", alignSelf: "center" }}>
+                        Excluir?
+                      </span>
+                      <button
+                        disabled={saving}
+                        style={{ ...smallBtn, background: "var(--err)" }}
+                        onClick={() => deleteTx(t)}
+                      >
+                        Confirmar
+                      </button>
+                      <button
+                        style={{ ...smallBtn, background: "var(--border)" }}
+                        onClick={() => setConfirmDelTx(null)}
+                      >
+                        Cancelar
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {!isTransfer && (
+                        <>
+                          <button
+                            style={{ ...smallBtn, background: "var(--border)" }}
+                            onClick={() => startEditTx(t)}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            style={{ ...smallBtn, background: "var(--border)" }}
+                            onClick={() => startCloneTx(t)}
+                          >
+                            Clonar
+                          </button>
+                        </>
+                      )}
+                      <button
+                        style={{ ...smallBtn, background: "var(--err)" }}
+                        onClick={() => setConfirmDelTx(t.id!)}
+                      >
+                        Excluir
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })
         )}
       </div>
 
@@ -421,6 +620,12 @@ const bigToggle = (active: boolean, color: string): React.CSSProperties => ({
   color: active ? "#fff" : "var(--text)",
   cursor: "pointer",
 });
+
+const smallBtn: React.CSSProperties = {
+  padding: "0.4rem 0.8rem",
+  borderRadius: 8,
+  fontSize: "0.85rem",
+};
 
 const accountCard = (active: boolean): React.CSSProperties => ({
   padding: "0.6rem 1rem",
