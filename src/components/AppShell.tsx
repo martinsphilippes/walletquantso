@@ -30,6 +30,7 @@ const NAV: NavEntry[] = [
   { label: "Subcategorias", href: "/subcategorias", icon: "◫" },
   { label: "Centros de custo", href: "/centros-de-custo", icon: "◈" },
   { label: "Pessoas e contatos", href: "/contatos", icon: "☺" },
+  { label: "Pedidos WhatsApp", href: "/pedidos-whatsapp", icon: "✉" },
   { label: "Relatórios", href: "/reports", icon: "▧" },
   { label: "Importação de dados", href: "/import", icon: "⤓" },
   { label: "Sincronizar Cora", href: "/cora", icon: "⟳" },
