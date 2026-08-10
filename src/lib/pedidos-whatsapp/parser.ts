@@ -54,13 +54,22 @@ const PERIOD_WORD = /(manh[aã]|tarde|noite|madrugada)/i;
 const HEADER_LINE = /^\*+\s*(.+?)\s*\*+$/;
 const LETTER = "A-Za-zÀ-ÖØ-öø-ÿ";
 // Tolerates a short OCR-noise token (misread icon/checkmark) before the digits, e.g. "D 2665- Candeal".
-const DATA_LINE = /^(?:\S{1,3}\s+)?(\d{2,6})\s*[-–—]\s*(.+)$/;
+// Separators aceitos após a cotação: - : = . (o OCR troca o hífen à vontade)…
+const DATA_LINE = /^(?:\S{1,3}\s+)?(\d{2,6})\s*[-:=.]\s*(.+)$/;
+// …ou apenas espaço, exigindo cotação de 3+ dígitos ("0963 Pituba") para não
+// engolir frases que começam com número pequeno ("24 linhas…").
+const DATA_LINE_SPACED = /^(?:\S{1,3}\s+)?(\d{3,6})\s+(.+)$/;
+const HAS_LETTER = new RegExp("[A-Za-zÀ-ÖØ-öø-ÿ]");
 const NAME_LINE = new RegExp(
   "^[^" + LETTER + "]*([" + LETTER + "][" + LETTER + "'.]*(?:\\s+[" + LETTER + "][" + LETTER + "'.]*)*)\\s*[-–—]\\s*(.+)$",
 );
 const SEM_NOTA_LINE = /^(?:\S{1,3}\s+)?(?:pedido\s+)?sem\s+notar?\s*[:\-]\s*(.+)$/i;
 const PHONE_PATTERN = /\+?\d[\d\s-]{8,14}\d/;
-const NAME_ONLY_LINE = new RegExp("^[A-ZÀ-Ö][a-zà-öø-ÿ'.]*(?:\\s+[A-ZÀ-Ö][a-zà-öø-ÿ'.]*){1,4}$");
+// Linha só com um nome (remetente): primeira palavra capitalizada; as demais
+// podem ser minúsculas ("Deus é fiel Quantso").
+const NAME_ONLY_LINE = new RegExp(
+  "^[A-ZÀ-Ö][" + LETTER + "'.]*(?:\\s+[" + LETTER + "][" + LETTER + "'.]*){1,4}$",
+);
 const TRAILING_NOISE = /\s*[[\]()]*\s*\d{1,2}[:.]\d{2}\s*[»>]?\s*[A-Za-z]?\s*$/;
 
 // "feira" days: the stem alone ("quinta"), or the stem plus "feira" with any
@@ -231,15 +240,23 @@ function matchShiftLine(line: string): { name: string; periodo: string } | null 
   return null;
 }
 
-function matchSenderLine(line: string): { phone: string } | null {
+function matchSenderLine(line: string): { phone: string; name: string } | null {
   const stripped = line.replace(/^[^A-Za-zÀ-ÖØ-öø-ÿ+0-9]+/, "").trim();
   if (!stripped) return null;
   const phoneMatch = stripped.match(PHONE_PATTERN);
   if (phoneMatch) {
     const phone = normalizePhone(phoneMatch[0]);
-    if (phone) return { phone };
+    if (phone) {
+      // Nome do remetente antes do telefone ("~Th +55 71 …" → "Th").
+      const name = stripped
+        .slice(0, phoneMatch.index ?? 0)
+        .replace(/[^A-Za-zÀ-ÖØ-öø-ÿ .']/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      return { phone, name };
+    }
   }
-  if (NAME_ONLY_LINE.test(stripped)) return { phone: "" };
+  if (NAME_ONLY_LINE.test(stripped)) return { phone: "", name: stripped };
   return null;
 }
 
@@ -248,6 +265,7 @@ export function parseConversation(text: string, today: Date = new Date()): Parse
   let currentPeriod = "";
   let currentDate = "";
   let currentPhone = "";
+  let currentSender = "";
   const rows: ParsedRow[] = [];
   const shifts: ShiftRow[] = [];
   const skipped: string[] = [];
@@ -260,6 +278,13 @@ export function parseConversation(text: string, today: Date = new Date()): Parse
       telefone: currentPhone,
       dia: currentDate,
     });
+  }
+
+  // Quem escreve "MANHÃ"/"NOITE" está declarando a própria diária: o marcador
+  // de período atribui um turno ao remetente atual da conversa.
+  function setPeriodAndDeclareShift(p: string) {
+    currentPeriod = p;
+    shifts.push({ name: currentSender, periodo: p, dia: currentDate });
   }
 
   for (const raw of lines) {
@@ -275,7 +300,7 @@ export function parseConversation(text: string, today: Date = new Date()): Parse
         inner,
         today,
         (d) => (currentDate = d),
-        (p) => (currentPeriod = p),
+        setPeriodAndDeclareShift,
       );
       if (!consumedHeader) currentPeriod = toTitleCase(inner);
       continue;
@@ -287,8 +312,9 @@ export function parseConversation(text: string, today: Date = new Date()): Parse
       continue;
     }
 
-    const dataMatch = line.match(DATA_LINE);
-    if (dataMatch) {
+    // Cotação + qualquer texto com letra = entrega (o separador varia com o OCR).
+    const dataMatch = line.match(DATA_LINE) ?? line.match(DATA_LINE_SPACED);
+    if (dataMatch && HAS_LETTER.test(dataMatch[2])) {
       pushRow(dataMatch[1], dataMatch[2]);
       continue;
     }
@@ -300,7 +326,7 @@ export function parseConversation(text: string, today: Date = new Date()): Parse
         line,
         today,
         (d) => (currentDate = d),
-        (p) => (currentPeriod = p),
+        setPeriodAndDeclareShift,
       );
       continue;
     }
@@ -322,6 +348,7 @@ export function parseConversation(text: string, today: Date = new Date()): Parse
     const senderMatch = matchSenderLine(line);
     if (senderMatch) {
       currentPhone = senderMatch.phone;
+      if (senderMatch.name) currentSender = senderMatch.name;
       continue;
     }
 

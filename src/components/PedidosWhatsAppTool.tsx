@@ -90,9 +90,10 @@ export function PedidosWhatsAppTool() {
   // vivo), nunca sobre uma conversão antiga — senão editar/extrair um texto
   // novo sem apertar "Converter" deixaria o cálculo preso em linhas velhas.
   const liveParsed = useMemo(() => {
-    if (!selectedClient || !text.trim()) return { rows: [], shifts: [] };
+    if (!selectedClient || !text.trim())
+      return { rows: [], shifts: [], skipped: [] as string[] };
     const r = parseConversation(text);
-    return { rows: r.rows, shifts: r.shifts };
+    return { rows: r.rows, shifts: r.shifts, skipped: r.skipped };
   }, [selectedClient, text]);
   const liveRows = liveParsed.rows;
 
@@ -421,6 +422,32 @@ export function PedidosWhatsAppTool() {
                 tabela:{" "}
                 {faturamento.semPreco.map((x) => `${x.bairro} (${x.count})`).join(", ")} — cadastre
                 esses bairros no cliente para somarem.
+              </div>
+            )}
+            {liveParsed.skipped.length > 0 && (
+              <div
+                style={{
+                  border: "1px solid var(--warn)",
+                  borderRadius: 8,
+                  padding: "0.5rem 0.7rem",
+                }}
+              >
+                <div style={{ color: "var(--warn)", fontWeight: 600, fontSize: "0.85rem" }}>
+                  ⚠ {liveParsed.skipped.length} linha(s) NÃO reconhecida(s) — não contam como
+                  entrega nem diária. Se alguma for entrega de verdade, me mostre para eu aprender:
+                </div>
+                <div
+                  style={{
+                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                    fontSize: "0.78rem",
+                    marginTop: "0.35rem",
+                    maxHeight: 140,
+                    overflowY: "auto",
+                    whiteSpace: "pre-wrap",
+                  }}
+                >
+                  {liveParsed.skipped.join("\n")}
+                </div>
               </div>
             )}
             <div style={{ fontSize: "1.15rem" }}>

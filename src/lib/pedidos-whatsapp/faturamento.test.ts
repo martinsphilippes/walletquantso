@@ -179,6 +179,33 @@ deus e fiel - manha
     expect(f.diariasValor).toBe(15 * 90);
   });
 
+  it("cabeçalho MANHÃ/NOITE declara a diária do remetente (2 motoboys no mesmo turno = 2)", () => {
+    const TEXT = `Domingo
+
+Josias Cardoso Quantso
+MANHÃ
+
+0963- Pituba
+0452 Pituba
+
+Deus é fiel Quantso
+MANHÃ
+
+7735- Jaguaribe
+
+Josias Cardoso Quantso
+NOITE
+
+5168- Pituba
+`;
+    const parsed = parseConversation(TEXT, new Date(2026, 7, 10));
+    expect(parsed.rows).toHaveLength(4); // "0452 Pituba" sem traço também conta
+    expect(parsed.shifts).toHaveLength(3);
+
+    const f = computeFaturamento(c, parsed.rows, undefined, parsed.shifts);
+    expect(f.diariasDetectadas).toBe(3); // Josias manhã + Deus é fiel manhã + Josias noite
+  });
+
   it("aceita override das diárias e ignora diária quando o cliente não cobra", () => {
     const rows = [row({}), row({ dia: "07/08/2026" })];
     expect(computeFaturamento(c, rows, 5).diariasValor).toBe(450);
