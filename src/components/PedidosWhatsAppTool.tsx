@@ -10,10 +10,19 @@
 // (public/tesseract/), Excel export via the xlsx package already used
 // elsewhere in this app. Nothing is uploaded anywhere.
 
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createWorker, type Worker } from "tesseract.js";
 import { parseConversation, type ParsedRow } from "@/lib/pedidos-whatsapp/parser";
 import { downloadWorkbook, previewToText } from "@/lib/pedidos-whatsapp/export";
+import { computeFaturamento } from "@/lib/pedidos-whatsapp/faturamento";
+import { useAuth } from "@/services/auth-context";
+import { listClients } from "@/services/clients";
+import { createBill } from "@/services/bills";
+import { todayBr } from "@/lib/br/date";
+import type { Client } from "@/types";
+
+const brl = (n: number) =>
+  n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 const EXAMPLE = `*MANHÃ*
 
@@ -56,6 +65,74 @@ export function PedidosWhatsAppTool() {
   const fallbackRef = useRef<HTMLTextAreaElement>(null);
 
   const fallbackText = rows.length ? previewToText(rows) : "";
+
+  // ── Faturamento automático por cliente (regras da tela Clientes) ─────────
+  const { user } = useAuth();
+  const [clients, setClients] = useState<Client[]>([]);
+  const [clientId, setClientId] = useState("");
+  const [diariasStr, setDiariasStr] = useState("");
+  const [billMsg, setBillMsg] = useState("");
+  const [generating, setGenerating] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    listClients(user.uid)
+      .then(setClients)
+      .catch(() => setClients([]));
+  }, [user]);
+
+  const selectedClient = useMemo(
+    () => clients.find((c) => c.id === clientId) ?? null,
+    [clients, clientId],
+  );
+
+  const faturamento = useMemo(() => {
+    if (!selectedClient || rows.length === 0) return null;
+    const override = diariasStr.trim() === "" ? undefined : parseInt(diariasStr, 10) || 0;
+    return computeFaturamento(selectedClient, rows, override);
+  }, [selectedClient, rows, diariasStr]);
+
+  // Trocar de cliente ou reconverter zera o ajuste manual de diárias.
+  useEffect(() => {
+    setDiariasStr("");
+    setBillMsg("");
+  }, [clientId, rows]);
+
+  async function generateBillFromFaturamento() {
+    if (!user || !selectedClient || !faturamento || faturamento.total <= 0) return;
+    setGenerating(true);
+    setBillMsg("");
+    try {
+      const parts: string[] = [];
+      if (faturamento.diarias > 0) parts.push(`${faturamento.diarias} diária(s)`);
+      parts.push(`${faturamento.entregas} entrega(s)`);
+      await createBill({
+        ownerId: user.uid,
+        kind: "receivable",
+        description: `${selectedClient.name} — ${parts.join(" + ")}`,
+        amount: faturamento.total,
+        dueDate: todayBr(),
+        competenceDate: todayBr(),
+        documentNumber: null,
+        contactId: selectedClient.contactId ?? null,
+        categoryId: selectedClient.categoryId ?? null,
+        costCenterId: selectedClient.costCenterId ?? null,
+        accountId: selectedClient.accountId ?? null,
+        notes:
+          `Pedidos WhatsApp: ${faturamento.entregas} entrega(s) ${brl(faturamento.entregasValor)}` +
+          (faturamento.diarias > 0
+            ? ` + ${faturamento.diarias} diária(s) ${brl(faturamento.diariasValor)} (turnos: ${faturamento.turnos.join(", ")})`
+            : ""),
+        payments: [],
+        createdAt: Date.now(),
+      });
+      setBillMsg(`✅ Título de ${brl(faturamento.total)} criado em Contas a receber.`);
+    } catch (err) {
+      setBillMsg(`❌ Falha ao gerar título: ${(err as Error).message}`);
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   function convert() {
     if (!text.trim()) {
@@ -244,7 +321,86 @@ export function PedidosWhatsAppTool() {
             <button type="button" className="btn-secondary" onClick={() => setText(EXAMPLE)}>
               Carregar exemplo
             </button>
+            {clients.length > 0 && (
+              <select
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                title="Calcula o faturamento automaticamente pelas regras do cliente (tela Clientes)."
+              >
+                <option value="">Cliente (cálculo automático)…</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            )}
             {status && <span className={statusClassName(status.type)}>{status.msg}</span>}
+          </div>
+        </div>
+      )}
+
+      {faturamento && selectedClient && (
+        <div className="panel">
+          <h3 style={{ marginTop: 0 }}>Faturamento — {selectedClient.name}</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem" }}>
+            {(selectedClient.dailyRate ?? 0) > 0 && (
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                <span>Diárias:</span>
+                <input
+                  value={diariasStr === "" ? String(faturamento.diarias) : diariasStr}
+                  onChange={(e) => setDiariasStr(e.target.value)}
+                  inputMode="numeric"
+                  style={{
+                    width: 64,
+                    textAlign: "right",
+                    padding: "0.3rem 0.4rem",
+                    borderRadius: 6,
+                    border: "1px solid var(--border)",
+                    background: "var(--bg)",
+                    color: "var(--text)",
+                    font: "inherit",
+                  }}
+                />
+                <span>
+                  × {brl(selectedClient.dailyRate!)} = <strong>{brl(faturamento.diariasValor)}</strong>
+                </span>
+                <span className="muted" style={{ fontSize: "0.82rem" }}>
+                  (detectadas {faturamento.diariasDetectadas}: {faturamento.turnos.join(", ")})
+                </span>
+              </div>
+            )}
+            <div>
+              Entregas: <strong>{faturamento.entregas}</strong> ={" "}
+              <strong>{brl(faturamento.entregasValor)}</strong>{" "}
+              <span className="muted" style={{ fontSize: "0.82rem" }}>
+                (pela tabela de bairros)
+              </span>
+            </div>
+            {faturamento.semPreco.length > 0 && (
+              <div className="badge warn" style={{ alignSelf: "flex-start" }}>
+                ⚠ {faturamento.semPreco.reduce((s, x) => s + x.count, 0)} entrega(s) sem preço na
+                tabela:{" "}
+                {faturamento.semPreco.map((x) => `${x.bairro} (${x.count})`).join(", ")} — cadastre
+                esses bairros no cliente para somarem.
+              </div>
+            )}
+            <div style={{ fontSize: "1.15rem" }}>
+              Total (diárias + entregas): <strong style={{ color: "var(--ok)" }}>{brl(faturamento.total)}</strong>
+            </div>
+            <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={generating || faturamento.total <= 0}
+                onClick={generateBillFromFaturamento}
+              >
+                {generating ? "Gerando…" : "Gerar título a receber"}
+              </button>
+              {billMsg && (
+                <span className={`badge ${billMsg.startsWith("✅") ? "ok" : "warn"}`}>{billMsg}</span>
+              )}
+            </div>
           </div>
         </div>
       )}
