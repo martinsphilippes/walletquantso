@@ -6,6 +6,17 @@ import { AppShell } from "@/components/AppShell";
 export const metadata: Metadata = {
   title: "WalletQuantso",
   description: "Sistema de controle financeiro pessoal.",
+  manifest: "/manifest.webmanifest",
+  // Ícone da tela de início (iPhone/iPad/Android): a logomarca Quantso.
+  icons: {
+    icon: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "Wallet",
+    statusBarStyle: "black-translucent",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
