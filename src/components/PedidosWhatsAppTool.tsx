@@ -89,16 +89,18 @@ export function PedidosWhatsAppTool() {
   // O faturamento é calculado SEMPRE sobre o texto atual da caixa (parse ao
   // vivo), nunca sobre uma conversão antiga — senão editar/extrair um texto
   // novo sem apertar "Converter" deixaria o cálculo preso em linhas velhas.
-  const liveRows = useMemo(() => {
-    if (!selectedClient || !text.trim()) return [];
-    return parseConversation(text).rows;
+  const liveParsed = useMemo(() => {
+    if (!selectedClient || !text.trim()) return { rows: [], shifts: [] };
+    const r = parseConversation(text);
+    return { rows: r.rows, shifts: r.shifts };
   }, [selectedClient, text]);
+  const liveRows = liveParsed.rows;
 
   const faturamento = useMemo(() => {
-    if (!selectedClient || liveRows.length === 0) return null;
+    if (!selectedClient || (liveRows.length === 0 && liveParsed.shifts.length === 0)) return null;
     const override = diariasStr.trim() === "" ? undefined : parseInt(diariasStr, 10) || 0;
-    return computeFaturamento(selectedClient, liveRows, override);
-  }, [selectedClient, liveRows, diariasStr]);
+    return computeFaturamento(selectedClient, liveRows, override, liveParsed.shifts);
+  }, [selectedClient, liveRows, liveParsed.shifts, diariasStr]);
 
   // Trocar de cliente ou mudar o texto zera o ajuste manual de diárias.
   useEffect(() => {

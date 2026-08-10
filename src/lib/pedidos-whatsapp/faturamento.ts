@@ -8,11 +8,45 @@
 // título.
 
 import type { Client, DeliveryZone } from "@/types";
-import type { ParsedRow } from "./parser";
+import type { ParsedRow, ShiftRow } from "./parser";
 
 const round = (n: number) => Math.round(n * 100) / 100;
 const norm = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+
+// Casamento tolerante de bairro: normaliza, tira pontuação e palavras de
+// ligação (da/das/de/...), reduz plural simples ("arvores" → "arvore").
+// "Itaigara 2310 |", "Candeal- reenvio asa" e "Caminho da arvore »" casam
+// com "Itaigara", "Candeal" e "Caminho das Arvores".
+const ZONE_STOPWORDS = new Set(["da", "das", "de", "do", "dos", "e"]);
+function zoneTokens(s: string): string[] {
+  return norm(s)
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .split(/\s+/)
+    .filter((t) => t && !ZONE_STOPWORDS.has(t))
+    .map((t) => t.replace(/s$/, ""));
+}
+
+/** Zona da tabela cujos tokens são prefixo do bairro escrito (mais específica primeiro). */
+function matchZone(
+  bairro: string,
+  zones: Array<{ zone: DeliveryZone; tokens: string[] }>,
+): DeliveryZone | null {
+  const b = zoneTokens(bairro);
+  if (b.length === 0) return null;
+  for (const { zone, tokens } of zones) {
+    if (tokens.length === 0 || tokens.length > b.length) continue;
+    let ok = true;
+    for (let i = 0; i < tokens.length; i++) {
+      if (tokens[i] !== b[i]) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) return zone;
+  }
+  return null;
+}
 
 export interface FaturamentoResult {
   /** Total de entregas (linhas convertidas). */
@@ -63,38 +97,57 @@ export function computeFaturamento(
   client: Client,
   rows: ParsedRow[],
   diariasOverride?: number,
+  declaredShifts?: ShiftRow[],
 ): FaturamentoResult {
-  // Entregas: preço por bairro (nome normalizado, sem acento/caixa).
-  const zoneByName = new Map<string, DeliveryZone>();
-  for (const z of client.zones ?? []) zoneByName.set(norm(z.name), z);
+  // Entregas: preço pela tabela de bairros, com casamento tolerante.
+  const zones = (client.zones ?? [])
+    .map((zone) => ({ zone, tokens: zoneTokens(zone.name) }))
+    .sort((a, b) => b.tokens.length - a.tokens.length);
 
   let entregasValor = 0;
   const misses = new Map<string, number>();
   for (const r of rows) {
-    const z = r.bairro ? zoneByName.get(norm(r.bairro)) : undefined;
+    const z = r.bairro ? matchZone(r.bairro, zones) : null;
     if (z) entregasValor += z.price;
     else misses.set(r.bairro || "—", (misses.get(r.bairro || "—") ?? 0) + 1);
   }
 
-  // Diárias: um motoboy disponível em um turno = uma combinação Dia × Período.
-  const shiftKeys = new Set<string>();
-  const byPeriod = new Map<string, Set<string>>();
-  for (const r of rows) {
-    const periodo = r.periodo && r.periodo !== "—" ? r.periodo : "";
-    shiftKeys.add(`${r.dia}|${periodo}`);
-    const dias = byPeriod.get(periodo || "—") ?? new Set<string>();
-    dias.add(r.dia);
-    byPeriod.set(periodo || "—", dias);
-  }
   const rate = client.dailyRate ?? 0;
-  const diariasDetectadas = rate > 0 && rows.length > 0 ? shiftKeys.size : 0;
+  let diariasDetectadas: number;
+  let turnos: string[];
+
+  if (declaredShifts && declaredShifts.length > 0) {
+    // Diárias declaradas na conversa ("Josias - manhã"): cada nome × turno ×
+    // dia é uma diária (duplicatas de prints sobrepostos não contam duas vezes).
+    const seen = new Set<string>();
+    const byPeriod = new Map<string, number>();
+    for (const s of declaredShifts) {
+      const key = `${s.dia}|${norm(s.periodo)}|${norm(s.name)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      byPeriod.set(s.periodo, (byPeriod.get(s.periodo) ?? 0) + 1);
+    }
+    diariasDetectadas = rate > 0 ? seen.size : 0;
+    turnos = [...byPeriod.entries()].map(([p, n]) => `${p} × ${n}`);
+  } else {
+    // Sem declarações: heurística por turnos distintos de Dia × Período.
+    const shiftKeys = new Set<string>();
+    const byPeriod = new Map<string, Set<string>>();
+    for (const r of rows) {
+      const periodo = r.periodo && r.periodo !== "—" ? r.periodo : "";
+      shiftKeys.add(`${r.dia}|${periodo}`);
+      const dias = byPeriod.get(periodo || "—") ?? new Set<string>();
+      dias.add(r.dia);
+      byPeriod.set(periodo || "—", dias);
+    }
+    diariasDetectadas = rate > 0 && rows.length > 0 ? shiftKeys.size : 0;
+    turnos = [...byPeriod.entries()].map(
+      ([p, dias]) => `${p === "—" ? "Dia" : p} × ${dias.size}`,
+    );
+  }
+
   const diarias = Math.max(0, diariasOverride ?? diariasDetectadas);
   const diariasValor = round(diarias * rate);
-
-  // "Noite × 3"; sem turno escrito na conversa vira "Dia × 3".
-  const turnos = [...byPeriod.entries()].map(
-    ([p, dias]) => `${p === "—" ? "Dia" : p} × ${dias.size}`,
-  );
 
   return {
     entregas: rows.length,

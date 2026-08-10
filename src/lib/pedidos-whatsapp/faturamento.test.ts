@@ -118,6 +118,67 @@ Sábado
     expect(f.total).toBe(265);
   });
 
+  it("casa bairros com sufixos/ruído do OCR na tabela (tolerante)", () => {
+    const zc = client({
+      zones: [
+        { id: "z1", name: "Itaigara", price: 10 },
+        { id: "z2", name: "Candeal", price: 11 },
+        { id: "z3", name: "Armação", price: 12 },
+        { id: "z4", name: "Pituba", price: 13 },
+        { id: "z5", name: "Caminho das Arvores", price: 14 },
+      ],
+    });
+    const rows = [
+      row({ bairro: "Itaigara 2310 |" }),
+      row({ bairro: "Candeal- reenvio asa" }),
+      row({ bairro: "Armação: retorno" }),
+      row({ bairro: "Pituba ns" }),
+      row({ bairro: 'Caminho da arvore »"' }),
+      row({ bairro: "Caminho da arvore" }),
+      row({ bairro: "Pituba et" }),
+    ];
+    const f = computeFaturamento(zc, rows);
+    expect(f.semPreco).toEqual([]);
+    expect(f.entregasValor).toBe(10 + 11 + 12 + 13 + 14 + 14 + 13);
+  });
+
+  it("conta diárias pelas declarações 'Nome - turno' da conversa (semana real)", () => {
+    const TEXT = `Terca feira
+Deus é fiel - manha
+Deus é fiel - noite
+
+Quarta feira
+Josias - manha
+Josias noite
+
+Quinta feira
+Deus e fiel - manha
+Josias - Noite
+
+Sexta feira
+Josias - Manha
+Josias - Noite
+Deus e fiel - Noite
+
+Sabado
+Deus e fiel - Manha
+Josias - Manha
+Josias - Noite
+Deus e fiel - Noite
+
+Domingo
+Erick - noite
+deus e fiel - manha
+`;
+    const parsed = parseConversation(TEXT, new Date(2026, 7, 10));
+    expect(parsed.rows).toEqual([]); // nenhuma declaração vira entrega falsa
+    expect(parsed.shifts).toHaveLength(15);
+
+    const f = computeFaturamento(c, [], undefined, parsed.shifts);
+    expect(f.diariasDetectadas).toBe(15);
+    expect(f.diariasValor).toBe(15 * 90);
+  });
+
   it("aceita override das diárias e ignora diária quando o cliente não cobra", () => {
     const rows = [row({}), row({ dia: "07/08/2026" })];
     expect(computeFaturamento(c, rows, 5).diariasValor).toBe(450);

@@ -22,8 +22,17 @@ export interface ParsedRow {
   dia: string;
 }
 
+/** Declaração de diária: "Nome - manhã" / "Nome noite" — motoboy num turno. */
+export interface ShiftRow {
+  name: string;
+  periodo: string;
+  dia: string;
+}
+
 export interface ParseResult {
   rows: ParsedRow[];
+  /** Diárias declaradas na conversa (nome do entregador + turno + dia). */
+  shifts: ShiftRow[];
   skipped: string[];
 }
 
@@ -201,6 +210,27 @@ function normalizePhone(raw: string): string {
   return "";
 }
 
+// "Nome - manhã" (o lado direito é SÓ a palavra do turno) ou "Nome noite"
+// (sem traço) declaram uma diária, não uma entrega.
+const PERIOD_ONLY = /^(manh[aã]|tarde|noite|madrugada)$/i;
+const SHIFT_NO_DASH = new RegExp(
+  "^([" + LETTER + "][" + LETTER + "'.]*(?:\\s+[" + LETTER + "][" + LETTER + "'.]*){0,4})\\s+(manh[aã]|tarde|noite|madrugada)$",
+  "i",
+);
+
+function matchShiftLine(line: string): { name: string; periodo: string } | null {
+  const m = line.match(NAME_LINE);
+  if (m) {
+    const rest = stripTrailingNoise(m[2]).trim();
+    const pm = rest.match(PERIOD_ONLY);
+    if (pm) return { name: m[1].trim(), periodo: toTitleCase(pm[1]) };
+    return null;
+  }
+  const nm = stripTrailingNoise(line).trim().match(SHIFT_NO_DASH);
+  if (nm) return { name: nm[1].trim(), periodo: toTitleCase(nm[2]) };
+  return null;
+}
+
 function matchSenderLine(line: string): { phone: string } | null {
   const stripped = line.replace(/^[^A-Za-zÀ-ÖØ-öø-ÿ+0-9]+/, "").trim();
   if (!stripped) return null;
@@ -219,6 +249,7 @@ export function parseConversation(text: string, today: Date = new Date()): Parse
   let currentDate = "";
   let currentPhone = "";
   const rows: ParsedRow[] = [];
+  const shifts: ShiftRow[] = [];
   const skipped: string[] = [];
 
   function pushRow(cotacao: string, bairro: string) {
@@ -274,6 +305,14 @@ export function parseConversation(text: string, today: Date = new Date()): Parse
       continue;
     }
 
+    // "Nome - manhã" / "Josias noite" = diária declarada (antes do Nome/Bairro,
+    // senão viraria uma entrega falsa com bairro "manhã").
+    const shift = matchShiftLine(line);
+    if (shift) {
+      shifts.push({ name: shift.name, periodo: shift.periodo, dia: currentDate });
+      continue;
+    }
+
     const nameMatch = line.match(NAME_LINE);
     if (nameMatch) {
       pushRow(nameMatch[1].trim(), nameMatch[2]);
@@ -289,5 +328,5 @@ export function parseConversation(text: string, today: Date = new Date()): Parse
     skipped.push(raw);
   }
 
-  return { rows, skipped };
+  return { rows, shifts, skipped };
 }
