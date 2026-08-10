@@ -86,17 +86,25 @@ export function PedidosWhatsAppTool() {
     [clients, clientId],
   );
 
-  const faturamento = useMemo(() => {
-    if (!selectedClient || rows.length === 0) return null;
-    const override = diariasStr.trim() === "" ? undefined : parseInt(diariasStr, 10) || 0;
-    return computeFaturamento(selectedClient, rows, override);
-  }, [selectedClient, rows, diariasStr]);
+  // O faturamento é calculado SEMPRE sobre o texto atual da caixa (parse ao
+  // vivo), nunca sobre uma conversão antiga — senão editar/extrair um texto
+  // novo sem apertar "Converter" deixaria o cálculo preso em linhas velhas.
+  const liveRows = useMemo(() => {
+    if (!selectedClient || !text.trim()) return [];
+    return parseConversation(text).rows;
+  }, [selectedClient, text]);
 
-  // Trocar de cliente ou reconverter zera o ajuste manual de diárias.
+  const faturamento = useMemo(() => {
+    if (!selectedClient || liveRows.length === 0) return null;
+    const override = diariasStr.trim() === "" ? undefined : parseInt(diariasStr, 10) || 0;
+    return computeFaturamento(selectedClient, liveRows, override);
+  }, [selectedClient, liveRows, diariasStr]);
+
+  // Trocar de cliente ou mudar o texto zera o ajuste manual de diárias.
   useEffect(() => {
     setDiariasStr("");
     setBillMsg("");
-  }, [clientId, rows]);
+  }, [clientId, text]);
 
   async function generateBillFromFaturamento() {
     if (!user || !selectedClient || !faturamento || faturamento.total <= 0) return;
@@ -342,7 +350,13 @@ export function PedidosWhatsAppTool() {
 
       {faturamento && selectedClient && (
         <div className="panel">
-          <h3 style={{ marginTop: 0 }}>Faturamento — {selectedClient.name}</h3>
+          <h3 style={{ marginTop: 0, marginBottom: "0.25rem" }}>
+            Faturamento — {selectedClient.name}
+          </h3>
+          <p className="muted" style={{ marginTop: 0, fontSize: "0.82rem" }}>
+            Calculado ao vivo do texto na caixa acima ({faturamento.entregas} linha(s)
+            reconhecida(s)) — editar o texto recalcula na hora.
+          </p>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem" }}>
             {(selectedClient.dailyRate ?? 0) > 0 && (
               <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
