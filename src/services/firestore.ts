@@ -39,6 +39,7 @@ export const COLLECTIONS = {
   importBatches: "importBatches",
   auditLog: "auditLog",
   clients: "clients",
+  clientBillings: "clientBillings",
 } as const;
 
 function mapDocs<T>(snap: {

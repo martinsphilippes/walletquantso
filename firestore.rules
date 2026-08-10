@@ -73,6 +73,13 @@ service cloud.firestore {
       allow update: if ownsExisting() && ownsIncoming();
     }
 
+    // Histórico de cobranças geradas por cliente.
+    match /clientBillings/{id} {
+      allow read, delete: if ownsExisting();
+      allow create: if ownsIncoming();
+      allow update: if ownsExisting() && ownsIncoming();
+    }
+
     // Audit log: append-only. The owner can create and read their entries but
     // never modify or delete them.
     match /auditLog/{id} {

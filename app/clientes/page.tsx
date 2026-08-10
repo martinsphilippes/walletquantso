@@ -16,7 +16,16 @@ import {
   listContacts,
   listCostCenters,
 } from "@/services/firestore";
-import { listClients, createClient, updateClient, removeClient } from "@/services/clients";
+import {
+  listClients,
+  createClient,
+  updateClient,
+  removeClient,
+  addClientBilling,
+  listClientBillings,
+  removeClientBilling,
+} from "@/services/clients";
+import type { ClientBillingRecord } from "@/types";
 import { createBill } from "@/services/bills";
 import { computeCharge, chargeDescription, type ChargeInput } from "@/lib/clients/billing";
 import { zonesFromMatrix } from "@/lib/clients/zones";
@@ -319,9 +328,38 @@ function Clientes() {
     };
   }
 
+  // Histórico de cobranças geradas (por cliente).
+  const [histId, setHistId] = useState<string | null>(null);
+  const [histRecords, setHistRecords] = useState<ClientBillingRecord[]>([]);
+  const [histLoading, setHistLoading] = useState(false);
+
+  async function openHistory(c: Client) {
+    if (!user) return;
+    setHistId(c.id!);
+    setHistLoading(true);
+    try {
+      setHistRecords(await listClientBillings(user.uid, c.id!));
+    } catch (err) {
+      setError(`Falha ao carregar histórico: ${(err as Error).message}`);
+    } finally {
+      setHistLoading(false);
+    }
+  }
+
+  async function deleteHistRecord(r: ClientBillingRecord) {
+    if (!r.id) return;
+    try {
+      await removeClientBilling(r.id);
+      setHistRecords((prev) => prev.filter((x) => x.id !== r.id));
+    } catch (err) {
+      setError(`Falha ao excluir registro: ${(err as Error).message}`);
+    }
+  }
+
   async function generateBill(c: Client) {
     if (!user) return;
-    const charge = computeCharge(c, chargeInput());
+    const input = chargeInput();
+    const charge = computeCharge(c, input);
     if (charge.total <= 0) {
       setChargeMsg("Informe as quantidades (ou o faturamento) para gerar o título.");
       return;
@@ -330,7 +368,7 @@ function Clientes() {
     setChargeMsg("");
     setError("");
     try {
-      await createBill({
+      const billId = await createBill({
         ownerId: user.uid,
         kind: "receivable",
         description: chargeDescription(c, charge),
@@ -346,11 +384,43 @@ function Clientes() {
         payments: [],
         createdAt: Date.now(),
       });
+      // Registra no histórico do cliente o retrato do que foi cobrado.
+      const rate = c.dailyRate ?? 0;
+      const diariasQty =
+        rate > 0
+          ? Math.max(0, Math.floor(input.morningShifts ?? 0)) +
+            Math.max(0, Math.floor(input.afternoonShifts ?? 0))
+          : 0;
+      let entregasQty = 0;
+      let entregasValor = 0;
+      for (const z of c.zones ?? []) {
+        const qty = Math.max(0, Math.floor(input.deliveries?.[z.id] ?? 0));
+        entregasQty += qty;
+        entregasValor += qty * z.price;
+      }
+      const pct = c.revenuePercent ?? 0;
+      const revenueBase = pct > 0 && (input.revenue ?? 0) > 0 ? (input.revenue as number) : null;
+      await addClientBilling({
+        ownerId: user.uid,
+        clientId: c.id!,
+        clientName: c.name,
+        createdAt: Date.now(),
+        period: dueDate.split("-").reverse().join("/"),
+        diarias: diariasQty,
+        diariasValor: Math.round(diariasQty * rate * 100) / 100,
+        entregas: entregasQty,
+        entregasValor: Math.round(entregasValor * 100) / 100,
+        revenueBase,
+        revenueValor: revenueBase != null ? Math.round(((revenueBase * pct) / 100) * 100) / 100 : null,
+        total: charge.total,
+        details: charge.lines.join(" · "),
+        billId,
+      });
       setChargeMsg(
         `✅ Título de ${brl(charge.total)} criado em Contas a receber (venc. ${dueDate
           .split("-")
           .reverse()
-          .join("/")}).`,
+          .join("/")}) e registrado no histórico.`,
       );
       setMorning("");
       setAfternoon("");
@@ -609,6 +679,12 @@ function Clientes() {
                 <button className="btn-primary" onClick={() => (charging ? setChargingId(null) : openCharge(c))}>
                   {charging ? "Fechar" : "Gerar título"}
                 </button>
+                <button
+                  style={{ background: "var(--border)" }}
+                  onClick={() => (histId === c.id ? setHistId(null) : openHistory(c))}
+                >
+                  {histId === c.id ? "Fechar histórico" : "Histórico"}
+                </button>
                 <button style={{ background: "var(--border)" }} onClick={() => startEdit(c)}>
                   Editar
                 </button>
@@ -638,6 +714,73 @@ function Clientes() {
                   </button>
                 )}
               </div>
+
+              {histId === c.id && (
+                <div style={{ marginTop: "0.75rem", borderTop: "1px solid var(--border)", paddingTop: "0.75rem" }}>
+                  <strong>Histórico de cobranças</strong>
+                  {histLoading ? (
+                    <p className="muted">Carregando…</p>
+                  ) : histRecords.length === 0 ? (
+                    <p className="muted">
+                      Nenhuma cobrança registrada ainda. Cada "Gerar título" (aqui ou nos Pedidos
+                      WhatsApp) passa a ficar registrado.
+                    </p>
+                  ) : (
+                    histRecords.map((r) => (
+                      <div
+                        key={r.id}
+                        style={{ borderTop: "1px solid var(--border)", padding: "0.55rem 0" }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: "0.5rem",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <span>
+                            <strong>
+                              {new Date(r.createdAt).toLocaleString("pt-BR", {
+                                timeZone: "America/Sao_Paulo",
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </strong>
+                            {r.period ? <span className="muted"> · período {r.period}</span> : null}
+                          </span>
+                          <strong style={{ color: "var(--ok)" }}>{brl(r.total)}</strong>
+                        </div>
+                        <div className="muted" style={{ fontSize: "0.85rem", marginTop: "0.15rem" }}>
+                          {r.diarias > 0 && `${r.diarias} diária(s) = ${brl(r.diariasValor)} · `}
+                          {r.entregas > 0 && `${r.entregas} entrega(s) = ${brl(r.entregasValor)}`}
+                          {r.revenueValor != null &&
+                            ` · % sobre ${brl(r.revenueBase ?? 0)} = ${brl(r.revenueValor)}`}
+                        </div>
+                        {r.details && (
+                          <div className="muted" style={{ fontSize: "0.8rem", marginTop: "0.15rem" }}>
+                            {r.details}
+                          </div>
+                        )}
+                        <button
+                          style={{
+                            background: "var(--border)",
+                            padding: "0.25rem 0.6rem",
+                            fontSize: "0.8rem",
+                            marginTop: "0.35rem",
+                          }}
+                          onClick={() => deleteHistRecord(r)}
+                        >
+                          Excluir registro
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
 
               {charging && (
                 <div style={{ marginTop: "0.75rem", borderTop: "1px solid var(--border)", paddingTop: "0.75rem" }}>

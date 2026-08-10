@@ -79,6 +79,35 @@ export interface Client {
   createdAt: number;
 }
 
+/**
+ * Registro histórico de uma cobrança gerada para um cliente (título a
+ * receber criado pela tela Clientes ou pelos Pedidos WhatsApp). Guarda o
+ * retrato do que foi cobrado — diárias, entregas, período, detalhamento —
+ * para consulta futura ("o que houve naquela semana?").
+ */
+export interface ClientBillingRecord {
+  id?: string;
+  ownerId: string;
+  clientId: string;
+  /** Nome na época (o cliente pode ser renomeado/excluído depois). */
+  clientName: string;
+  createdAt: number;
+  /** Período coberto, legível (ex.: "07/08/2026 a 09/08/2026"). */
+  period?: string | null;
+  diarias: number;
+  diariasValor: number;
+  entregas: number;
+  entregasValor: number;
+  /** Percentual sobre faturamento, quando usado. */
+  revenueBase?: number | null;
+  revenueValor?: number | null;
+  total: number;
+  /** Detalhamento legível (turnos, entregas por bairro…). */
+  details: string;
+  /** Título a receber gerado. */
+  billId?: string | null;
+}
+
 /** A cost center / project (centro de custo / projeto). */
 export interface CostCenter {
   id?: string;

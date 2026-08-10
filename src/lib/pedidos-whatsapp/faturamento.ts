@@ -31,6 +31,34 @@ export interface FaturamentoResult {
   total: number;
 }
 
+export interface RowsSummary {
+  /** Datas distintas em ordem cronológica (dd/mm/yyyy). */
+  dias: string[];
+  /** "07/08/2026 a 09/08/2026", data única, ou null. */
+  period: string | null;
+  /** Entregas por bairro, maiores contagens primeiro. */
+  porBairro: Array<{ bairro: string; qty: number }>;
+}
+
+/** Período e entregas-por-bairro das linhas (para o histórico do cliente). */
+export function summarizeRows(rows: ParsedRow[]): RowsSummary {
+  const diasSet = new Set<string>();
+  const counts = new Map<string, number>();
+  for (const r of rows) {
+    if (r.dia) diasSet.add(r.dia);
+    const b = r.bairro || "—";
+    counts.set(b, (counts.get(b) ?? 0) + 1);
+  }
+  const key = (d: string) => d.split("/").reverse().join("-");
+  const dias = [...diasSet].sort((a, b) => key(a).localeCompare(key(b)));
+  const period =
+    dias.length === 0 ? null : dias.length === 1 ? dias[0] : `${dias[0]} a ${dias[dias.length - 1]}`;
+  const porBairro = [...counts.entries()]
+    .map(([bairro, qty]) => ({ bairro, qty }))
+    .sort((x, y) => y.qty - x.qty);
+  return { dias, period, porBairro };
+}
+
 export function computeFaturamento(
   client: Client,
   rows: ParsedRow[],

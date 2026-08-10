@@ -14,9 +14,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createWorker, type Worker } from "tesseract.js";
 import { parseConversation, type ParsedRow } from "@/lib/pedidos-whatsapp/parser";
 import { downloadWorkbook, previewToText } from "@/lib/pedidos-whatsapp/export";
-import { computeFaturamento } from "@/lib/pedidos-whatsapp/faturamento";
+import { computeFaturamento, summarizeRows } from "@/lib/pedidos-whatsapp/faturamento";
 import { useAuth } from "@/services/auth-context";
-import { listClients } from "@/services/clients";
+import { listClients, addClientBilling } from "@/services/clients";
 import { createBill } from "@/services/bills";
 import { todayBr } from "@/lib/br/date";
 import type { Client } from "@/types";
@@ -114,7 +114,7 @@ export function PedidosWhatsAppTool() {
       const parts: string[] = [];
       if (faturamento.diarias > 0) parts.push(`${faturamento.diarias} diária(s)`);
       parts.push(`${faturamento.entregas} entrega(s)`);
-      await createBill({
+      const billId = await createBill({
         ownerId: user.uid,
         kind: "receivable",
         description: `${selectedClient.name} — ${parts.join(" + ")}`,
@@ -134,7 +134,29 @@ export function PedidosWhatsAppTool() {
         payments: [],
         createdAt: Date.now(),
       });
-      setBillMsg(`✅ Título de ${brl(faturamento.total)} criado em Contas a receber.`);
+      // Registra no histórico do cliente o retrato do que foi cobrado.
+      const s = summarizeRows(liveRows);
+      await addClientBilling({
+        ownerId: user.uid,
+        clientId: selectedClient.id!,
+        clientName: selectedClient.name,
+        createdAt: Date.now(),
+        period: s.period,
+        diarias: faturamento.diarias,
+        diariasValor: faturamento.diariasValor,
+        entregas: faturamento.entregas,
+        entregasValor: faturamento.entregasValor,
+        revenueBase: null,
+        revenueValor: null,
+        total: faturamento.total,
+        details:
+          (faturamento.diarias > 0 ? `Diárias: ${faturamento.turnos.join(", ")}. ` : "") +
+          `Entregas: ${s.porBairro.map((x) => `${x.qty}x ${x.bairro}`).join(", ")}.`,
+        billId,
+      });
+      setBillMsg(
+        `✅ Título de ${brl(faturamento.total)} criado em Contas a receber e registrado no histórico do cliente.`,
+      );
     } catch (err) {
       setBillMsg(`❌ Falha ao gerar título: ${(err as Error).message}`);
     } finally {
