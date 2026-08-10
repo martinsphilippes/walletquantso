@@ -59,6 +59,30 @@ describe("parseConversation — weekday/date column", () => {
     expect(rows[0].dia).toBe("26/07/2026");
   });
 
+  it("uses the explicit date of a marker like 'Sexta-feira 07/08/26' (no fake row)", () => {
+    const { rows, skipped } = parseConversation(
+      "Sexta-feira 07/08/26\n* João - Vitória",
+      TODAY,
+    );
+    expect(skipped).toEqual([]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].dia).toBe("07/08/2026");
+    expect(rows[0].cotacao).toBe("João");
+  });
+
+  it("accepts OCR dash lookalikes in Nome − Bairro lines", () => {
+    // U+2212 (minus) and U+2011 (non-breaking hyphen) instead of "-".
+    const { rows, skipped } = parseConversation(
+      "* Maria − Pituba\n* Luis ‑ Garcia",
+      TODAY,
+    );
+    expect(skipped).toEqual([]);
+    expect(rows.map((r) => `${r.cotacao}|${r.bairro}`)).toEqual([
+      "Maria|Pituba",
+      "Luis|Garcia",
+    ]);
+  });
+
   it("recognizes space, hyphen, and spaced-hyphen 'feira' forms the same way", () => {
     const cases = ["Quinta feira", "Quinta-feira", "Quinta - Feira", "QUINTA FEIRA"];
     for (const line of cases) {

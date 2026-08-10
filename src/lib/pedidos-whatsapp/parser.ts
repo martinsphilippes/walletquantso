@@ -33,6 +33,14 @@ export function rowValues(r: ParsedRow): string[] {
   return [r.periodo, r.cotacao, r.bairro, r.telefone, r.dia];
 }
 
+// OCR/WhatsApp produce many dash lookalikes (‐ ‑ ‒ – — ― − ﹘ －). Everything
+// is normalized to a plain "-" before matching, so "Nome − Bairro" lines from
+// a photo parse the same as typed ones.
+const DASH_VARIANTS = /[‐-―−﹘－]/g;
+// An explicit date in a marker line ("Sexta-feira 07/08/26") wins over the
+// weekday resolution.
+const EXPLICIT_DATE = /\b(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})\b/;
+
 const PERIOD_WORD = /(manh[aã]|tarde|noite|madrugada)/i;
 const HEADER_LINE = /^\*+\s*(.+?)\s*\*+$/;
 const LETTER = "A-Za-zÀ-ÖØ-öø-ÿ";
@@ -102,6 +110,16 @@ function findWeekdayMatch(normalized: string): { dow: number; matchText: string 
 
 function findDateInLine(line: string, today: Date): string | null {
   const normalized = normalizeAccents(line.toLowerCase());
+  const explicit = normalized.match(EXPLICIT_DATE);
+  if (explicit) {
+    const day = Number(explicit[1]);
+    const month = Number(explicit[2]);
+    let year = Number(explicit[3]);
+    if (year < 100) year += 2000;
+    if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+      return pad2(day) + "/" + pad2(month) + "/" + year;
+    }
+  }
   const wd = findWeekdayMatch(normalized);
   if (wd) return formatDateBR(mostRecentPastWeekday(wd.dow, today));
   if (/\bontem\b/.test(normalized)) {
@@ -153,12 +171,15 @@ function isPureDayPeriodLine(line: string): boolean {
   const wd = findWeekdayMatch(normalized);
   const hasPeriod = PERIOD_WORD.test(normalized);
   const hasRelative = /\bontem\b|\bhoje\b/.test(normalized);
-  if (!wd && !hasPeriod && !hasRelative) return false;
+  const hasExplicitDate = EXPLICIT_DATE.test(normalized);
+  if (!wd && !hasPeriod && !hasRelative && !hasExplicitDate) return false;
 
   let remaining = normalized;
   if (wd) remaining = remaining.replace(wd.matchText, " ");
   remaining = remaining.replace(/\bontem\b/, " ").replace(/\bhoje\b/, " ");
   remaining = remaining.replace(PERIOD_WORD, " ");
+  // "Sexta-feira 07/08/26": a data explícita faz parte do marcador de dia.
+  remaining = remaining.replace(EXPLICIT_DATE, " ");
   remaining = remaining.replace(/[-–—\s]+/g, "");
   return remaining.length <= 3;
 }
@@ -211,7 +232,9 @@ export function parseConversation(text: string, today: Date = new Date()): Parse
   }
 
   for (const raw of lines) {
-    const line = raw.trim();
+    // Normaliza todas as variantes de traço para "-" antes de reconhecer os
+    // formatos (fotos/OCR trazem − ‑ ‒ etc. no lugar do hífen).
+    const line = raw.trim().replace(DASH_VARIANTS, "-");
     if (!line) continue;
 
     const headerMatch = line.match(HEADER_LINE);
