@@ -63,7 +63,10 @@ export function computeFaturamento(
   const diarias = Math.max(0, diariasOverride ?? diariasDetectadas);
   const diariasValor = round(diarias * rate);
 
-  const turnos = [...byPeriod.entries()].map(([p, dias]) => `${p} × ${dias.size}`);
+  // "Noite × 3"; sem turno escrito na conversa vira "Dia × 3".
+  const turnos = [...byPeriod.entries()].map(
+    ([p, dias]) => `${p === "—" ? "Dia" : p} × ${dias.size}`,
+  );
 
   return {
     entregas: rows.length,

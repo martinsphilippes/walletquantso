@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { computeFaturamento } from "./faturamento";
-import type { ParsedRow } from "./parser";
+import { parseConversation, type ParsedRow } from "./parser";
 import type { Client } from "@/types";
 
 function client(p: Partial<Client>): Client {
@@ -53,6 +53,69 @@ describe("computeFaturamento", () => {
       row({ dia: "01/08/2026", periodo: "Noite" }),
     ];
     expect(computeFaturamento(c, rows).diariasDetectadas).toBe(2);
+  });
+
+  it("conversa real do Th: 23 entregas em 3 dias = 3 diárias", () => {
+    // Reconstrução das mensagens reais (Domingo, Sexta-feira 07/08/26 e
+    // Sábado) como o OCR as entrega, com horas e divisor de dia do WhatsApp.
+    const TEXT = `~Th +55 71 98387-9497
+Domingo
+
+* João - Vitória
+* Maria - Pituba
+* Luis - Cardeal da Silva
+* Márcia - Garcia
+« Victor - Ondina
+* Plinio - Horto florestal
+« Ligia - Rio Vermelho
+* Liliane - Ondina
+* Rubia - Rio vermelho
+07:38
+
+~Th +55 71 98387-9497
+Sexta-feira 07/08/26
+
+* Paulo - Pituba
+* Higor - Federação
+* Fabio - Acupe de Brotas
+* Lucy - Costa Azul
+23:31
+
+sábado
+
+~Th +55 71 98387-9497
+Sábado
+
+* Ines - Waldemar falcão
+* Helida - Federação
+* Raphael - Rio vermelho
+* Márcia - Rio vermelho
+* Dora - Costa Azul
+* Guilherme - Rio vermelho
+* Amanda -  Cardeal da Silva
+* Regina - Rio vermelho
+* Carlos - Vitória
+* Roberta - Rio vermelho
+23:45
+`;
+    const parsed = parseConversation(TEXT, new Date(2026, 7, 10));
+    expect(parsed.rows).toHaveLength(23);
+
+    const zones = [
+      "Vitória", "Pituba", "Cardeal da Silva", "Garcia", "Ondina",
+      "Horto florestal", "Rio Vermelho", "Federação", "Acupe de Brotas",
+      "Costa Azul", "Waldemar falcão",
+    ].map((name, i) => ({ id: `z${i}`, name, price: 5 }));
+    const th = client({ name: "Pizzaria", dailyRate: 50, zones });
+
+    const f = computeFaturamento(th, parsed.rows);
+    expect(f.entregas).toBe(23);
+    expect(f.entregasValor).toBe(115); // 23 × 5
+    expect(f.semPreco).toEqual([]);
+    expect(f.diariasDetectadas).toBe(3); // Domingo, Sexta 07/08, Sábado
+    expect(f.diariasValor).toBe(150);
+    expect(f.turnos).toEqual(["Dia × 3"]);
+    expect(f.total).toBe(265);
   });
 
   it("aceita override das diárias e ignora diária quando o cliente não cobra", () => {
