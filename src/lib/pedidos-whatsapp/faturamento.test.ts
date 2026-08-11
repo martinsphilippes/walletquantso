@@ -206,6 +206,36 @@ NOITE
     expect(f.diariasDetectadas).toBe(3); // Josias manhã + Deus é fiel manhã + Josias noite
   });
 
+  it("mensagem do Erick: 'Pedido NNNN - bairro' conta entrega; cancelado/editado vai pro bairro", () => {
+    const TEXT = `Domingo
+Erick Ifood Moto Mottu Lavajato Quantso
+Noite .
+
+Pedido 4583 - Pituba
+pedido 8955 - pituba
+pedido 0618 - Pituba cancelado
+pedido 7917 - Brotas
+Pedido 0554 - Pituba Editada 22:24
+`;
+    const parsed = parseConversation(TEXT, new Date(2026, 7, 10));
+    expect(parsed.rows).toHaveLength(5);
+    expect(parsed.shifts).toHaveLength(1); // diária do Erick, noite
+    expect(parsed.shifts[0].periodo).toBe("Noite");
+    expect(parsed.shifts[0].name).toContain("Erick");
+
+    const zc = client({
+      dailyRate: 70,
+      zones: [
+        { id: "z1", name: "Pituba", price: 10 },
+        { id: "z2", name: "Brotas", price: 12 },
+      ],
+    });
+    const f = computeFaturamento(zc, parsed.rows, undefined, parsed.shifts);
+    expect(f.semPreco).toEqual([]); // "Pituba cancelado"/"Pituba Editada" caem em Pituba
+    expect(f.entregasValor).toBe(4 * 10 + 12);
+    expect(f.diariasDetectadas).toBe(1);
+  });
+
   it("aceita override das diárias e ignora diária quando o cliente não cobra", () => {
     const rows = [row({}), row({ dia: "07/08/2026" })];
     expect(computeFaturamento(c, rows, 5).diariasValor).toBe(450);

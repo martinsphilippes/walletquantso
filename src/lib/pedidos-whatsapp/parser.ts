@@ -53,12 +53,13 @@ const EXPLICIT_DATE = /\b(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})\b/;
 const PERIOD_WORD = /(manh[aã]|tarde|noite|madrugada)/i;
 const HEADER_LINE = /^\*+\s*(.+?)\s*\*+$/;
 const LETTER = "A-Za-zÀ-ÖØ-öø-ÿ";
-// Tolerates a short OCR-noise token (misread icon/checkmark) before the digits, e.g. "D 2665- Candeal".
+// Tolerates a short OCR-noise token (misread icon/checkmark) before the digits, e.g. "D 2665- Candeal",
+// and the optional "Pedido" keyword ("Pedido 4583 - Pituba").
 // Separators aceitos após a cotação: - : = . (o OCR troca o hífen à vontade)…
-const DATA_LINE = /^(?:\S{1,3}\s+)?(\d{2,6})\s*[-:=.]\s*(.+)$/;
+const DATA_LINE = /^(?:\S{1,3}\s+)?(?:pedidos?\s+)?(\d{2,6})\s*[-:=.]\s*(.+)$/i;
 // …ou apenas espaço, exigindo cotação de 3+ dígitos ("0963 Pituba") para não
 // engolir frases que começam com número pequeno ("24 linhas…").
-const DATA_LINE_SPACED = /^(?:\S{1,3}\s+)?(\d{3,6})\s+(.+)$/;
+const DATA_LINE_SPACED = /^(?:\S{1,3}\s+)?(?:pedidos?\s+)?(\d{3,6})\s+(.+)$/i;
 const HAS_LETTER = new RegExp("[A-Za-zÀ-ÖØ-öø-ÿ]");
 const NAME_LINE = new RegExp(
   "^[^" + LETTER + "]*([" + LETTER + "][" + LETTER + "'.]*(?:\\s+[" + LETTER + "][" + LETTER + "'.]*)*)\\s*[-–—]\\s*(.+)$",
@@ -66,9 +67,10 @@ const NAME_LINE = new RegExp(
 const SEM_NOTA_LINE = /^(?:\S{1,3}\s+)?(?:pedido\s+)?sem\s+notar?\s*[:\-]\s*(.+)$/i;
 const PHONE_PATTERN = /\+?\d[\d\s-]{8,14}\d/;
 // Linha só com um nome (remetente): primeira palavra capitalizada; as demais
-// podem ser minúsculas ("Deus é fiel Quantso").
+// podem ser minúsculas ("Deus é fiel Quantso"). Aceita nomes de aparelho
+// longos ("Erick Ifood Moto Mottu Lavajato Quantso").
 const NAME_ONLY_LINE = new RegExp(
-  "^[A-ZÀ-Ö][" + LETTER + "'.]*(?:\\s+[" + LETTER + "][" + LETTER + "'.]*){1,4}$",
+  "^[A-ZÀ-Ö][" + LETTER + "'.]*(?:\\s+[" + LETTER + "][" + LETTER + "'.]*){1,6}$",
 );
 const TRAILING_NOISE = /\s*[[\]()]*\s*\d{1,2}[:.]\d{2}\s*[»>]?\s*[A-Za-z]?\s*$/;
 
