@@ -16,6 +16,7 @@ import { parseConversation, type ParsedRow } from "@/lib/pedidos-whatsapp/parser
 import { downloadWorkbook, previewToText } from "@/lib/pedidos-whatsapp/export";
 import { computeFaturamento, summarizeRows } from "@/lib/pedidos-whatsapp/faturamento";
 import { downloadCobranca } from "@/lib/pedidos-whatsapp/cobranca";
+import { downloadCobrancaPdf } from "@/lib/pedidos-whatsapp/cobranca-pdf";
 import { useAuth } from "@/services/auth-context";
 import { listClients, addClientBilling } from "@/services/clients";
 import { createBill } from "@/services/bills";
@@ -467,12 +468,23 @@ export function PedidosWhatsAppTool() {
                 type="button"
                 className="btn-secondary"
                 disabled={faturamento.total <= 0}
-                title="Baixa a planilha de prestação de contas: entregas, motoboys/diárias, totais, período e tabela de preços."
+                title="PDF bonito para enviar ao cliente: resumo no topo, entregas, motoboys/diárias, tabela de preços e marca d'água Quantso."
+                onClick={() =>
+                  downloadCobrancaPdf(selectedClient, liveRows, liveParsed.shifts, faturamento)
+                }
+              >
+                📄 Cobrança em PDF
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={faturamento.total <= 0}
+                title="Planilha editável com os mesmos dados."
                 onClick={() =>
                   downloadCobranca(selectedClient, liveRows, liveParsed.shifts, faturamento)
                 }
               >
-                📄 Documento de cobrança (Excel)
+                📊 Cobrança em Excel
               </button>
               {billMsg && (
                 <span className={`badge ${billMsg.startsWith("✅") ? "ok" : "warn"}`}>{billMsg}</span>

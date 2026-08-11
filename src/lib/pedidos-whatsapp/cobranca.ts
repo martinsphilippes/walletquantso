@@ -45,6 +45,13 @@ export function buildCobrancaAoa(
   aoa.push([`Gerado em: ${geradoEm}`]);
   aoa.push([]);
 
+  // ── Resumo primeiro: quem paga vê logo o que importa ─────────────────────
+  aoa.push(["RESUMO"]);
+  aoa.push(["Diárias", fat.diarias, "", "", fat.diariasValor]);
+  aoa.push(["Entregas", fat.entregas, "", "", fat.entregasValor]);
+  aoa.push(["TOTAL A PAGAR", "", "", "", fat.total]);
+  aoa.push([]);
+
   // ── Entregas, em ordem cronológica ────────────────────────────────────────
   aoa.push(["ENTREGAS"]);
   aoa.push(["Cotação", "Bairro", "Dia", "Turno", "Valor (R$)"]);
@@ -82,10 +89,6 @@ export function buildCobrancaAoa(
     aoa.push([`Quantidade ajustada manualmente para ${fat.diarias} diária(s).`]);
   }
   aoa.push(["Total de diárias", fat.diarias, "", "", fat.diariasValor]);
-  aoa.push([]);
-
-  // ── Total ────────────────────────────────────────────────────────────────
-  aoa.push(["TOTAL A PAGAR (entregas + diárias)", "", "", "", fat.total]);
   aoa.push([]);
 
   // ── Tabela de preços para conferência ────────────────────────────────────

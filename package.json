@@ -20,6 +20,8 @@
   "dependencies": {
     "firebase": "^12.16.0",
     "firebase-admin": "^14.2.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "next": "^16.2.12",
     "papaparse": "^5.5.4",
     "react": "^19.2.8",
