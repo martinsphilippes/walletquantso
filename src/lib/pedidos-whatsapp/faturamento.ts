@@ -62,6 +62,9 @@ export interface FaturamentoResult {
   /** Diárias consideradas (override do usuário ou as detectadas). */
   diarias: number;
   diariasValor: number;
+  /** Percentual sobre faturamento entregue (clientes com revenuePercent). */
+  revenueBase: number | null;
+  revenueValor: number;
   total: number;
 }
 
@@ -119,6 +122,7 @@ export function computeFaturamento(
   rows: ParsedRow[],
   diariasOverride?: number,
   declaredShifts?: ShiftRow[],
+  revenue?: number | null,
 ): FaturamentoResult {
   // Entregas: preço pela tabela de bairros, com casamento tolerante.
   const zones = (client.zones ?? [])
@@ -170,6 +174,12 @@ export function computeFaturamento(
   const diarias = Math.max(0, diariasOverride ?? diariasDetectadas);
   const diariasValor = round(diarias * rate);
 
+  // Percentual sobre o faturamento entregue (ex.: fábrica que paga 12%).
+  const pct = client.revenuePercent ?? 0;
+  const base = revenue ?? 0;
+  const revenueValor = pct > 0 && base > 0 ? round((base * pct) / 100) : 0;
+  const revenueBase = pct > 0 && base > 0 ? base : null;
+
   return {
     entregas: rows.length,
     entregasValor: round(entregasValor),
@@ -180,6 +190,8 @@ export function computeFaturamento(
     turnos,
     diarias,
     diariasValor,
-    total: round(entregasValor + diariasValor),
+    revenueBase,
+    revenueValor,
+    total: round(entregasValor + diariasValor + revenueValor),
   };
 }

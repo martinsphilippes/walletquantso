@@ -96,16 +96,44 @@ export async function downloadCobrancaPdf(
   const cardY = 150;
   const cardH = 66;
   const gap = 12;
-  const cardW = (W - 2 * M - 2 * gap) / 3;
 
-  const card = (
-    x: number,
-    label: string,
-    value: string,
-    sub: string,
-    filled: boolean,
-  ) => {
-    if (filled) {
+  interface CardSpec {
+    label: string;
+    value: string;
+    sub: string;
+    filled: boolean;
+  }
+  const cards: CardSpec[] = [];
+  if ((client.dailyRate ?? 0) > 0 || fat.diariasValor > 0) {
+    cards.push({
+      label: "Diárias",
+      value: brl(fat.diariasValor),
+      sub: `${fat.diarias} diária(s)`,
+      filled: false,
+    });
+  }
+  if ((client.zones?.length ?? 0) > 0 || fat.entregas > 0) {
+    cards.push({
+      label: "Entregas",
+      value: brl(fat.entregasValor),
+      sub: `${fat.entregas} entrega(s)`,
+      filled: false,
+    });
+  }
+  if (fat.revenueValor > 0) {
+    cards.push({
+      label: "% do faturamento",
+      value: brl(fat.revenueValor),
+      sub: `${String(client.revenuePercent).replace(".", ",")}% de ${brl(fat.revenueBase ?? 0)}`,
+      filled: false,
+    });
+  }
+  cards.push({ label: "Total a pagar", value: brl(fat.total), sub: "soma de tudo", filled: true });
+
+  const cardW = (W - 2 * M - (cards.length - 1) * gap) / cards.length;
+
+  const card = (x: number, c: CardSpec) => {
+    if (c.filled) {
       doc.setFillColor(...ink);
       doc.roundedRect(x, cardY, cardW, cardH, 6, 6, "F");
     } else {
@@ -118,32 +146,18 @@ export async function downloadCobrancaPdf(
     const white: [number, number, number] = [255, 255, 255];
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(...(filled ? muted : gray));
-    doc.text(label.toUpperCase(), x + 12, cardY + 18);
-    doc.setFontSize(15);
-    doc.setTextColor(...(filled ? white : ink));
-    doc.text(value, x + 12, cardY + 40);
-    doc.setFontSize(8.5);
+    doc.setTextColor(...(c.filled ? muted : gray));
+    doc.text(c.label.toUpperCase(), x + 12, cardY + 18);
+    doc.setFontSize(cards.length > 3 ? 13 : 15);
+    doc.setTextColor(...(c.filled ? white : ink));
+    doc.text(c.value, x + 12, cardY + 40);
+    doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
-    doc.setTextColor(...(filled ? muted : gray));
-    doc.text(sub, x + 12, cardY + 55);
+    doc.setTextColor(...(c.filled ? muted : gray));
+    doc.text(c.sub, x + 12, cardY + 55);
   };
 
-  card(M, "Diárias", brl(fat.diariasValor), `${fat.diarias} diária(s)`, false);
-  card(
-    M + cardW + gap,
-    "Entregas",
-    brl(fat.entregasValor),
-    `${fat.entregas} entrega(s)`,
-    false,
-  );
-  card(
-    M + 2 * (cardW + gap),
-    "Total a pagar",
-    brl(fat.total),
-    "diárias + entregas",
-    true,
-  );
+  cards.forEach((c, i) => card(M + i * (cardW + gap), c));
 
   // ── Tabelas ──────────────────────────────────────────────────────────────
   const tableStyles = {

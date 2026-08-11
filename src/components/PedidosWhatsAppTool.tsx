@@ -21,6 +21,7 @@ import { useAuth } from "@/services/auth-context";
 import { listClients, addClientBilling } from "@/services/clients";
 import { createBill } from "@/services/bills";
 import { todayBr } from "@/lib/br/date";
+import { parseBrCurrency } from "@/lib/br/parse";
 import type { Client } from "@/types";
 
 const brl = (n: number) =>
@@ -103,6 +104,9 @@ export function PedidosWhatsAppTool() {
   // O faturamento é calculado SEMPRE sobre o texto atual da caixa (parse ao
   // vivo), nunca sobre uma conversão antiga — senão editar/extrair um texto
   // novo sem apertar "Converter" deixaria o cálculo preso em linhas velhas.
+  // Faturamento entregue (clientes que pagam percentual, ex.: Qpaozinho).
+  const [revenueStr, setRevenueStr] = useState("");
+
   const liveParsed = useMemo(() => {
     if (!selectedClient || !text.trim())
       return { rows: [], shifts: [], skipped: [] as string[] };
@@ -111,15 +115,22 @@ export function PedidosWhatsAppTool() {
   }, [selectedClient, text]);
   const liveRows = liveParsed.rows;
 
-  const faturamento = useMemo(() => {
-    if (!selectedClient || (liveRows.length === 0 && liveParsed.shifts.length === 0)) return null;
-    const override = diariasStr.trim() === "" ? undefined : parseInt(diariasStr, 10) || 0;
-    return computeFaturamento(selectedClient, liveRows, override, liveParsed.shifts);
-  }, [selectedClient, liveRows, liveParsed.shifts, diariasStr]);
+  const clientHasPercent = (selectedClient?.revenuePercent ?? 0) > 0;
 
-  // Trocar de cliente ou mudar o texto zera o ajuste manual de diárias.
+  const faturamento = useMemo(() => {
+    if (!selectedClient) return null;
+    // Cliente de percentual: o painel abre mesmo sem conversa reconhecida,
+    // para digitar o faturamento e gerar o título por aqui.
+    if (liveRows.length === 0 && liveParsed.shifts.length === 0 && !clientHasPercent) return null;
+    const override = diariasStr.trim() === "" ? undefined : parseInt(diariasStr, 10) || 0;
+    const revenue = revenueStr.trim() === "" ? null : parseBrCurrency(revenueStr);
+    return computeFaturamento(selectedClient, liveRows, override, liveParsed.shifts, revenue);
+  }, [selectedClient, liveRows, liveParsed.shifts, diariasStr, revenueStr, clientHasPercent]);
+
+  // Trocar de cliente ou mudar o texto zera os ajustes manuais.
   useEffect(() => {
     setDiariasStr("");
+    setRevenueStr("");
     setBillMsg("");
   }, [clientId, text]);
 
@@ -128,9 +139,15 @@ export function PedidosWhatsAppTool() {
     setGenerating(true);
     setBillMsg("");
     try {
+      const pctLabel = String(selectedClient.revenuePercent ?? 0).replace(".", ",");
       const parts: string[] = [];
       if (faturamento.diarias > 0) parts.push(`${faturamento.diarias} diária(s)`);
-      parts.push(`${faturamento.entregas} entrega(s)`);
+      if (faturamento.entregas > 0 || faturamento.revenueValor === 0) {
+        parts.push(`${faturamento.entregas} entrega(s)`);
+      }
+      if (faturamento.revenueValor > 0) {
+        parts.push(`${pctLabel}% de ${brl(faturamento.revenueBase ?? 0)}`);
+      }
       const billId = await createBill({
         ownerId: user.uid,
         kind: "receivable",
@@ -147,6 +164,9 @@ export function PedidosWhatsAppTool() {
           `Pedidos WhatsApp: ${faturamento.entregas} entrega(s) ${brl(faturamento.entregasValor)}` +
           (faturamento.diarias > 0
             ? ` + ${faturamento.diarias} diária(s) ${brl(faturamento.diariasValor)} (turnos: ${faturamento.turnos.join(", ")})`
+            : "") +
+          (faturamento.revenueValor > 0
+            ? ` + ${pctLabel}% sobre ${brl(faturamento.revenueBase ?? 0)} = ${brl(faturamento.revenueValor)}`
             : ""),
         payments: [],
         createdAt: Date.now(),
@@ -163,12 +183,17 @@ export function PedidosWhatsAppTool() {
         diariasValor: faturamento.diariasValor,
         entregas: faturamento.entregas,
         entregasValor: faturamento.entregasValor,
-        revenueBase: null,
-        revenueValor: null,
+        revenueBase: faturamento.revenueBase,
+        revenueValor: faturamento.revenueValor > 0 ? faturamento.revenueValor : null,
         total: faturamento.total,
         details:
           (faturamento.diarias > 0 ? `Diárias: ${faturamento.turnos.join(", ")}. ` : "") +
-          `Entregas: ${s.porBairro.map((x) => `${x.qty}x ${x.bairro}`).join(", ")}.`,
+          (faturamento.entregas > 0
+            ? `Entregas: ${s.porBairro.map((x) => `${x.qty}x ${x.bairro}`).join(", ")}. `
+            : "") +
+          (faturamento.revenueValor > 0
+            ? `Faturamento: ${pctLabel}% de ${brl(faturamento.revenueBase ?? 0)} = ${brl(faturamento.revenueValor)}.`
+            : ""),
         billId,
       });
       setBillMsg(
@@ -426,13 +451,45 @@ export function PedidosWhatsAppTool() {
                 </span>
               </div>
             )}
-            <div>
-              Entregas: <strong>{faturamento.entregas}</strong> ={" "}
-              <strong>{brl(faturamento.entregasValor)}</strong>{" "}
-              <span className="muted" style={{ fontSize: "0.82rem" }}>
-                (pela tabela de bairros)
-              </span>
-            </div>
+            {(faturamento.entregas > 0 || !clientHasPercent) && (
+              <div>
+                Entregas: <strong>{faturamento.entregas}</strong> ={" "}
+                <strong>{brl(faturamento.entregasValor)}</strong>{" "}
+                <span className="muted" style={{ fontSize: "0.82rem" }}>
+                  (pela tabela de bairros)
+                </span>
+              </div>
+            )}
+            {clientHasPercent && (
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                <span>Faturamento entregue (R$):</span>
+                <input
+                  value={revenueStr}
+                  onChange={(e) => setRevenueStr(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="0,00"
+                  style={{
+                    width: 120,
+                    textAlign: "right",
+                    padding: "0.3rem 0.4rem",
+                    borderRadius: 6,
+                    border: "1px solid var(--border)",
+                    background: "var(--bg)",
+                    color: "var(--text)",
+                    font: "inherit",
+                  }}
+                />
+                <span>
+                  × {String(selectedClient.revenuePercent).replace(".", ",")}% ={" "}
+                  <strong>{brl(faturamento.revenueValor)}</strong>
+                </span>
+                {revenueStr.trim() === "" && (
+                  <span className="muted" style={{ fontSize: "0.82rem" }}>
+                    (digite o total realizado para calcular a porcentagem)
+                  </span>
+                )}
+              </div>
+            )}
             {faturamento.semPreco.length > 0 && (
               <div className="badge warn" style={{ alignSelf: "flex-start" }}>
                 ⚠ {faturamento.semPreco.reduce((s, x) => s + x.count, 0)} entrega(s) sem preço na
@@ -468,7 +525,7 @@ export function PedidosWhatsAppTool() {
               </div>
             )}
             <div style={{ fontSize: "1.15rem" }}>
-              Total (diárias + entregas): <strong style={{ color: "var(--ok)" }}>{brl(faturamento.total)}</strong>
+              Total a cobrar: <strong style={{ color: "var(--ok)" }}>{brl(faturamento.total)}</strong>
             </div>
             <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
               <span>Data do título:</span>

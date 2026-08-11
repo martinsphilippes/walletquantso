@@ -47,6 +47,35 @@ describe("computeFaturamento", () => {
     expect(f.total).toBe(270 + f.entregasValor);
   });
 
+  it("cliente de percentual: calcula a fatia sobre o faturamento informado", () => {
+    // Qpaozinho paga 12% do que faturou; sem conversa nenhuma, digitar o
+    // total realizado já gera o valor a cobrar.
+    const qp = client({ revenuePercent: 12 });
+    const f = computeFaturamento(qp, [], undefined, undefined, 2500);
+    expect(f.revenueBase).toBe(2500);
+    expect(f.revenueValor).toBe(300);
+    expect(f.total).toBe(300);
+  });
+
+  it("cliente de percentual sem faturamento digitado não soma nada", () => {
+    const qp = client({ revenuePercent: 12 });
+    const f = computeFaturamento(qp, [], undefined, undefined, null);
+    expect(f.revenueBase).toBeNull();
+    expect(f.revenueValor).toBe(0);
+    expect(f.total).toBe(0);
+  });
+
+  it("percentual soma com diárias e entregas quando o cliente tem os dois", () => {
+    const misto = client({
+      dailyRate: 90,
+      revenuePercent: 10,
+      zones: [{ id: "z1", name: "Pituba", price: 10 }],
+    });
+    const f = computeFaturamento(misto, [row({ bairro: "Pituba", periodo: "Noite" })], undefined, undefined, 1000);
+    expect(f.revenueValor).toBe(100);
+    expect(f.total).toBe(10 + 90 + 100);
+  });
+
   it("mesmo dia com dois turnos = duas diárias", () => {
     const rows = [
       row({ dia: "01/08/2026", periodo: "Manhã" }),

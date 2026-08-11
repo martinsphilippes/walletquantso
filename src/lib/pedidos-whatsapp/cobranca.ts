@@ -49,6 +49,15 @@ export function buildCobrancaAoa(
   aoa.push(["RESUMO"]);
   aoa.push(["Diárias", fat.diarias, "", "", fat.diariasValor]);
   aoa.push(["Entregas", fat.entregas, "", "", fat.entregasValor]);
+  if (fat.revenueValor > 0) {
+    aoa.push([
+      `% do faturamento (${String(client.revenuePercent).replace(".", ",")}% sobre ${fat.revenueBase})`,
+      "",
+      "",
+      "",
+      fat.revenueValor,
+    ]);
+  }
   aoa.push(["TOTAL A PAGAR", "", "", "", fat.total]);
   aoa.push([]);
 
