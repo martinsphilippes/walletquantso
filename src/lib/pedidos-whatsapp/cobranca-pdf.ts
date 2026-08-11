@@ -121,10 +121,14 @@ export async function downloadCobrancaPdf(
     });
   }
   if (fat.revenueValor > 0) {
+    const nLojas =
+      fat.revenueParts && fat.revenueParts.length > 1
+        ? ` · ${fat.revenueParts.length} lojas`
+        : "";
     cards.push({
       label: "% do faturamento",
       value: brl(fat.revenueValor),
-      sub: `${String(client.revenuePercent).replace(".", ",")}% de ${brl(fat.revenueBase ?? 0)}`,
+      sub: `${String(client.revenuePercent).replace(".", ",")}% de ${brl(fat.revenueBase ?? 0)}${nLojas}`,
       filled: false,
     });
   }
@@ -186,82 +190,107 @@ export async function downloadCobrancaPdf(
     return y + 8;
   };
 
-  let y = section("ENTREGAS", cardY + cardH + 34);
-  const ordered = [...rows].sort((a, b) =>
-    dateKey(a.dia || "99/99/9999").localeCompare(dateKey(b.dia || "99/99/9999")),
-  );
-  autoTable(doc, {
-    ...tableStyles,
-    startY: y,
-    head: [["Cotação", "Bairro", "Dia", "Turno", "Valor"]],
-    body: ordered.map((r) => {
-      const price = r.bairro ? zonePriceFor(client, r.bairro) : null;
-      return [
-        r.cotacao,
-        r.bairro,
-        r.dia || "—",
-        r.periodo === "—" ? "" : r.periodo,
-        price != null ? brl(price) : "sem preço",
-      ];
-    }),
-    foot: [[`Total: ${fat.entregas} entrega(s)`, "", "", "", brl(fat.entregasValor)]],
-    columnStyles: { 4: { halign: "right" } },
-  });
+  let y = cardY + cardH + 34;
+  const afterTable = () => {
+    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 28;
+    if (y > H - 160) {
+      doc.addPage();
+      y = 70;
+    }
+  };
 
-  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 28;
-  if (y > H - 140) {
-    doc.addPage();
-    y = 70;
+  if (rows.length > 0) {
+    y = section("ENTREGAS", y);
+    const ordered = [...rows].sort((a, b) =>
+      dateKey(a.dia || "99/99/9999").localeCompare(dateKey(b.dia || "99/99/9999")),
+    );
+    autoTable(doc, {
+      ...tableStyles,
+      startY: y,
+      head: [["Cotação", "Bairro", "Dia", "Turno", "Valor"]],
+      body: ordered.map((r) => {
+        const price = r.bairro ? zonePriceFor(client, r.bairro) : null;
+        return [
+          r.cotacao,
+          r.bairro,
+          r.dia || "—",
+          r.periodo === "—" ? "" : r.periodo,
+          price != null ? brl(price) : "sem preço",
+        ];
+      }),
+      foot: [[`Total: ${fat.entregas} entrega(s)`, "", "", "", brl(fat.entregasValor)]],
+      columnStyles: { 4: { halign: "right" } },
+    });
+    afterTable();
   }
-  y = section("DIÁRIAS (MOTOBOYS)", y);
+
   const declared = dedupeShifts(shifts).sort((a, b) =>
     dateKey(a.dia || "99/99/9999").localeCompare(dateKey(b.dia || "99/99/9999")),
   );
-  const diariasBody =
-    declared.length > 0
-      ? declared.map((sh) => [
-          sh.name || "—",
-          sh.dia || "—",
-          sh.periodo,
-          brl(client.dailyRate ?? 0),
-        ])
-      : [[`Diárias consideradas: ${fat.turnos.join(", ") || fat.diarias}`, "", "", ""]];
-  const diariasFoot: string[][] = [
-    [`Total: ${fat.diarias} diária(s)`, "", "", brl(fat.diariasValor)],
-  ];
-  if (declared.length > 0 && fat.diarias !== declared.length) {
-    diariasBody.push([`Quantidade ajustada manualmente para ${fat.diarias}.`, "", "", ""]);
+  if (declared.length > 0 || fat.diarias > 0) {
+    y = section("DIÁRIAS (MOTOBOYS)", y);
+    const diariasBody =
+      declared.length > 0
+        ? declared.map((sh) => [
+            sh.name || "—",
+            sh.dia || "—",
+            sh.periodo,
+            brl(client.dailyRate ?? 0),
+          ])
+        : [[`Diárias consideradas: ${fat.turnos.join(", ") || fat.diarias}`, "", "", ""]];
+    const diariasFoot: string[][] = [
+      [`Total: ${fat.diarias} diária(s)`, "", "", brl(fat.diariasValor)],
+    ];
+    if (declared.length > 0 && fat.diarias !== declared.length) {
+      diariasBody.push([`Quantidade ajustada manualmente para ${fat.diarias}.`, "", "", ""]);
+    }
+    autoTable(doc, {
+      ...tableStyles,
+      startY: y,
+      head: [["Motoboy", "Dia", "Turno", "Valor"]],
+      body: diariasBody,
+      foot: diariasFoot,
+      columnStyles: { 3: { halign: "right" } },
+    });
+    afterTable();
   }
-  autoTable(doc, {
-    ...tableStyles,
-    startY: y,
-    head: [["Motoboy", "Dia", "Turno", "Valor"]],
-    body: diariasBody,
-    foot: diariasFoot,
-    columnStyles: { 3: { halign: "right" } },
-  });
 
-  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 28;
-  if (y > H - 160) {
-    doc.addPage();
-    y = 70;
+  // Faturamento dividido por loja/canal (base do percentual).
+  if (fat.revenueValor > 0 && fat.revenueParts && fat.revenueParts.length > 0) {
+    y = section("FATURAMENTO POR LOJA/CANAL", y);
+    const pctLabel = String(client.revenuePercent).replace(".", ",");
+    autoTable(doc, {
+      ...tableStyles,
+      startY: y,
+      head: [["Loja/Canal", "Faturamento"]],
+      body: fat.revenueParts.map((p) => [p.label, brl(p.value)]),
+      foot: [
+        [`Total × ${pctLabel}% = ${brl(fat.revenueValor)}`, brl(fat.revenueBase ?? 0)],
+      ],
+      columnStyles: { 1: { halign: "right" } },
+      tableWidth: (W - 2 * M) / 2,
+    });
+    afterTable();
   }
-  y = section("TABELA DE PREÇOS POR BAIRRO (para conferência)", y);
+
   const zones = [...(client.zones ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name, "pt-BR"),
   );
-  const priceBody: string[][] = zones.map((z) => [z.name, brl(z.price)]);
-  if ((client.dailyRate ?? 0) > 0) {
-    priceBody.push(["Diária (um motoboy por turno)", brl(client.dailyRate as number)]);
+  if (zones.length > 0 || (client.dailyRate ?? 0) > 0) {
+    y = section("TABELA DE PREÇOS POR BAIRRO (para conferência)", y);
+    const priceBody: string[][] = zones.map((z) => [z.name, brl(z.price)]);
+    if ((client.dailyRate ?? 0) > 0) {
+      priceBody.push(["Diária (um motoboy por turno)", brl(client.dailyRate as number)]);
+    }
+    autoTable(doc, {
+      ...tableStyles,
+      startY: y,
+      head: [["Bairro", "Valor"]],
+      body: priceBody,
+      columnStyles: { 1: { halign: "right" } },
+      tableWidth: (W - 2 * M) / 2,
+    });
   }
-  autoTable(doc, {
-    ...tableStyles,
-    startY: y,
-    head: [["Bairro", "Valor"]],
-    body: priceBody,
-    columnStyles: { 1: { halign: "right" } },
-    tableWidth: (W - 2 * M) / 2,
-  });
 
   // ── Marca d'água + rodapé em todas as páginas ────────────────────────────
   const pages = doc.getNumberOfPages();

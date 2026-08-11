@@ -57,6 +57,23 @@ describe("computeFaturamento", () => {
     expect(f.total).toBe(300);
   });
 
+  it("cliente de percentual: soma o faturamento de várias lojas/canais", () => {
+    // Qpaozinho fatura na loja própria e no iFood: o % vale sobre a soma.
+    const qp = client({ revenuePercent: 12 });
+    const f = computeFaturamento(qp, [], undefined, undefined, [
+      { label: "Loja própria", value: 2000 },
+      { label: "iFood", value: 1500 },
+      { label: "Loja 3", value: 0 }, // campo vazio não conta
+    ]);
+    expect(f.revenueBase).toBe(3500);
+    expect(f.revenueValor).toBe(420);
+    expect(f.revenueParts).toEqual([
+      { label: "Loja própria", value: 2000 },
+      { label: "iFood", value: 1500 },
+    ]);
+    expect(f.total).toBe(420);
+  });
+
   it("cliente de percentual sem faturamento digitado não soma nada", () => {
     const qp = client({ revenuePercent: 12 });
     const f = computeFaturamento(qp, [], undefined, undefined, null);

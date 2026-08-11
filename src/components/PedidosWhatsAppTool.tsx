@@ -27,6 +27,15 @@ import type { Client } from "@/types";
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+// Faturamento entregue por loja/canal (clientes de percentual): cada campo é
+// uma loja (loja própria, iFood, ...) e o % é aplicado sobre a soma de todas.
+interface RevenueField {
+  id: number;
+  label: string;
+  value: string;
+}
+const emptyRevenueField = (id: number): RevenueField => ({ id, label: "", value: "" });
+
 const EXAMPLE = `*MANHÃ*
 
 7143- Caminho das Árvores
@@ -104,8 +113,10 @@ export function PedidosWhatsAppTool() {
   // O faturamento é calculado SEMPRE sobre o texto atual da caixa (parse ao
   // vivo), nunca sobre uma conversão antiga — senão editar/extrair um texto
   // novo sem apertar "Converter" deixaria o cálculo preso em linhas velhas.
-  // Faturamento entregue (clientes que pagam percentual, ex.: Qpaozinho).
-  const [revenueStr, setRevenueStr] = useState("");
+  // Faturamento entregue (clientes que pagam percentual, ex.: Qpaozinho),
+  // podendo vir dividido por loja/canal.
+  const [revenueFields, setRevenueFields] = useState<RevenueField[]>([emptyRevenueField(1)]);
+  const revenueIdRef = useRef(2);
 
   const liveParsed = useMemo(() => {
     if (!selectedClient || !text.trim())
@@ -117,20 +128,32 @@ export function PedidosWhatsAppTool() {
 
   const clientHasPercent = (selectedClient?.revenuePercent ?? 0) > 0;
 
+  // Lojas com valor digitado (campos vazios/zerados não contam).
+  const revenueEntries = useMemo(
+    () =>
+      revenueFields
+        .map((f, i) => ({
+          label: f.label.trim() || `Loja ${i + 1}`,
+          value: parseBrCurrency(f.value) ?? 0,
+        }))
+        .filter((e) => e.value > 0),
+    [revenueFields],
+  );
+
   const faturamento = useMemo(() => {
     if (!selectedClient) return null;
     // Cliente de percentual: o painel abre mesmo sem conversa reconhecida,
     // para digitar o faturamento e gerar o título por aqui.
     if (liveRows.length === 0 && liveParsed.shifts.length === 0 && !clientHasPercent) return null;
     const override = diariasStr.trim() === "" ? undefined : parseInt(diariasStr, 10) || 0;
-    const revenue = revenueStr.trim() === "" ? null : parseBrCurrency(revenueStr);
+    const revenue = revenueEntries.length > 0 ? revenueEntries : null;
     return computeFaturamento(selectedClient, liveRows, override, liveParsed.shifts, revenue);
-  }, [selectedClient, liveRows, liveParsed.shifts, diariasStr, revenueStr, clientHasPercent]);
+  }, [selectedClient, liveRows, liveParsed.shifts, diariasStr, revenueEntries, clientHasPercent]);
 
   // Trocar de cliente ou mudar o texto zera os ajustes manuais.
   useEffect(() => {
     setDiariasStr("");
-    setRevenueStr("");
+    setRevenueFields([emptyRevenueField(1)]);
     setBillMsg("");
   }, [clientId, text]);
 
@@ -140,6 +163,10 @@ export function PedidosWhatsAppTool() {
     setBillMsg("");
     try {
       const pctLabel = String(selectedClient.revenuePercent ?? 0).replace(".", ",");
+      const lojas =
+        faturamento.revenueParts && faturamento.revenueParts.length > 1
+          ? ` (${faturamento.revenueParts.map((p) => `${p.label} ${brl(p.value)}`).join(" + ")})`
+          : "";
       const parts: string[] = [];
       if (faturamento.diarias > 0) parts.push(`${faturamento.diarias} diária(s)`);
       if (faturamento.entregas > 0 || faturamento.revenueValor === 0) {
@@ -166,7 +193,7 @@ export function PedidosWhatsAppTool() {
             ? ` + ${faturamento.diarias} diária(s) ${brl(faturamento.diariasValor)} (turnos: ${faturamento.turnos.join(", ")})`
             : "") +
           (faturamento.revenueValor > 0
-            ? ` + ${pctLabel}% sobre ${brl(faturamento.revenueBase ?? 0)} = ${brl(faturamento.revenueValor)}`
+            ? ` + ${pctLabel}% sobre ${brl(faturamento.revenueBase ?? 0)}${lojas} = ${brl(faturamento.revenueValor)}`
             : ""),
         payments: [],
         createdAt: Date.now(),
@@ -192,7 +219,7 @@ export function PedidosWhatsAppTool() {
             ? `Entregas: ${s.porBairro.map((x) => `${x.qty}x ${x.bairro}`).join(", ")}. `
             : "") +
           (faturamento.revenueValor > 0
-            ? `Faturamento: ${pctLabel}% de ${brl(faturamento.revenueBase ?? 0)} = ${brl(faturamento.revenueValor)}.`
+            ? `Faturamento: ${pctLabel}% de ${brl(faturamento.revenueBase ?? 0)}${lojas} = ${brl(faturamento.revenueValor)}.`
             : ""),
         billId,
       });
@@ -461,33 +488,91 @@ export function PedidosWhatsAppTool() {
               </div>
             )}
             {clientHasPercent && (
-              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-                <span>Faturamento entregue (R$):</span>
-                <input
-                  value={revenueStr}
-                  onChange={(e) => setRevenueStr(e.target.value)}
-                  inputMode="decimal"
-                  placeholder="0,00"
-                  style={{
-                    width: 120,
-                    textAlign: "right",
-                    padding: "0.3rem 0.4rem",
-                    borderRadius: 6,
-                    border: "1px solid var(--border)",
-                    background: "var(--bg)",
-                    color: "var(--text)",
-                    font: "inherit",
-                  }}
-                />
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
                 <span>
-                  × {String(selectedClient.revenuePercent).replace(".", ",")}% ={" "}
-                  <strong>{brl(faturamento.revenueValor)}</strong>
+                  Faturamento entregue (R$) — pode dividir por loja/canal; o{" "}
+                  {String(selectedClient.revenuePercent).replace(".", ",")}% é aplicado sobre a
+                  soma de tudo:
                 </span>
-                {revenueStr.trim() === "" && (
-                  <span className="muted" style={{ fontSize: "0.82rem" }}>
-                    (digite o total realizado para calcular a porcentagem)
-                  </span>
-                )}
+                {revenueFields.map((f, i) => (
+                  <div
+                    key={f.id}
+                    style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}
+                  >
+                    <input
+                      value={f.label}
+                      onChange={(e) =>
+                        setRevenueFields((fs) =>
+                          fs.map((x) => (x.id === f.id ? { ...x, label: e.target.value } : x)),
+                        )
+                      }
+                      placeholder={i === 0 ? "Loja própria" : i === 1 ? "iFood" : `Loja ${i + 1}`}
+                      style={{
+                        width: 160,
+                        padding: "0.3rem 0.4rem",
+                        borderRadius: 6,
+                        border: "1px solid var(--border)",
+                        background: "var(--bg)",
+                        color: "var(--text)",
+                        font: "inherit",
+                      }}
+                    />
+                    <input
+                      value={f.value}
+                      onChange={(e) =>
+                        setRevenueFields((fs) =>
+                          fs.map((x) => (x.id === f.id ? { ...x, value: e.target.value } : x)),
+                        )
+                      }
+                      inputMode="decimal"
+                      placeholder="0,00"
+                      style={{
+                        width: 120,
+                        textAlign: "right",
+                        padding: "0.3rem 0.4rem",
+                        borderRadius: 6,
+                        border: "1px solid var(--border)",
+                        background: "var(--bg)",
+                        color: "var(--text)",
+                        font: "inherit",
+                      }}
+                    />
+                    {revenueFields.length > 1 && (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        title="Remover esta loja"
+                        onClick={() =>
+                          setRevenueFields((fs) => fs.filter((x) => x.id !== f.id))
+                        }
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() =>
+                      setRevenueFields((fs) => [...fs, emptyRevenueField(revenueIdRef.current++)])
+                    }
+                  >
+                    + Adicionar loja/canal
+                  </button>
+                  {faturamento.revenueValor > 0 ? (
+                    <span>
+                      Soma: <strong>{brl(faturamento.revenueBase ?? 0)}</strong> ×{" "}
+                      {String(selectedClient.revenuePercent).replace(".", ",")}% ={" "}
+                      <strong>{brl(faturamento.revenueValor)}</strong>
+                    </span>
+                  ) : (
+                    <span className="muted" style={{ fontSize: "0.82rem" }}>
+                      (digite o faturamento de cada loja para calcular a porcentagem)
+                    </span>
+                  )}
+                </div>
               </div>
             )}
             {faturamento.semPreco.length > 0 && (

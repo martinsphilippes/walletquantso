@@ -48,6 +48,12 @@ function matchZone(
   return null;
 }
 
+/** Faturamento de uma loja/canal (ex.: "Loja própria", "iFood"). */
+export interface RevenueEntry {
+  label: string;
+  value: number;
+}
+
 export interface FaturamentoResult {
   /** Total de entregas (linhas convertidas). */
   entregas: number;
@@ -64,6 +70,8 @@ export interface FaturamentoResult {
   diariasValor: number;
   /** Percentual sobre faturamento entregue (clientes com revenuePercent). */
   revenueBase: number | null;
+  /** Divisão do faturamento por loja/canal, quando informado assim. */
+  revenueParts: RevenueEntry[] | null;
   revenueValor: number;
   total: number;
 }
@@ -122,7 +130,7 @@ export function computeFaturamento(
   rows: ParsedRow[],
   diariasOverride?: number,
   declaredShifts?: ShiftRow[],
-  revenue?: number | null,
+  revenue?: number | RevenueEntry[] | null,
 ): FaturamentoResult {
   // Entregas: preço pela tabela de bairros, com casamento tolerante.
   const zones = (client.zones ?? [])
@@ -175,10 +183,14 @@ export function computeFaturamento(
   const diariasValor = round(diarias * rate);
 
   // Percentual sobre o faturamento entregue (ex.: fábrica que paga 12%).
+  // O faturamento pode vir num valor único ou dividido por loja/canal
+  // (loja própria, iFood, ...): a soma de todas as lojas é a base do %.
   const pct = client.revenuePercent ?? 0;
-  const base = revenue ?? 0;
+  const parts = Array.isArray(revenue) ? revenue.filter((p) => p.value > 0) : null;
+  const base = parts ? round(parts.reduce((s, p) => s + p.value, 0)) : (revenue as number | null | undefined) ?? 0;
   const revenueValor = pct > 0 && base > 0 ? round((base * pct) / 100) : 0;
   const revenueBase = pct > 0 && base > 0 ? base : null;
+  const revenueParts = pct > 0 && base > 0 && parts && parts.length > 0 ? parts : null;
 
   return {
     entregas: rows.length,
@@ -191,6 +203,7 @@ export function computeFaturamento(
     diarias,
     diariasValor,
     revenueBase,
+    revenueParts,
     revenueValor,
     total: round(entregasValor + diariasValor + revenueValor),
   };

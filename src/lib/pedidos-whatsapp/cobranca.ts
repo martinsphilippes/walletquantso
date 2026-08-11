@@ -50,6 +50,12 @@ export function buildCobrancaAoa(
   aoa.push(["Diárias", fat.diarias, "", "", fat.diariasValor]);
   aoa.push(["Entregas", fat.entregas, "", "", fat.entregasValor]);
   if (fat.revenueValor > 0) {
+    if (fat.revenueParts && fat.revenueParts.length > 1) {
+      for (const p of fat.revenueParts) {
+        aoa.push([`Faturamento — ${p.label}`, "", "", "", p.value]);
+      }
+      aoa.push([`Faturamento total (soma das lojas)`, "", "", "", fat.revenueBase ?? 0]);
+    }
     aoa.push([
       `% do faturamento (${String(client.revenuePercent).replace(".", ",")}% sobre ${fat.revenueBase})`,
       "",
@@ -62,53 +68,59 @@ export function buildCobrancaAoa(
   aoa.push([]);
 
   // ── Entregas, em ordem cronológica ────────────────────────────────────────
-  aoa.push(["ENTREGAS"]);
-  aoa.push(["Cotação", "Bairro", "Dia", "Turno", "Valor (R$)"]);
-  const ordered = [...rows].sort((a, b) =>
-    dateKey(a.dia || "99/99/9999").localeCompare(dateKey(b.dia || "99/99/9999")),
-  );
-  for (const r of ordered) {
-    const price = r.bairro ? zonePriceFor(client, r.bairro) : null;
-    aoa.push([
-      r.cotacao,
-      r.bairro,
-      r.dia || "—",
-      r.periodo === "—" ? "" : r.periodo,
-      price ?? "sem preço",
-    ]);
-  }
-  aoa.push(["Total de entregas", fat.entregas, "", "", fat.entregasValor]);
-  aoa.push([]);
-
-  // ── Diárias / motoboys ───────────────────────────────────────────────────
-  aoa.push(["DIÁRIAS (MOTOBOYS)"]);
-  const declared = dedupeShifts(shifts);
-  if (declared.length > 0) {
-    aoa.push(["Motoboy", "Dia", "Turno", "", "Valor (R$)"]);
-    const orderedShifts = [...declared].sort((a, b) =>
+  if (rows.length > 0) {
+    aoa.push(["ENTREGAS"]);
+    aoa.push(["Cotação", "Bairro", "Dia", "Turno", "Valor (R$)"]);
+    const ordered = [...rows].sort((a, b) =>
       dateKey(a.dia || "99/99/9999").localeCompare(dateKey(b.dia || "99/99/9999")),
     );
-    for (const sh of orderedShifts) {
-      aoa.push([sh.name || "—", sh.dia || "—", sh.periodo, "", client.dailyRate ?? 0]);
+    for (const r of ordered) {
+      const price = r.bairro ? zonePriceFor(client, r.bairro) : null;
+      aoa.push([
+        r.cotacao,
+        r.bairro,
+        r.dia || "—",
+        r.periodo === "—" ? "" : r.periodo,
+        price ?? "sem preço",
+      ]);
     }
-  } else if (fat.diarias > 0) {
-    aoa.push([`Diárias consideradas: ${fat.turnos.join(", ")}`]);
+    aoa.push(["Total de entregas", fat.entregas, "", "", fat.entregasValor]);
+    aoa.push([]);
   }
-  if (declared.length > 0 && fat.diarias !== declared.length) {
-    aoa.push([`Quantidade ajustada manualmente para ${fat.diarias} diária(s).`]);
+
+  // ── Diárias / motoboys ───────────────────────────────────────────────────
+  const declared = dedupeShifts(shifts);
+  if (declared.length > 0 || fat.diarias > 0) {
+    aoa.push(["DIÁRIAS (MOTOBOYS)"]);
+    if (declared.length > 0) {
+      aoa.push(["Motoboy", "Dia", "Turno", "", "Valor (R$)"]);
+      const orderedShifts = [...declared].sort((a, b) =>
+        dateKey(a.dia || "99/99/9999").localeCompare(dateKey(b.dia || "99/99/9999")),
+      );
+      for (const sh of orderedShifts) {
+        aoa.push([sh.name || "—", sh.dia || "—", sh.periodo, "", client.dailyRate ?? 0]);
+      }
+    } else if (fat.diarias > 0) {
+      aoa.push([`Diárias consideradas: ${fat.turnos.join(", ")}`]);
+    }
+    if (declared.length > 0 && fat.diarias !== declared.length) {
+      aoa.push([`Quantidade ajustada manualmente para ${fat.diarias} diária(s).`]);
+    }
+    aoa.push(["Total de diárias", fat.diarias, "", "", fat.diariasValor]);
+    aoa.push([]);
   }
-  aoa.push(["Total de diárias", fat.diarias, "", "", fat.diariasValor]);
-  aoa.push([]);
 
   // ── Tabela de preços para conferência ────────────────────────────────────
-  aoa.push(["TABELA DE PREÇOS POR BAIRRO"]);
-  aoa.push(["Bairro", "", "", "", "Valor (R$)"]);
   const zones = [...(client.zones ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name, "pt-BR"),
   );
-  for (const z of zones) aoa.push([z.name, "", "", "", z.price]);
-  if ((client.dailyRate ?? 0) > 0) {
-    aoa.push(["Diária (um motoboy por turno)", "", "", "", client.dailyRate as number]);
+  if (zones.length > 0 || (client.dailyRate ?? 0) > 0) {
+    aoa.push(["TABELA DE PREÇOS POR BAIRRO"]);
+    aoa.push(["Bairro", "", "", "", "Valor (R$)"]);
+    for (const z of zones) aoa.push([z.name, "", "", "", z.price]);
+    if ((client.dailyRate ?? 0) > 0) {
+      aoa.push(["Diária (um motoboy por turno)", "", "", "", client.dailyRate as number]);
+    }
   }
 
   return aoa;
