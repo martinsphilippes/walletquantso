@@ -93,6 +93,27 @@ export function summarizeRows(rows: ParsedRow[]): RowsSummary {
   return { dias, period, porBairro };
 }
 
+/** Declarações de diária sem repetições (mesmo nome × turno × dia conta uma vez). */
+export function dedupeShifts(shifts: ShiftRow[]): ShiftRow[] {
+  const seen = new Set<string>();
+  const out: ShiftRow[] = [];
+  for (const s of shifts) {
+    const k = `${s.dia}|${norm(s.periodo)}|${norm(s.name)}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(s);
+  }
+  return out;
+}
+
+/** Preço de entrega de um bairro pela tabela do cliente (null = sem preço). */
+export function zonePriceFor(client: Client, bairro: string): number | null {
+  const zones = (client.zones ?? [])
+    .map((zone) => ({ zone, tokens: zoneTokens(zone.name) }))
+    .sort((a, b) => b.tokens.length - a.tokens.length);
+  return matchZone(bairro, zones)?.price ?? null;
+}
+
 export function computeFaturamento(
   client: Client,
   rows: ParsedRow[],

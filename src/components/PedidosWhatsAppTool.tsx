@@ -15,6 +15,7 @@ import { createWorker, type Worker } from "tesseract.js";
 import { parseConversation, type ParsedRow } from "@/lib/pedidos-whatsapp/parser";
 import { downloadWorkbook, previewToText } from "@/lib/pedidos-whatsapp/export";
 import { computeFaturamento, summarizeRows } from "@/lib/pedidos-whatsapp/faturamento";
+import { downloadCobranca } from "@/lib/pedidos-whatsapp/cobranca";
 import { useAuth } from "@/services/auth-context";
 import { listClients, addClientBilling } from "@/services/clients";
 import { createBill } from "@/services/bills";
@@ -461,6 +462,17 @@ export function PedidosWhatsAppTool() {
                 onClick={generateBillFromFaturamento}
               >
                 {generating ? "Gerando…" : "Gerar título a receber"}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={faturamento.total <= 0}
+                title="Baixa a planilha de prestação de contas: entregas, motoboys/diárias, totais, período e tabela de preços."
+                onClick={() =>
+                  downloadCobranca(selectedClient, liveRows, liveParsed.shifts, faturamento)
+                }
+              >
+                📄 Documento de cobrança (Excel)
               </button>
               {billMsg && (
                 <span className={`badge ${billMsg.startsWith("✅") ? "ok" : "warn"}`}>{billMsg}</span>
