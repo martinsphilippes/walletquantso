@@ -11,6 +11,7 @@
 // elsewhere in this app. Nothing is uploaded anywhere.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { createWorker, type Worker } from "tesseract.js";
 import { parseConversation, type ParsedRow } from "@/lib/pedidos-whatsapp/parser";
 import { downloadWorkbook, previewToText } from "@/lib/pedidos-whatsapp/export";
@@ -19,10 +20,11 @@ import { downloadCobranca } from "@/lib/pedidos-whatsapp/cobranca";
 import { downloadCobrancaPdf } from "@/lib/pedidos-whatsapp/cobranca-pdf";
 import { useAuth } from "@/services/auth-context";
 import { listClients, addClientBilling } from "@/services/clients";
+import { listCategories, listCostCenters } from "@/services/firestore";
 import { createBill } from "@/services/bills";
 import { todayBr } from "@/lib/br/date";
 import { parseBrCurrency } from "@/lib/br/parse";
-import type { Client } from "@/types";
+import type { Category, Client, CostCenter } from "@/types";
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -98,17 +100,46 @@ export function PedidosWhatsAppTool() {
   const safeDueDay = Math.min(dueDay, daysInMonth(dueYear, dueMonth));
   const dueDateIso = `${dueYear}-${String(dueMonth).padStart(2, "0")}-${String(safeDueDay).padStart(2, "0")}`;
 
+  // Categorias e centros de custo para validar a classificação do título:
+  // o título gerado tem que sair com o centro/categoria do cliente.
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
+
   useEffect(() => {
     if (!user) return;
     listClients(user.uid)
       .then(setClients)
       .catch(() => setClients([]));
+    listCategories(user.uid)
+      .then(setCategories)
+      .catch(() => setCategories([]));
+    listCostCenters(user.uid)
+      .then(setCostCenters)
+      .catch(() => setCostCenters([]));
   }, [user]);
 
   const selectedClient = useMemo(
     () => clients.find((c) => c.id === clientId) ?? null,
     [clients, clientId],
   );
+
+  // Classificação que o título vai carregar (precisa corresponder ao cliente).
+  const clientCategory = useMemo(
+    () => categories.find((c) => c.id === selectedClient?.categoryId) ?? null,
+    [categories, selectedClient],
+  );
+  const clientCostCenter = useMemo(
+    () => costCenters.find((cc) => cc.id === selectedClient?.costCenterId) ?? null,
+    [costCenters, selectedClient],
+  );
+  const classificacaoFaltas: string[] = [];
+  if (selectedClient) {
+    if (!clientCostCenter) classificacaoFaltas.push("o centro de custo");
+    if (!clientCategory) classificacaoFaltas.push("a categoria");
+    else if (clientCategory.kind !== "income")
+      classificacaoFaltas.push("uma categoria de RECEITA (a configurada não é de receita)");
+  }
+  const classificacaoOk = selectedClient != null && classificacaoFaltas.length === 0;
 
   // O faturamento é calculado SEMPRE sobre o texto atual da caixa (parse ao
   // vivo), nunca sobre uma conversão antiga — senão editar/extrair um texto
@@ -159,6 +190,12 @@ export function PedidosWhatsAppTool() {
 
   async function generateBillFromFaturamento() {
     if (!user || !selectedClient || !faturamento || faturamento.total <= 0) return;
+    if (!classificacaoOk) {
+      setBillMsg(
+        "❌ Configure o centro de custo e a categoria de receita do cliente na tela Clientes antes de gerar o título.",
+      );
+      return;
+    }
     setGenerating(true);
     setBillMsg("");
     try {
@@ -612,6 +649,35 @@ export function PedidosWhatsAppTool() {
             <div style={{ fontSize: "1.15rem" }}>
               Total a cobrar: <strong style={{ color: "var(--ok)" }}>{brl(faturamento.total)}</strong>
             </div>
+            {classificacaoOk ? (
+              <div className="muted" style={{ fontSize: "0.82rem" }}>
+                O título sai classificado como o cliente: Centro de custo{" "}
+                <strong>{clientCostCenter!.name}</strong> · Categoria{" "}
+                <strong>{clientCategory!.name}</strong>.
+              </div>
+            ) : (
+              <div
+                style={{
+                  border: "1px solid var(--warn)",
+                  borderRadius: 8,
+                  padding: "0.5rem 0.7rem",
+                  fontSize: "0.85rem",
+                }}
+              >
+                <div style={{ color: "var(--warn)", fontWeight: 600 }}>
+                  ⚠ Ainda não dá para gerar o título: falta configurar{" "}
+                  {classificacaoFaltas.join(" e ")} deste cliente.
+                </div>
+                <div style={{ marginTop: "0.3rem" }}>
+                  Se ainda não existirem, crie em{" "}
+                  <Link href="/centros-de-custo">Centros de custo</Link> e{" "}
+                  <Link href="/categories">Categorias</Link>; depois abra a tela{" "}
+                  <Link href="/clientes">Clientes</Link>, edite o cliente escolhendo o
+                  centro de custo e a categoria de receita, e volte aqui para gerar o
+                  título.
+                </div>
+              </div>
+            )}
             <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
               <span>Data do título:</span>
               <select value={safeDueDay} onChange={(e) => setDueDay(Number(e.target.value))}>
@@ -647,7 +713,12 @@ export function PedidosWhatsAppTool() {
               <button
                 type="button"
                 className="btn-primary"
-                disabled={generating || faturamento.total <= 0}
+                disabled={generating || faturamento.total <= 0 || !classificacaoOk}
+                title={
+                  classificacaoOk
+                    ? undefined
+                    : "Configure o centro de custo e a categoria do cliente na tela Clientes."
+                }
                 onClick={generateBillFromFaturamento}
               >
                 {generating ? "Gerando…" : "Gerar título a receber"}
