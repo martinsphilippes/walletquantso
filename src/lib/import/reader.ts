@@ -4,7 +4,6 @@
 // quote handling, good for Brazilian `;`-separated files); XLS/XLSX with
 // SheetJS. No data leaves the browser at this stage.
 
-import * as XLSX from "xlsx";
 import Papa from "papaparse";
 import type { RawRow } from "./engine";
 
@@ -52,6 +51,7 @@ async function readCsv(file: File): Promise<ReadResult> {
 
 async function readXlsx(file: File): Promise<ReadResult> {
   const buffer = await file.arrayBuffer();
+  const XLSX = await import("xlsx"); // sob demanda: só pesa ao ler o arquivo
   const wb = XLSX.read(buffer, { cellDates: true });
   const sheet = wb.Sheets[wb.SheetNames[0]];
   if (!sheet) return { headers: [], rows: [] };

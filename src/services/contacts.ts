@@ -15,9 +15,10 @@ import {
   where,
   writeBatch,
   type DocumentData,
-} from "firebase/firestore";
+} from "firebase/firestore/lite";
 import { db } from "./firebase";
 import { COLLECTIONS } from "./firestore";
+import { invalidateAllLists, invalidateLists } from "./list-cache";
 import type { Contact } from "@/types";
 
 const BATCH_LIMIT = 400;
@@ -25,17 +26,20 @@ const BATCH_LIMIT = 400;
 /** Create a contact. Returns its id. */
 export async function createContact(contact: Omit<Contact, "id">): Promise<string> {
   const ref = await addDoc(collection(db, COLLECTIONS.contacts), contact);
+  invalidateLists(COLLECTIONS.contacts);
   return ref.id;
 }
 
 /** Update mutable fields of a contact. */
-export function updateContact(id: string, patch: Partial<Contact>): Promise<void> {
-  return updateDoc(doc(db, COLLECTIONS.contacts, id), patch as DocumentData);
+export async function updateContact(id: string, patch: Partial<Contact>): Promise<void> {
+  await updateDoc(doc(db, COLLECTIONS.contacts, id), patch as DocumentData);
+  invalidateLists(COLLECTIONS.contacts);
 }
 
 /** Delete a contact. Callers should ensure it is not in use first. */
-export function removeContact(id: string): Promise<void> {
-  return deleteDoc(doc(db, COLLECTIONS.contacts, id));
+export async function removeContact(id: string): Promise<void> {
+  await deleteDoc(doc(db, COLLECTIONS.contacts, id));
+  invalidateLists(COLLECTIONS.contacts);
 }
 
 /**
@@ -75,6 +79,7 @@ export async function deleteContactDeep(
   }
 
   await deleteDoc(doc(db, COLLECTIONS.contacts, contactId));
+  invalidateAllLists(); // mexeu em contatos, transações e títulos de uma vez
   return { unassigned: txToClear.length + billToClear.length };
 }
 
@@ -107,5 +112,6 @@ export async function mergeContacts(
   }
 
   await deleteDoc(doc(db, COLLECTIONS.contacts, sourceId));
+  invalidateAllLists(); // mexeu em contatos e transações de uma vez
   return ids.length;
 }

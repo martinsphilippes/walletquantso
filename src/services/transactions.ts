@@ -4,9 +4,10 @@
 // Every create/update/delete appends an append-only audit entry so manual
 // changes are traceable alongside imports.
 
-import { addDoc, collection, deleteDoc, doc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, updateDoc } from "firebase/firestore/lite";
 import { db } from "./firebase";
 import { COLLECTIONS, appendAudit } from "./firestore";
+import { invalidateLists } from "./list-cache";
 import { dedupHash } from "@/lib/import/engine";
 import type { Bill, BillPayment, Transaction, TransactionType } from "@/types";
 
@@ -104,6 +105,7 @@ export async function createTransaction(
 ): Promise<string> {
   const now = Date.now();
   const ref = await addDoc(collection(db, COLLECTIONS.transactions), buildRecord(ownerId, input, now));
+  invalidateLists(COLLECTIONS.transactions);
   await appendAudit({
     ownerId,
     action: "manual_create",
@@ -128,6 +130,7 @@ export async function updateTransaction(
     ...patch,
     notes: input.notes?.trim() ?? null,
   });
+  invalidateLists(COLLECTIONS.transactions);
   await appendAudit({
     ownerId,
     action: "manual_update",
@@ -137,8 +140,9 @@ export async function updateTransaction(
 }
 
 /** Toggle the bank-reconciliation (cleared) flag on a transaction. */
-export function setReconciled(id: string, reconciled: boolean): Promise<void> {
-  return updateDoc(doc(db, COLLECTIONS.transactions, id), { reconciled });
+export async function setReconciled(id: string, reconciled: boolean): Promise<void> {
+  await updateDoc(doc(db, COLLECTIONS.transactions, id), { reconciled });
+  invalidateLists(COLLECTIONS.transactions);
 }
 
 /**
@@ -154,6 +158,7 @@ export async function bulkPatchTransactions(
   for (const id of ids) {
     await updateDoc(doc(db, COLLECTIONS.transactions, id), patch as Record<string, unknown>);
   }
+  invalidateLists(COLLECTIONS.transactions);
   await appendAudit({
     ownerId,
     action: "manual_update",
@@ -166,5 +171,6 @@ export async function bulkPatchTransactions(
 export async function removeTransaction(ownerId: string, id: string): Promise<void> {
   const now = Date.now();
   await deleteDoc(doc(db, COLLECTIONS.transactions, id));
+  invalidateLists(COLLECTIONS.transactions);
   await appendAudit({ ownerId, action: "manual_delete", details: { id }, at: now });
 }

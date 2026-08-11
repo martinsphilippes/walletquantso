@@ -12,7 +12,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { createWorker, type Worker } from "tesseract.js";
+// tesseract.js é importado sob demanda dentro da extração de imagens — não
+// entra no carregamento inicial da página.
+import type { Worker } from "tesseract.js";
 import { parseConversation, type ParsedRow } from "@/lib/pedidos-whatsapp/parser";
 import { downloadWorkbook, previewToText } from "@/lib/pedidos-whatsapp/export";
 import { computeFaturamento, summarizeRows } from "@/lib/pedidos-whatsapp/faturamento";
@@ -285,7 +287,7 @@ export function PedidosWhatsAppTool() {
       return;
     }
     setRows(result.rows);
-    downloadWorkbook(result.rows);
+    void downloadWorkbook(result.rows);
     let msg = `${result.rows.length} linha(s) convertida(s) e planilha baixada.`;
     if (result.skipped.length) {
       msg += ` ${result.skipped.length} linha(s) ignorada(s) por não seguir o formato esperado.`;
@@ -361,6 +363,7 @@ export function PedidosWhatsAppTool() {
           msg: "Carregando reconhecimento de texto (primeira vez pode demorar um pouco)...",
           type: undefined,
         });
+        const { createWorker } = await import("tesseract.js");
         worker = await createWorker("por", 1, {
           workerPath: "/tesseract/worker.min.js",
           corePath: "/tesseract",

@@ -7,7 +7,6 @@
 // conferência. O montador de células é puro (testável); o download usa o
 // xlsx já existente no projeto.
 
-import * as XLSX from "xlsx";
 import type { Client } from "@/types";
 import type { ParsedRow, ShiftRow } from "./parser";
 import {
@@ -140,13 +139,14 @@ export function cobrancaFilename(client: Client, now: Date = new Date()): string
   return `cobranca_${slug}_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.xlsx`;
 }
 
-/** Gera e baixa o .xlsx do documento de cobrança. */
-export function downloadCobranca(
+/** Gera e baixa o .xlsx do documento de cobrança (xlsx importado sob demanda). */
+export async function downloadCobranca(
   client: Client,
   rows: ParsedRow[],
   shifts: ShiftRow[],
   fat: FaturamentoResult,
-): void {
+): Promise<void> {
+  const XLSX = await import("xlsx");
   const ws = XLSX.utils.aoa_to_sheet(buildCobrancaAoa(client, rows, shifts, fat));
   ws["!cols"] = [{ wch: 34 }, { wch: 24 }, { wch: 14 }, { wch: 10 }, { wch: 12 }];
   const wb = XLSX.utils.book_new();

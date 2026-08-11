@@ -17,9 +17,10 @@ import {
   where,
   type DocumentData,
   type QueryDocumentSnapshot,
-} from "firebase/firestore";
+} from "firebase/firestore/lite";
 import { db } from "./firebase";
 import { COLLECTIONS } from "./firestore";
+import { cachedList, invalidateLists } from "./list-cache";
 import { buildBillPaymentTransaction } from "./transactions";
 import type { Bill, BillKind, BillPayment } from "@/types";
 
@@ -34,25 +35,32 @@ export async function listBills(ownerId: string, kind: BillKind): Promise<Bill[]
   // Filter by ownerId only (single-field, auto-provisioned index) and match the
   // `kind` in memory. Combining both equality filters in the query would need a
   // composite index to exist first, otherwise the payables/receivables screens
-  // fail to load with FAILED_PRECONDITION.
-  const q = query(collection(db, COLLECTIONS.bills), where("ownerId", "==", ownerId));
-  return mapDocs<Bill>(await getDocs(q)).filter((b) => b.kind === kind);
+  // fail to load with FAILED_PRECONDITION. The full fetch is cached, so
+  // payables and receivables share a single read.
+  const all = await cachedList(`bills|${ownerId}`, async () => {
+    const q = query(collection(db, COLLECTIONS.bills), where("ownerId", "==", ownerId));
+    return mapDocs<Bill>(await getDocs(q));
+  });
+  return all.filter((b) => b.kind === kind);
 }
 
 /** Create a bill. Returns its id. */
 export async function createBill(bill: Omit<Bill, "id">): Promise<string> {
   const ref = await addDoc(collection(db, COLLECTIONS.bills), bill);
+  invalidateLists(COLLECTIONS.bills);
   return ref.id;
 }
 
 /** Update mutable fields of a bill. */
-export function updateBill(id: string, patch: Partial<Bill>): Promise<void> {
-  return updateDoc(doc(db, COLLECTIONS.bills, id), patch as DocumentData);
+export async function updateBill(id: string, patch: Partial<Bill>): Promise<void> {
+  await updateDoc(doc(db, COLLECTIONS.bills, id), patch as DocumentData);
+  invalidateLists(COLLECTIONS.bills);
 }
 
 /** Delete a bill. */
-export function removeBill(id: string): Promise<void> {
-  return deleteDoc(doc(db, COLLECTIONS.bills, id));
+export async function removeBill(id: string): Promise<void> {
+  await deleteDoc(doc(db, COLLECTIONS.bills, id));
+  invalidateLists(COLLECTIONS.bills);
 }
 
 /**
@@ -68,6 +76,7 @@ export async function settleBillAtPaid(id: string): Promise<void> {
   const paid = (bill.payments ?? []).reduce((s, p) => s + (p.amount || 0), 0);
   if (paid <= 0) throw new Error("O título ainda não tem baixa para quitar.");
   await updateDoc(doc(db, COLLECTIONS.bills, id), { amount: Math.round(paid * 100) / 100 });
+  invalidateLists(COLLECTIONS.bills);
 }
 
 /**
@@ -107,6 +116,8 @@ export async function addPayment(
   } catch (err) {
     await deleteDoc(doc(db, COLLECTIONS.transactions, txRef.id)).catch(() => {});
     throw err;
+  } finally {
+    invalidateLists(COLLECTIONS.bills, COLLECTIONS.transactions);
   }
 }
 
@@ -125,6 +136,7 @@ export async function removePayment(id: string, paymentId: string): Promise<void
   }
   const payments = (bill.payments ?? []).filter((p) => p.id !== paymentId);
   await updateDoc(doc(db, COLLECTIONS.bills, id), { payments });
+  invalidateLists(COLLECTIONS.bills, COLLECTIONS.transactions);
 }
 
 /**
@@ -150,5 +162,6 @@ export async function backfillPaymentTransactions(bills: Bill[]): Promise<number
     }
     if (changed) await updateDoc(doc(db, COLLECTIONS.bills, b.id), { payments });
   }
+  if (created > 0) invalidateLists(COLLECTIONS.bills, COLLECTIONS.transactions);
   return created;
 }

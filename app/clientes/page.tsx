@@ -29,7 +29,6 @@ import type { ClientBillingRecord } from "@/types";
 import { createBill } from "@/services/bills";
 import { computeCharge, chargeDescription, type ChargeInput } from "@/lib/clients/billing";
 import { zonesFromMatrix } from "@/lib/clients/zones";
-import * as XLSX from "xlsx";
 import Papa from "papaparse";
 import { parseBrCurrency } from "@/lib/br/parse";
 import { DateParts } from "@/components/DateParts";
@@ -50,6 +49,7 @@ async function readMatrix(file: File): Promise<unknown[][]> {
     const parsed = Papa.parse<string[]>(text, { skipEmptyLines: "greedy", delimiter: "" });
     return parsed.data as unknown[][];
   }
+  const XLSX = await import("xlsx"); // sob demanda: só pesa ao importar planilha
   const buffer = await file.arrayBuffer();
   const wb = XLSX.read(buffer);
   const sheet = wb.Sheets[wb.SheetNames[0]];
