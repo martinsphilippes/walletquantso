@@ -73,6 +73,9 @@ const NAME_ONLY_LINE = new RegExp(
   "^[A-ZÀ-Ö][" + LETTER + "'.]*(?:\\s+[" + LETTER + "][" + LETTER + "'.]*){1,6}$",
 );
 const TRAILING_NOISE = /\s*[[\]()]*\s*\d{1,2}[:.]\d{2}\s*[»>]?\s*[A-Za-z]?\s*$/;
+// "Mensagem apagada" (e variantes) não é entrega nem diária: a linha inteira
+// é descartada em silêncio, sem nem aparecer entre as não reconhecidas.
+const DELETED_MESSAGE = /mensagem\s+apagada|apagou\s+es[st]a\s+mensagem/;
 
 // "feira" days: the stem alone ("quinta"), or the stem plus "feira" with any
 // amount of spaces and/or a hyphen between them ("quinta-feira", "quinta
@@ -258,8 +261,19 @@ function matchSenderLine(line: string): { phone: string; name: string } | null {
       return { phone, name };
     }
   }
-  if (NAME_ONLY_LINE.test(stripped)) return { phone: "", name: stripped };
+  // Sobras de OCR no fim ("Wiliam Quantso »") não impedem reconhecer o nome.
+  const nameCandidate = stripped.replace(/[^A-Za-zÀ-ÖØ-öø-ÿ.']+$/, "").trim();
+  if (NAME_ONLY_LINE.test(nameCandidate)) return { phone: "", name: nameCandidate };
   return null;
+}
+
+/** Mesmo entregador? Compara nomes normalizados (prefixo ou 1ª palavra igual). */
+function samePerson(a: string, b: string): boolean {
+  const na = normalizeAccents(a.toLowerCase()).trim();
+  const nb = normalizeAccents(b.toLowerCase()).trim();
+  if (!na || !nb) return false;
+  if (na === nb || na.startsWith(nb) || nb.startsWith(na)) return true;
+  return na.split(/\s+/)[0] === nb.split(/\s+/)[0];
 }
 
 export function parseConversation(text: string, today: Date = new Date()): ParseResult {
@@ -271,6 +285,9 @@ export function parseConversation(text: string, today: Date = new Date()): Parse
   const rows: ParsedRow[] = [];
   const shifts: ShiftRow[] = [];
   const skipped: string[] = [];
+  // Remetentes que postaram entregas em cada dia — quem entregou mas nunca
+  // escreveu o turno também fez uma diária (o turno só fica em branco).
+  const senderDeliveries = new Map<string, { name: string; dia: string }>();
 
   function pushRow(cotacao: string, bairro: string) {
     rows.push({
@@ -280,6 +297,12 @@ export function parseConversation(text: string, today: Date = new Date()): Parse
       telefone: currentPhone,
       dia: currentDate,
     });
+    if (currentSender) {
+      const k = normalizeAccents(currentSender.toLowerCase()) + "|" + currentDate;
+      if (!senderDeliveries.has(k)) {
+        senderDeliveries.set(k, { name: currentSender, dia: currentDate });
+      }
+    }
   }
 
   // Quem escreve "MANHÃ"/"NOITE" está declarando a própria diária: o marcador
@@ -294,6 +317,9 @@ export function parseConversation(text: string, today: Date = new Date()): Parse
     // formatos (fotos/OCR trazem − ‑ ‒ etc. no lugar do hífen).
     const line = raw.trim().replace(DASH_VARIANTS, "-");
     if (!line) continue;
+
+    // "Mensagem apagada" some por inteiro — não é entrega, diária nem dúvida.
+    if (DELETED_MESSAGE.test(normalizeAccents(line.toLowerCase()))) continue;
 
     const headerMatch = line.match(HEADER_LINE);
     if (headerMatch) {
@@ -355,6 +381,14 @@ export function parseConversation(text: string, today: Date = new Date()): Parse
     }
 
     skipped.push(raw);
+  }
+
+  // Diárias implícitas: remetente que postou entregas num dia sem declarar
+  // turno nenhum (nem cabeçalho MANHÃ/NOITE, nem "Nome - turno") trabalhou —
+  // conta uma diária naquele dia, com o turno em branco.
+  for (const { name, dia } of senderDeliveries.values()) {
+    const declared = shifts.some((s) => s.dia === dia && samePerson(s.name, name));
+    if (!declared) shifts.push({ name, periodo: "—", dia });
   }
 
   return { rows, shifts, skipped };

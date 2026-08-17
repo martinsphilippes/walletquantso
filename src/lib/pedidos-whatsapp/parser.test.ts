@@ -285,3 +285,64 @@ E 2783 - Pituba 55:03
     expect(rows[0].telefone).toBe("+55 71 99363-4285");
   });
 });
+
+describe("parseConversation — regras ensinadas na conversa da Gialla", () => {
+  const TODAY = new Date(2026, 7, 11); // terça, 11/08/2026
+
+  it("descarta 'Mensagem apagada' por inteiro (nem entrega, nem não-reconhecida)", () => {
+    const text = `Erick Quantso
+Sábado
+Noite
+O Mensagem apagada 92:05
+Você apagou esta mensagem
+4583- Pituba
+`;
+    const { rows, skipped } = parseConversation(text, TODAY);
+    expect(rows.length).toBe(1);
+    expect(skipped).toEqual([]);
+  });
+
+  it("reconhece remetente com sobra de OCR no fim ('Wiliam Quantso »')", () => {
+    const text = `Wiliam Quantso »
+Quinta feira
+1234- Pituba
+`;
+    const { rows, shifts, skipped } = parseConversation(text, TODAY);
+    expect(rows.length).toBe(1);
+    expect(skipped).toEqual([]);
+    expect(shifts.some((s) => s.name.startsWith("Wiliam"))).toBe(true);
+  });
+
+  it("quem entrega sem escrever o turno conta uma diária por dia, turno em branco", () => {
+    // Wiliam não escreveu manhã nem tarde em nenhum dos dois dias: são 2
+    // diárias dele (uma por dia), com o turno em branco.
+    const text = `Wiliam Quantso
+Quinta feira
+1111- Pituba
+2222- Brotas
+Sexta feira
+3333- Pituba
+`;
+    const { shifts } = parseConversation(text, TODAY);
+    const doWiliam = shifts.filter((s) => s.name.startsWith("Wiliam"));
+    expect(doWiliam.length).toBe(2);
+    expect(doWiliam.every((s) => s.periodo === "—")).toBe(true);
+    expect(new Set(doWiliam.map((s) => s.dia)).size).toBe(2);
+  });
+
+  it("não duplica a diária de quem declarou o turno e também entregou", () => {
+    // Josias escreveu "manhã" (diária declarada, sem entregas no turno) e
+    // depois "tarde" com a lista: 2 diárias, nada de implícita a mais.
+    const text = `Josias Quantso
+Sexta feira
+Manhã
+Tarde
+1111- Pituba
+2222- Brotas
+`;
+    const { shifts } = parseConversation(text, TODAY);
+    const doJosias = shifts.filter((s) => s.name.startsWith("Josias"));
+    expect(doJosias.length).toBe(2);
+    expect(doJosias.map((s) => s.periodo).sort()).toEqual(["Manhã", "Tarde"]);
+  });
+});
