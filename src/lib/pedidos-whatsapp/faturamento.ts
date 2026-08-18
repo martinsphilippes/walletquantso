@@ -9,23 +9,15 @@
 
 import type { Client, DeliveryZone } from "@/types";
 import type { ParsedRow, ShiftRow } from "./parser";
+import { zoneTokens } from "./zone-match";
 
 const round = (n: number) => Math.round(n * 100) / 100;
 const norm = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 
-// Casamento tolerante de bairro: normaliza, tira pontuação e palavras de
-// ligação (da/das/de/...), reduz plural simples ("arvores" → "arvore").
-// "Itaigara 2310 |", "Candeal- reenvio asa" e "Caminho da arvore »" casam
-// com "Itaigara", "Candeal" e "Caminho das Arvores".
-const ZONE_STOPWORDS = new Set(["da", "das", "de", "do", "dos", "e"]);
-function zoneTokens(s: string): string[] {
-  return norm(s)
-    .replace(/[^a-z0-9 ]+/g, " ")
-    .split(/\s+/)
-    .filter((t) => t && !ZONE_STOPWORDS.has(t))
-    .map((t) => t.replace(/s$/, ""));
-}
+// Casamento tolerante de bairro (tokens de zone-match): "Itaigara 2310 |",
+// "Candeal- reenvio asa" e "Caminho da arvore »" casam com "Itaigara",
+// "Candeal" e "Caminho das Arvores".
 
 /** Zona da tabela cujos tokens são prefixo do bairro escrito (mais específica primeiro). */
 function matchZone(

@@ -346,3 +346,72 @@ Tarde
     expect(doJosias.map((s) => s.periodo).sort()).toEqual(["Manhã", "Tarde"]);
   });
 });
+
+describe("parseConversation — lista colada com _dias_ em itálico e Nome Bairro sem traço", () => {
+  const TODAY = new Date(2026, 7, 17); // segunda, 17/08/2026
+  const ZONES = [
+    "Rio Vermelho", "Barra", "Campo da Pólvora", "Horto Florestal", "Ondina",
+    "Jardim Apipema", "Federação", "Pituba", "Dois de Julho",
+  ];
+  const text = `_Sexta_
+Noite
+* Henrique - Rio Vermelho 
+* Caíque - Barra 
+* Yane - Rio Vermelho 
+* Andrea - Rio Vermelho 
+* Pili - Rio Vermelho
+
+_Sábado_
+Noite
+* Claudia - Campo da Pólvora 
+* Marcus - Barra 
+* Claudia - Rio Vermelho 
+* Elísio - Rio Vermelho 
+* Carol - Rio Vermelho 
+* Luiz - Horto florestal 
+* Ana Cecília - Rio Vermelho 
+* Tatiana - Rio Vermelho 
+* Rodrigo - Rio Vermelho 
+* Bruna - Rio Vermelho
+Domingo
+Noite
+Claudia rio vermelho 
+Henrique rio vermelho
+Caíque Barra 
+Bernardo ondina
+Patrícia jardim apipema
+Ana horto florestal 
+Luiz federação 
+Marta rio vermelho 
+Bruno ondina 
+Ronaldo ondina 
+Arlei Pituba 
+Mariana dois de julho 
+Alex rio vermelho 
+Maia rio vermelho 
+`;
+
+  it("29 entregas, dias de sexta/sábado/domingo resolvidos, nada ignorado", () => {
+    const { rows, skipped } = parseConversation(text, TODAY, { zoneNames: ZONES });
+    expect(rows.length).toBe(29);
+    expect(skipped).toEqual([]);
+    const dias = new Set(rows.map((r) => r.dia));
+    expect(dias).toEqual(new Set(["14/08/2026", "15/08/2026", "16/08/2026"]));
+    expect(rows.every((r) => r.periodo === "Noite")).toBe(true);
+  });
+
+  it("linhas sem traço viram entregas pela tabela de bairros (não remetentes)", () => {
+    const { rows } = parseConversation(text, TODAY, { zoneNames: ZONES });
+    const domingo = rows.filter((r) => r.dia === "16/08/2026");
+    expect(domingo.length).toBe(14);
+    expect(domingo.find((r) => r.cotacao === "Mariana")?.bairro).toBe("dois de julho");
+    expect(domingo.find((r) => r.cotacao === "Patrícia")?.bairro).toBe("jardim apipema");
+  });
+
+  it("3 diárias: uma por dia, turno Noite", () => {
+    const { shifts } = parseConversation(text, TODAY, { zoneNames: ZONES });
+    const dedup = new Set(shifts.map((s) => `${s.dia}|${s.periodo.toLowerCase()}|${s.name.toLowerCase()}`));
+    expect(dedup.size).toBe(3);
+    expect(shifts.every((s) => s.periodo === "Noite")).toBe(true);
+  });
+});

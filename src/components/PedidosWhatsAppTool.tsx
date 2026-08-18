@@ -154,7 +154,11 @@ export function PedidosWhatsAppTool() {
   const liveParsed = useMemo(() => {
     if (!selectedClient || !text.trim())
       return { rows: [], shifts: [], skipped: [] as string[] };
-    const r = parseConversation(text);
+    // A tabela de bairros do cliente ajuda o parser a reconhecer entregas
+    // "Nome Bairro" sem traço ("Claudia rio vermelho").
+    const r = parseConversation(text, new Date(), {
+      zoneNames: selectedClient.zones?.map((z) => z.name),
+    });
     return { rows: r.rows, shifts: r.shifts, skipped: r.skipped };
   }, [selectedClient, text]);
   const liveRows = liveParsed.rows;
@@ -280,7 +284,11 @@ export function PedidosWhatsAppTool() {
       setStatus({ msg: "Cole o texto da conversa antes de converter.", type: "error" });
       return;
     }
-    const result = parseConversation(text);
+    const result = parseConversation(
+      text,
+      new Date(),
+      selectedClient ? { zoneNames: selectedClient.zones?.map((z) => z.name) } : undefined,
+    );
     if (!result.rows.length) {
       setStatus({ msg: "Nenhuma linha reconhecida foi encontrada.", type: "error" });
       setRows([]);

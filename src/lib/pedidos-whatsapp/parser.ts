@@ -14,6 +14,8 @@
 //   a phone number on its own line     -- delivery contact's phone, applies
 //                                          to subsequent rows until a new one
 
+import { zoneTokens } from "./zone-match";
+
 export interface ParsedRow {
   periodo: string;
   cotacao: string;
@@ -34,6 +36,16 @@ export interface ParseResult {
   /** Diárias declaradas na conversa (nome do entregador + turno + dia). */
   shifts: ShiftRow[];
   skipped: string[];
+}
+
+export interface ParseOptions {
+  /**
+   * Nomes dos bairros da tabela do cliente. Quando presentes, uma linha
+   * "Nome Bairro" sem traço ("Claudia rio vermelho") é reconhecida como
+   * entrega — o fim da linha casa com um bairro conhecido — em vez de ser
+   * confundida com um nome de remetente.
+   */
+  zoneNames?: string[];
 }
 
 export const COLUMNS = ["Manhã/Tarde", "Cotação", "Bairro", "Telefone", "Dia"] as const;
@@ -276,8 +288,35 @@ function samePerson(a: string, b: string): boolean {
   return na.split(/\s+/)[0] === nb.split(/\s+/)[0];
 }
 
-export function parseConversation(text: string, today: Date = new Date()): ParseResult {
+export function parseConversation(
+  text: string,
+  today: Date = new Date(),
+  opts?: ParseOptions,
+): ParseResult {
   const lines = text.split(/\r?\n/);
+  // Tabela de bairros do cliente (quando informada) tokenizada uma vez, para
+  // reconhecer entregas "Nome Bairro" sem traço.
+  const zoneTokenList = (opts?.zoneNames ?? [])
+    .map((n) => zoneTokens(n))
+    .filter((t) => t.length > 0);
+
+  /** "Claudia rio vermelho" → {name: "Claudia", bairro: "rio vermelho"} se o
+   *  fim da linha casa com um bairro da tabela; senão null. */
+  function splitNameZone(line: string): { name: string; bairro: string } | null {
+    if (zoneTokenList.length === 0) return null;
+    const words = line.split(/\s+/);
+    if (words.length < 2) return null;
+    for (let k = Math.min(4, words.length - 1); k >= 1; k--) {
+      const bairro = words.slice(words.length - k).join(" ");
+      const suf = zoneTokens(bairro);
+      if (suf.length === 0) continue;
+      const hit = zoneTokenList.some(
+        (zt) => zt.length === suf.length && zt.every((t, i) => t === suf[i]),
+      );
+      if (hit) return { name: words.slice(0, words.length - k).join(" "), bairro };
+    }
+    return null;
+  }
   let currentPeriod = "";
   let currentDate = "";
   let currentPhone = "";
@@ -314,8 +353,13 @@ export function parseConversation(text: string, today: Date = new Date()): Parse
 
   for (const raw of lines) {
     // Normaliza todas as variantes de traço para "-" antes de reconhecer os
-    // formatos (fotos/OCR trazem − ‑ ‒ etc. no lugar do hífen).
-    const line = raw.trim().replace(DASH_VARIANTS, "-");
+    // formatos (fotos/OCR trazem − ‑ ‒ etc. no lugar do hífen). Sublinhados/
+    // tis de formatação do WhatsApp ("_Sexta_", "~Sábado~") também caem fora.
+    const line = raw
+      .trim()
+      .replace(DASH_VARIANTS, "-")
+      .replace(/^[_~]+|[_~]+$/g, "")
+      .trim();
     if (!line) continue;
 
     // "Mensagem apagada" some por inteiro — não é entrega, diária nem dúvida.
@@ -370,6 +414,14 @@ export function parseConversation(text: string, today: Date = new Date()): Parse
     const nameMatch = line.match(NAME_LINE);
     if (nameMatch) {
       pushRow(nameMatch[1].trim(), nameMatch[2]);
+      continue;
+    }
+
+    // "Claudia rio vermelho" (sem traço): quando o fim da linha é um bairro
+    // da tabela do cliente, é uma entrega — não um nome de remetente.
+    const nz = splitNameZone(stripTrailingNoise(line));
+    if (nz) {
+      pushRow(nz.name, nz.bairro);
       continue;
     }
 
