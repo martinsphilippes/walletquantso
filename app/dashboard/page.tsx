@@ -484,7 +484,59 @@ function Dashboard() {
         </div>
       )}
 
-      {/* Resultado do mês + Saldos de caixa */}
+      {/* Saldos de caixa (largura inteira) */}
+      <div className="panel">
+          <h2>Saldos de caixa</h2>
+          {cash.rows.length === 0 ? (
+            <p className="muted">Nenhuma conta cadastrada ainda.</p>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Conta</th>
+                    <th style={{ textAlign: "right" }}>Confirmado</th>
+                    <th style={{ textAlign: "right" }}>Projetado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cash.rows.map((r) => (
+                    <tr key={r.accountId ?? "none"}>
+                      <td>{r.name}</td>
+                      <td
+                        style={{
+                          textAlign: "right",
+                          whiteSpace: "nowrap",
+                          color: r.confirmed >= 0 ? "var(--ok)" : "var(--err)",
+                        }}
+                      >
+                        {brl(r.confirmed)}
+                      </td>
+                      <td
+                        style={{
+                          textAlign: "right",
+                          whiteSpace: "nowrap",
+                          color: r.projected >= 0 ? "var(--ok)" : "var(--err)",
+                        }}
+                      >
+                        {brl(r.projected)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td><strong>Total</strong></td>
+                    <td style={{ textAlign: "right" }}><strong>{brl(cash.totalConfirmed)}</strong></td>
+                    <td style={{ textAlign: "right" }}><strong>{brl(cash.totalProjected)}</strong></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+      </div>
+
+      {/* Resultado do mês + Resultados de caixa, lado a lado */}
       <div
         style={{
           display: "grid",
@@ -549,66 +601,6 @@ function Dashboard() {
           </div>
         </div>
 
-        <div className="panel">
-          <h2>Saldos de caixa</h2>
-          {cash.rows.length === 0 ? (
-            <p className="muted">Nenhuma conta cadastrada ainda.</p>
-          ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Conta</th>
-                    <th style={{ textAlign: "right" }}>Confirmado</th>
-                    <th style={{ textAlign: "right" }}>Projetado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cash.rows.map((r) => (
-                    <tr key={r.accountId ?? "none"}>
-                      <td>{r.name}</td>
-                      <td
-                        style={{
-                          textAlign: "right",
-                          whiteSpace: "nowrap",
-                          color: r.confirmed >= 0 ? "var(--ok)" : "var(--err)",
-                        }}
-                      >
-                        {brl(r.confirmed)}
-                      </td>
-                      <td
-                        style={{
-                          textAlign: "right",
-                          whiteSpace: "nowrap",
-                          color: r.projected >= 0 ? "var(--ok)" : "var(--err)",
-                        }}
-                      >
-                        {brl(r.projected)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td><strong>Total</strong></td>
-                    <td style={{ textAlign: "right" }}><strong>{brl(cash.totalConfirmed)}</strong></td>
-                    <td style={{ textAlign: "right" }}><strong>{brl(cash.totalProjected)}</strong></td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Resultados de caixa (realizado) */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-          gap: "1rem",
-        }}
-      >
         <div className="panel">
           <h2 style={{ marginBottom: 0 }}>Resultados de caixa</h2>
           <p className="muted" style={{ marginTop: 2 }}>Movimentado (realizado)</p>
