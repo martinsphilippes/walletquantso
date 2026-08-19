@@ -273,8 +273,9 @@ export async function downloadCobrancaPdf(
     afterTable();
   }
 
-  const zones = [...(client.zones ?? [])].sort((a, b) =>
-    a.name.localeCompare(b.name, "pt-BR"),
+  // Tabela de preços do mais barato para o mais caro (empate: ordem alfabética).
+  const zones = [...(client.zones ?? [])].sort(
+    (a, b) => a.price - b.price || a.name.localeCompare(b.name, "pt-BR"),
   );
   if (zones.length > 0 || (client.dailyRate ?? 0) > 0) {
     y = section("TABELA DE PREÇOS POR BAIRRO (para conferência)", y);
