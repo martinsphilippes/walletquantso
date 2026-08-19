@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { loadErrorMessage } from "@/lib/errors";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
 import { listAccounts, listTransactions, updateAccount } from "@/services/firestore";
@@ -59,7 +60,7 @@ function CoraSync() {
       setAccounts(a);
       setAccountId((cur) => cur || a[0]?.id || "");
     } catch (err) {
-      setError(`Falha ao carregar contas: ${(err as Error).message}`);
+      setError(`Falha ao carregar contas: ${loadErrorMessage(err)}`);
     }
     try {
       const cfg = await getCoraSyncConfig(user.uid);

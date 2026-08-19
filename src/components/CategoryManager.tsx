@@ -8,6 +8,7 @@
 // collection — a subcategory is a category with `parentId` set.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { loadErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/services/auth-context";
 import { listCategories, listCostCenters, listTransactions } from "@/services/firestore";
 import { listBills } from "@/services/bills";
@@ -79,7 +80,7 @@ export function CategoryManager({ mode }: { mode: CategoryManagerMode }) {
       setTxs(t);
       setBills([...pay, ...rec]);
     } catch (err) {
-      setError(`Falha ao carregar: ${(err as Error).message}`);
+      setError(`Falha ao carregar: ${loadErrorMessage(err)}`);
     } finally {
       setLoading(false);
     }

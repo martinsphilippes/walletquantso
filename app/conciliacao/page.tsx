@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { loadErrorMessage } from "@/lib/errors";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
 import { listAccounts, listTransactions } from "@/services/firestore";
@@ -72,7 +73,7 @@ function Conciliacao() {
       setReceivables(rec);
       setAccountId((cur) => cur || sorted[0]?.id || "");
     } catch (err) {
-      setError(`Falha ao carregar: ${(err as Error).message}`);
+      setError(`Falha ao carregar: ${loadErrorMessage(err)}`);
     } finally {
       setLoading(false);
     }

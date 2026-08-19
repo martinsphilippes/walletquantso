@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { loadErrorMessage } from "@/lib/errors";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
 import { listImportBatches } from "@/services/firestore";
@@ -37,7 +38,7 @@ function History() {
     try {
       setBatches(await listImportBatches(user.uid));
     } catch (err) {
-      setError(`Falha ao carregar: ${(err as Error).message}`);
+      setError(`Falha ao carregar: ${loadErrorMessage(err)}`);
       setBatches([]);
     }
   }, [user]);

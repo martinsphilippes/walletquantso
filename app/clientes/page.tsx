@@ -8,6 +8,7 @@
 // receber já classificado com os vínculos padrão do cliente.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { loadErrorMessage } from "@/lib/errors";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
 import {
@@ -202,7 +203,7 @@ function Clientes() {
       setCategories(cat.filter((c) => c.kind === "income"));
       setCostCenters(cc.sort((a, b) => a.name.localeCompare(b.name, "pt-BR")));
     } catch (err) {
-      setError(`Falha ao carregar: ${(err as Error).message}`);
+      setError(`Falha ao carregar: ${loadErrorMessage(err)}`);
     } finally {
       setLoading(false);
     }
@@ -340,7 +341,7 @@ function Clientes() {
     try {
       setHistRecords(await listClientBillings(user.uid, c.id!));
     } catch (err) {
-      setError(`Falha ao carregar histórico: ${(err as Error).message}`);
+      setError(`Falha ao carregar histórico: ${loadErrorMessage(err)}`);
     } finally {
       setHistLoading(false);
     }

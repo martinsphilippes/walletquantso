@@ -5,6 +5,7 @@
 // delete, and partial settlements; status is derived, never stored.
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { loadErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/services/auth-context";
 import {
   listAccounts,
@@ -194,7 +195,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
       setCostCenters(cc);
       setContacts(ct);
     } catch (err) {
-      setError(`Falha ao carregar: ${(err as Error).message}`);
+      setError(`Falha ao carregar: ${loadErrorMessage(err)}`);
       setBills([]);
     }
   }, [user, kind, isPayable]);

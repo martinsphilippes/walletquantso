@@ -8,6 +8,7 @@
 // mesmos do app completo (mesma conta, mesmo login).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { loadErrorMessage } from "@/lib/errors";
 import Link from "next/link";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
@@ -83,7 +84,7 @@ function Rapido() {
       setCategories(cat);
       setCostCenters(cc.sort((x, y) => x.name.localeCompare(y.name, "pt-BR")));
     } catch (err) {
-      setError(`Falha ao carregar: ${(err as Error).message}`);
+      setError(`Falha ao carregar: ${loadErrorMessage(err)}`);
     } finally {
       setLoading(false);
     }

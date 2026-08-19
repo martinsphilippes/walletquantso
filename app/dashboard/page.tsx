@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { loadErrorMessage } from "@/lib/errors";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
 import {
@@ -118,7 +119,7 @@ function Dashboard() {
       setAccountName(new Map(a.map((x) => [x.id!, x.name])));
       setCategoryName(new Map(c.map((x) => [x.id!, x.name])));
     } catch (err) {
-      setError(`Falha ao carregar: ${(err as Error).message}`);
+      setError(`Falha ao carregar: ${loadErrorMessage(err)}`);
       setTxs([]);
     }
   }, [user]);

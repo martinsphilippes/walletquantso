@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { loadErrorMessage } from "@/lib/errors";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
 import { listContacts, listTransactions } from "@/services/firestore";
@@ -78,7 +79,7 @@ function Contacts() {
       setTxs(t);
       setBills([...pay, ...rec]);
     } catch (err) {
-      setError(`Falha ao carregar: ${(err as Error).message}`);
+      setError(`Falha ao carregar: ${loadErrorMessage(err)}`);
     } finally {
       setLoading(false);
     }
