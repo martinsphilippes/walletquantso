@@ -37,8 +37,7 @@ import {
   type Slice,
   type BreakdownMode,
 } from "@/lib/dashboard/breakdown";
-import { ChartSwitcher, LineChart, PALETTE } from "@/components/charts";
-import { projectCashFlow } from "@/lib/cashflow/project";
+import { ChartSwitcher, PALETTE } from "@/components/charts";
 import { remaining, billStatus, sortByDueDate } from "@/lib/bills/status";
 import type {
   Account,
@@ -61,11 +60,6 @@ const brl = (n: number) =>
 
 const brDate = (iso: string) => iso.split("-").reverse().join("/");
 
-const MONTHS_ABBR = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-const monthLabel = (ym: string) => {
-  const [y, m] = ym.split("-").map(Number);
-  return `${MONTHS_ABBR[m - 1]}/${String(y).slice(2)}`;
-};
 
 export default function DashboardPage() {
   return (
@@ -268,54 +262,6 @@ function Dashboard() {
 
   const toDonut = (slices: Slice[]) =>
     slices.map((s, i) => ({ label: s.label, value: s.value, color: PALETTE[i % PALETTE.length] }));
-
-  const openingBalance = useMemo(
-    () => accounts.reduce((s, a) => s + (a.initialBalance ?? 0), 0),
-    [accounts],
-  );
-  // Fluxo de caixa: Projetado × Realizado (gravado) + recorte de mês/ano.
-  const [fluxoMode, setFluxoMode] = useState<"projected" | "realized">("projected");
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("wq.fluxoMode");
-      if (saved === "projected" || saved === "realized") setFluxoMode(saved);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-  const chooseFluxoMode = (m: "projected" | "realized") => {
-    setFluxoMode(m);
-    try {
-      localStorage.setItem("wq.fluxoMode", m);
-    } catch {
-      /* ignore */
-    }
-  };
-  const [fluxoYear, setFluxoYear] = useState("");
-  const [fluxoMonth, setFluxoMonth] = useState("");
-
-  const cashflowAll = useMemo(
-    () =>
-      projectCashFlow(txs ?? [], [...payables, ...receivables], {
-        openingBalance,
-        mode: fluxoMode,
-      }),
-    [txs, payables, receivables, openingBalance, fluxoMode],
-  );
-  const fluxoYears = useMemo(
-    () => [...new Set(cashflowAll.map((r) => r.month.slice(0, 4)))].sort(),
-    [cashflowAll],
-  );
-  const cashflow = useMemo(
-    () =>
-      cashflowAll.filter(
-        (r) =>
-          (!fluxoYear || r.month.slice(0, 4) === fluxoYear) &&
-          (!fluxoMonth || r.month.slice(5, 7) === fluxoMonth),
-      ),
-    [cashflowAll, fluxoYear, fluxoMonth],
-  );
-  const projectedEnd = cashflow.length ? cashflow[cashflow.length - 1].balance : openingBalance;
 
   const filtered = useMemo(
     () => (txs ? filterTransactions(txs, filters) : []),
@@ -581,7 +527,7 @@ function Dashboard() {
           </p>
           <ChartSwitcher
             storageKey="wq.chart.resultadoMes"
-            kinds={["bar", "donut"]}
+            kinds={["bar", "hbar", "donut"]}
             items={[
               { label: "Receitas", value: month.income, color: "var(--ok)" },
               { label: "Despesas", value: month.expense, color: "var(--err)" },
@@ -655,7 +601,7 @@ function Dashboard() {
         </div>
       </div>
 
-      {/* Fluxo de caixa (projeção) + Resultados de caixa (realizado) */}
+      {/* Resultados de caixa (realizado) */}
       <div
         style={{
           display: "grid",
@@ -664,112 +610,11 @@ function Dashboard() {
         }}
       >
         <div className="panel">
-          <h2 style={{ marginBottom: 0 }}>Fluxo de caixa</h2>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "6px 0 8px", alignItems: "center" }}>
-            {(
-              [
-                ["projected", "Projetado"],
-                ["realized", "Realizado"],
-              ] as Array<["projected" | "realized", string]>
-            ).map(([m, label]) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => chooseFluxoMode(m)}
-                style={{
-                  padding: "0.2rem 0.7rem",
-                  fontSize: "0.78rem",
-                  borderRadius: 6,
-                  border: "1px solid var(--border)",
-                  background: fluxoMode === m ? "var(--accent)" : "transparent",
-                  color: fluxoMode === m ? "var(--accent-ink)" : "var(--muted)",
-                  cursor: "pointer",
-                }}
-                aria-pressed={fluxoMode === m}
-              >
-                {label}
-              </button>
-            ))}
-            <select
-              aria-label="Mês"
-              value={fluxoMonth}
-              onChange={(e) => setFluxoMonth(e.target.value)}
-              style={{ fontSize: "0.8rem" }}
-            >
-              <option value="">Todos os meses</option>
-              {MONTHS_ABBR.map((m, i) => (
-                <option key={m} value={String(i + 1).padStart(2, "0")}>
-                  {m}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Ano"
-              value={fluxoYear}
-              onChange={(e) => setFluxoYear(e.target.value)}
-              style={{ fontSize: "0.8rem" }}
-            >
-              <option value="">Todos os anos</option>
-              {fluxoYears.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-          </div>
-          <p className="muted" style={{ marginTop: 0, fontSize: "0.8rem" }}>
-            {fluxoMode === "projected"
-              ? "Saldo projetado por mês (realizado + títulos em aberto)."
-              : "Saldo realizado por mês (somente o que de fato movimentou)."}
-          </p>
-          {cashflow.length === 0 ? (
-            <p className="muted">Sem meses no recorte escolhido.</p>
-          ) : (
-            <LineChart points={cashflow.map((m) => ({ label: monthLabel(m.month), value: m.balance }))} />
-          )}
-          {cashflow.length === 1 && (
-            <div className="stat-row" style={{ marginTop: "0.6rem" }}>
-              <Stat
-                label="Entradas no mês"
-                value={brl(cashflow[0].realizedIn + cashflow[0].plannedIn)}
-                color="var(--ok)"
-              />
-              <Stat
-                label="Saídas no mês"
-                value={brl(cashflow[0].realizedOut + cashflow[0].plannedOut)}
-                color="var(--err)"
-              />
-              <Stat
-                label="Resultado do mês"
-                value={brl(cashflow[0].net)}
-                color={cashflow[0].net >= 0 ? "var(--ok)" : "var(--err)"}
-              />
-            </div>
-          )}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              borderTop: "1px solid var(--border)",
-              paddingTop: "0.6rem",
-              marginTop: "0.6rem",
-            }}
-          >
-            <strong>
-              {fluxoMode === "projected" ? "Saldo projetado ao fim" : "Saldo realizado ao fim"}
-            </strong>
-            <strong style={{ color: projectedEnd >= 0 ? "var(--ok)" : "var(--err)" }}>
-              {brl(projectedEnd)}
-            </strong>
-          </div>
-        </div>
-
-        <div className="panel">
           <h2 style={{ marginBottom: 0 }}>Resultados de caixa</h2>
           <p className="muted" style={{ marginTop: 2 }}>Movimentado (realizado)</p>
           <ChartSwitcher
             storageKey="wq.chart.resultadosCaixa"
-            kinds={["bar", "donut"]}
+            kinds={["bar", "hbar", "donut"]}
             items={[
               { label: "Entradas", value: overview.realizedIncome, color: "var(--ok)" },
               { label: "Saídas", value: overview.realizedExpense, color: "var(--err)" },
