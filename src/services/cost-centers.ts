@@ -15,10 +15,9 @@ import {
   where,
   writeBatch,
   type DocumentData,
-} from "firebase/firestore/lite";
+} from "firebase/firestore";
 import { db } from "./firebase";
 import { COLLECTIONS } from "./firestore";
-import { invalidateAllLists, invalidateLists } from "./list-cache";
 import type { CostCenter } from "@/types";
 
 const BATCH_LIMIT = 400;
@@ -26,20 +25,17 @@ const BATCH_LIMIT = 400;
 /** Create a cost center. Returns its id. */
 export async function createCostCenter(costCenter: Omit<CostCenter, "id">): Promise<string> {
   const ref = await addDoc(collection(db, COLLECTIONS.costCenters), costCenter);
-  invalidateLists(COLLECTIONS.costCenters);
   return ref.id;
 }
 
 /** Update mutable fields of a cost center. */
 export async function updateCostCenter(id: string, patch: Partial<CostCenter>): Promise<void> {
   await updateDoc(doc(db, COLLECTIONS.costCenters, id), patch as DocumentData);
-  invalidateLists(COLLECTIONS.costCenters);
 }
 
 /** Delete a cost center. Callers should ensure it is not in use first. */
 export async function removeCostCenter(id: string): Promise<void> {
   await deleteDoc(doc(db, COLLECTIONS.costCenters, id));
-  invalidateLists(COLLECTIONS.costCenters);
 }
 
 /**
@@ -79,7 +75,6 @@ export async function deleteCostCenterDeep(
   }
 
   await deleteDoc(doc(db, COLLECTIONS.costCenters, costCenterId));
-  invalidateAllLists(); // mexeu em centros, transações e títulos de uma vez
   return { unassigned: txToClear.length + billToClear.length };
 }
 
@@ -111,6 +106,5 @@ export async function mergeCostCenters(
   }
 
   await deleteDoc(doc(db, COLLECTIONS.costCenters, sourceId));
-  invalidateAllLists(); // mexeu em centros e transações de uma vez
   return ids.length;
 }

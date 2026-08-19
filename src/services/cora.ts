@@ -4,9 +4,8 @@
 // statement, then saves the movements as lançamentos, skipping any that were
 // already imported (dedup by the Cora entry id stored in `externalId`).
 
-import { addDoc, collection, doc, getDoc, setDoc, updateDoc } from "firebase/firestore/lite";
+import { addDoc, collection, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
-import { invalidateAllLists } from "./list-cache";
 import { COLLECTIONS, listTransactions } from "./firestore";
 import { listBills, addPayment } from "./bills";
 import { removeTransaction } from "./transactions";
@@ -206,7 +205,6 @@ export async function autoProcessCora(
     onProgress?.(done, plan.length);
   }
 
-  invalidateAllLists(); // a sincronização mexe em transações e títulos
   return result;
 }
 
@@ -259,6 +257,5 @@ export async function commitCoraEntries(
     seen.add(e.externalId);
     created++;
   }
-  invalidateAllLists(); // a sincronização cria transações
   return { created, skipped };
 }

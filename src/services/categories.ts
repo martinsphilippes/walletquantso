@@ -14,10 +14,9 @@ import {
   where,
   writeBatch,
   type DocumentData,
-} from "firebase/firestore/lite";
+} from "firebase/firestore";
 import { db } from "./firebase";
 import { COLLECTIONS } from "./firestore";
-import { invalidateAllLists, invalidateLists } from "./list-cache";
 import type { Category } from "@/types";
 
 const BATCH_LIMIT = 400;
@@ -25,20 +24,17 @@ const BATCH_LIMIT = 400;
 /** Create a category (or subcategory when parentId is set). Returns its id. */
 export async function createCategory(category: Omit<Category, "id">): Promise<string> {
   const ref = await addDoc(collection(db, COLLECTIONS.categories), category);
-  invalidateLists(COLLECTIONS.categories);
   return ref.id;
 }
 
 /** Update mutable fields of a category. */
 export async function updateCategory(id: string, patch: Partial<Category>): Promise<void> {
   await updateDoc(doc(db, COLLECTIONS.categories, id), patch as DocumentData);
-  invalidateLists(COLLECTIONS.categories);
 }
 
 /** Delete a category. Callers should ensure it is not in use first. */
 export async function removeCategory(id: string): Promise<void> {
   await deleteDoc(doc(db, COLLECTIONS.categories, id));
-  invalidateLists(COLLECTIONS.categories);
 }
 
 /**
@@ -90,7 +86,6 @@ export async function deleteCategoryDeep(
     await batch.commit();
   }
 
-  invalidateAllLists(); // mexeu em categorias, transações e títulos de uma vez
   return { deletedCategories: targetIds.size, unassigned: txToClear.length + billToClear.length };
 }
 
@@ -145,6 +140,5 @@ export async function mergeCategories(
 
   await reparentChildren(ownerId, sourceId, targetId);
   await deleteDoc(doc(db, COLLECTIONS.categories, sourceId));
-  invalidateAllLists(); // mexeu em categorias e transações de uma vez
   return ids.length;
 }

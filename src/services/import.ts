@@ -11,9 +11,8 @@ import {
   getDocs,
   query,
   where,
-} from "firebase/firestore/lite";
+} from "firebase/firestore";
 import { db } from "./firebase";
-import { invalidateAllLists } from "./list-cache";
 import { COLLECTIONS } from "./firestore";
 import { planCommit } from "@/lib/import/commit-plan";
 import { normalizeHeader, type NormalizedRow } from "@/lib/import/engine";
@@ -236,7 +235,6 @@ export async function commitImport(params: {
     at: now,
   });
   await finalBatch.commit();
-  invalidateAllLists();
 
   return {
     batchId,
@@ -285,7 +283,6 @@ export async function revertImport(ownerId: string, batchId: string): Promise<nu
     at: now,
   });
   await finalBatch.commit();
-  invalidateAllLists();
 
   return ids.length;
 }
@@ -473,7 +470,6 @@ export async function commitBillsImport(params: {
     at: now,
   });
   await finalBatch.commit();
-  invalidateAllLists();
 
   return {
     batchId,
@@ -512,7 +508,6 @@ export async function revertBillsImport(ownerId: string, batchId: string): Promi
     at: now,
   });
   await finalBatch.commit();
-  invalidateAllLists();
 
   return ids.length;
 }
