@@ -415,3 +415,44 @@ Maia rio vermelho
     expect(shifts.every((s) => s.periodo === "Noite")).toBe(true);
   });
 });
+
+describe("parseConversation — lista colada: bairro fora da tabela e texto extra no fim", () => {
+  const TODAY = new Date(2026, 7, 19);
+  // Tabela SEM "Ondina": as linhas "Bernardo ondina" etc. ainda são entregas
+  // (aparecem como "sem preço"), e a diária do dia continua sendo UMA (a do
+  // marcador "Noite"), sem diária fantasma de falso remetente.
+  const ZONES = ["Rio Vermelho", "Barra", "Pituba", "Dois de Julho", "Jardim Apipema", "Federação", "Horto Florestal"];
+  const text = `Domingo
+Noite
+Claudia rio vermelho 
+Caíque Barra 
+Bernardo ondina
+Patrícia jardim apipema
+Bruno ondina 
+Ronaldo ondina 
+Arlei Pituba 
+
+Aqui sao: 
+3 diarias (sexta, sábado e domingo)
+Turno Noite de todas as diarias
+29 entregas realizadas 
+`;
+
+  it("linha vizinha com bairro desconhecido vira entrega (não some como remetente)", () => {
+    const { rows } = parseConversation(text, TODAY, { zoneNames: ZONES });
+    expect(rows.length).toBe(7);
+    expect(rows.filter((r) => r.bairro === "ondina").length).toBe(3);
+  });
+
+  it("dia com diária anônima declarada não ganha diária implícita por cima", () => {
+    const { shifts } = parseConversation(text, TODAY, { zoneNames: ZONES });
+    const dedup = new Set(shifts.map((s) => `${s.dia}|${s.periodo.toLowerCase()}|${s.name.toLowerCase()}`));
+    expect(dedup.size).toBe(1);
+  });
+
+  it("o bloco de descrição no fim não vira entrega nem diária", () => {
+    const { rows, shifts } = parseConversation(text, TODAY, { zoneNames: ZONES });
+    expect(rows.some((r) => /diaria|entrega|aqui/i.test(r.bairro + r.cotacao))).toBe(false);
+    expect(shifts.length).toBe(1);
+  });
+});

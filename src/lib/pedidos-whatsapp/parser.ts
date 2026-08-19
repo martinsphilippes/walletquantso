@@ -351,6 +351,11 @@ export function parseConversation(
     shifts.push({ name: currentSender, periodo: p, dia: currentDate });
   }
 
+  // Numa lista colada sem traço ("Claudia rio vermelho"), uma linha vizinha
+  // cujo bairro NÃO está na tabela ("Bernardo ondina") ainda é entrega — vira
+  // linha "sem preço" visível, em vez de sumir como falso remetente.
+  let prevNoDashRow = false;
+
   for (const raw of lines) {
     // Normaliza todas as variantes de traço para "-" antes de reconhecer os
     // formatos (fotos/OCR trazem − ‑ ‒ etc. no lugar do hífen). Sublinhados/
@@ -364,6 +369,10 @@ export function parseConversation(
 
     // "Mensagem apagada" some por inteiro — não é entrega, diária nem dúvida.
     if (DELETED_MESSAGE.test(normalizeAccents(line.toLowerCase()))) continue;
+
+    // Vale só para a linha imediatamente seguinte a uma entrega sem traço.
+    const afterNoDashRow = prevNoDashRow;
+    prevNoDashRow = false;
 
     const headerMatch = line.match(HEADER_LINE);
     if (headerMatch) {
@@ -422,7 +431,24 @@ export function parseConversation(
     const nz = splitNameZone(stripTrailingNoise(line));
     if (nz) {
       pushRow(nz.name, nz.bairro);
+      prevNoDashRow = true;
       continue;
+    }
+
+    // Linha vizinha de uma entrega sem traço, com 2–5 palavras e sem virar
+    // rótulo ("Aqui sao:"): também é entrega, só que de bairro fora da
+    // tabela — entra como "sem preço" para o usuário ver e cadastrar.
+    if (
+      zoneTokenList.length > 0 &&
+      afterNoDashRow &&
+      !/[:：]\s*$/.test(line)
+    ) {
+      const words = stripTrailingNoise(line).split(/\s+/).filter(Boolean);
+      if (words.length >= 2 && words.length <= 5 && HAS_LETTER.test(line)) {
+        pushRow(words[0], words.slice(1).join(" "));
+        prevNoDashRow = true;
+        continue;
+      }
     }
 
     const senderMatch = matchSenderLine(line);
@@ -437,10 +463,13 @@ export function parseConversation(
 
   // Diárias implícitas: remetente que postou entregas num dia sem declarar
   // turno nenhum (nem cabeçalho MANHÃ/NOITE, nem "Nome - turno") trabalhou —
-  // conta uma diária naquele dia, com o turno em branco.
+  // conta uma diária naquele dia, com o turno em branco. Exceção: dia que já
+  // tem diária ANÔNIMA declarada (marcador "Noite" numa lista colada, sem
+  // remetente conhecido) — a diária do dia é essa, sem somar outra por cima.
   for (const { name, dia } of senderDeliveries.values()) {
+    const anonymous = shifts.some((s) => s.dia === dia && !s.name);
     const declared = shifts.some((s) => s.dia === dia && samePerson(s.name, name));
-    if (!declared) shifts.push({ name, periodo: "—", dia });
+    if (!anonymous && !declared) shifts.push({ name, periodo: "—", dia });
   }
 
   return { rows, shifts, skipped };
