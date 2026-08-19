@@ -27,7 +27,7 @@ import { effectiveCostCenterId } from "@/lib/categories/tree";
 import { DateParts } from "@/components/DateParts";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
-import { expandRepeat, type RepeatMode } from "@/lib/bills/repeat";
+import { expandRepeat, type RepeatMode, type RepeatUnit } from "@/lib/bills/repeat";
 import {
   billStatus,
   remaining,
@@ -82,6 +82,8 @@ interface Draft {
   notes: string;
   repeatMode: RepeatMode;
   repeatCount: string;
+  repeatEveryN: string;
+  repeatEveryUnit: RepeatUnit;
 }
 
 const emptyDraft = (): Draft => ({
@@ -98,6 +100,8 @@ const emptyDraft = (): Draft => ({
   notes: "",
   repeatMode: "single",
   repeatCount: "2",
+  repeatEveryN: "1",
+  repeatEveryUnit: "months" as RepeatUnit,
 });
 
 export function BillsManager({ kind }: { kind: BillKind }) {
@@ -115,6 +119,32 @@ export function BillsManager({ kind }: { kind: BillKind }) {
   const [busy, setBusy] = useState(false);
 
   const [creating, setCreating] = useState<Draft>(emptyDraft());
+
+  // Conferência da repetição: as datas que serão criadas, antes do Adicionar.
+  const repeatPreview = useMemo(() => {
+    if (creating.repeatMode === "single" || !creating.dueDate) return "";
+    const count = Math.floor(Number(creating.repeatCount));
+    const n = Math.floor(Number(creating.repeatEveryN));
+    if (!Number.isFinite(count) || count < 2 || !Number.isFinite(n) || n < 1) return "";
+    const expanded = expandRepeat(
+      { amount: 0, dueDate: creating.dueDate, competenceDate: null },
+      creating.repeatMode,
+      Math.min(count, 120),
+      { n, unit: creating.repeatEveryUnit },
+    );
+    const fmt = (iso: string) => iso.split("-").reverse().join("/");
+    const dates = expanded.map((x) => fmt(x.dueDate));
+    const shown = dates.slice(0, 4).join(", ");
+    const rest = dates.length > 4 ? ` … até ${dates[dates.length - 1]}` : "";
+    const what = creating.repeatMode === "installments" ? "parcelas" : "títulos";
+    return `Serão criados ${dates.length} ${what}: ${shown}${rest}`;
+  }, [
+    creating.repeatMode,
+    creating.repeatCount,
+    creating.repeatEveryN,
+    creating.repeatEveryUnit,
+    creating.dueDate,
+  ]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft());
   const [payingId, setPayingId] = useState<string | null>(null);
@@ -367,7 +397,16 @@ export function BillsManager({ kind }: { kind: BillKind }) {
         setError(mode === "installments" ? "Informe pelo menos 2 parcelas." : "Informe pelo menos 2 repetições.");
         return;
       }
+      const everyN = Math.floor(Number(creating.repeatEveryN));
+      if (!Number.isFinite(everyN) || everyN < 1) {
+        setError("O intervalo da repetição deve ser de pelo menos 1.");
+        return;
+      }
     }
+    const every = {
+      n: Math.max(1, Math.floor(Number(creating.repeatEveryN)) || 1),
+      unit: creating.repeatEveryUnit,
+    };
 
     setBusy(true);
     setError("");
@@ -376,6 +415,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
         { amount: fields.amount, dueDate: fields.dueDate, competenceDate: fields.competenceDate },
         mode,
         count,
+        every,
       );
       const groupId = mode === "single" ? null : rid();
       const now = Date.now();
@@ -432,6 +472,8 @@ export function BillsManager({ kind }: { kind: BillKind }) {
       notes: b.notes ?? "",
       repeatMode: "single",
       repeatCount: "2",
+      repeatEveryN: "1",
+      repeatEveryUnit: "months",
     });
   }
 
@@ -458,6 +500,8 @@ export function BillsManager({ kind }: { kind: BillKind }) {
       notes: b.notes ?? "",
       repeatMode: "single",
       repeatCount: "2",
+      repeatEveryN: "1",
+      repeatEveryUnit: "months",
     });
     createFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -736,6 +780,29 @@ export function BillsManager({ kind }: { kind: BillKind }) {
               />
             </Field>
           )}
+          {creating.repeatMode !== "single" && (
+            <Field label="Repete a cada">
+              <span style={{ display: "inline-flex", gap: "0.4rem", alignItems: "center" }}>
+                <input
+                  type="number"
+                  min={1}
+                  value={creating.repeatEveryN}
+                  onChange={(e) => setCreating({ ...creating, repeatEveryN: e.target.value })}
+                  style={{ ...fieldStyle, width: 64 }}
+                />
+                <select
+                  value={creating.repeatEveryUnit}
+                  onChange={(e) =>
+                    setCreating({ ...creating, repeatEveryUnit: e.target.value as RepeatUnit })
+                  }
+                >
+                  <option value="days">dia(s)</option>
+                  <option value="weeks">semana(s)</option>
+                  <option value="months">mês(es)</option>
+                </select>
+              </span>
+            </Field>
+          )}
           <Field label="Descrição">
             <input
               placeholder="Descrição"
@@ -849,12 +916,17 @@ export function BillsManager({ kind }: { kind: BillKind }) {
             Adicionar
           </button>
         </form>
+        {repeatPreview && (
+          <p style={{ marginTop: "0.6rem", fontSize: "0.9rem" }}>
+            📅 {repeatPreview}
+          </p>
+        )}
         <p className="muted" style={{ marginTop: "0.6rem", fontSize: "0.85rem" }}>
           <strong>Repetição:</strong> <em>Única</em> cria um título só. <em>Fixa</em> repete o
-          mesmo valor todo mês, na mesma data, pela quantidade de repetições. <em>Parcelado</em>{" "}
-          divide o valor total automaticamente na quantidade de parcelas (mensais). O{" "}
-          <strong>Nº documento</strong> é preenchido automaticamente em ordem crescente (você pode
-          alterá-lo).
+          mesmo valor, <em>Parcelado</em> divide o valor total na quantidade de parcelas — nos
+          dois, o intervalo entre os títulos é o <em>Repete a cada</em> (todo dia, 2 em 2 dias,
+          semanal, mensal…). O <strong>Nº documento</strong> é preenchido automaticamente em
+          ordem crescente (você pode alterá-lo).
         </p>
       </div>
 

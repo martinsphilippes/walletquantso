@@ -52,3 +52,49 @@ describe("expandRepeat", () => {
     expect(sum).toBe(100);
   });
 });
+
+describe("repetição com intervalo (a cada N dias/semanas/meses)", () => {
+  it("todos os dias: datas consecutivas", () => {
+    const out = expandRepeat(
+      { amount: 50, dueDate: "2026-08-30" },
+      "fixed",
+      3,
+      { n: 1, unit: "days" },
+    );
+    expect(out.map((x) => x.dueDate)).toEqual(["2026-08-30", "2026-08-31", "2026-09-01"]);
+  });
+
+  it("2 em 2 dias, atravessando a virada do mês", () => {
+    const out = expandRepeat(
+      { amount: 50, dueDate: "2026-08-29" },
+      "fixed",
+      3,
+      { n: 2, unit: "days" },
+    );
+    expect(out.map((x) => x.dueDate)).toEqual(["2026-08-29", "2026-08-31", "2026-09-02"]);
+  });
+
+  it("semanal e quinzenal", () => {
+    const semanal = expandRepeat({ amount: 10, dueDate: "2026-08-19" }, "fixed", 3, { n: 1, unit: "weeks" });
+    expect(semanal.map((x) => x.dueDate)).toEqual(["2026-08-19", "2026-08-26", "2026-09-02"]);
+    const quinzenal = expandRepeat({ amount: 10, dueDate: "2026-08-19" }, "fixed", 2, { n: 2, unit: "weeks" });
+    expect(quinzenal.map((x) => x.dueDate)).toEqual(["2026-08-19", "2026-09-02"]);
+  });
+
+  it("parcelado com intervalo em dias divide o total e espaça as parcelas", () => {
+    const out = expandRepeat(
+      { amount: 100, dueDate: "2026-08-19" },
+      "installments",
+      3,
+      { n: 5, unit: "days" },
+    );
+    expect(out.map((x) => x.dueDate)).toEqual(["2026-08-19", "2026-08-24", "2026-08-29"]);
+    expect(out.reduce((s, x) => s + x.amount, 0)).toBeCloseTo(100, 2);
+    expect(out[0].installment).toEqual({ number: 1, total: 3 });
+  });
+
+  it("sem intervalo informado continua de mês em mês (dia 31 ajustado)", () => {
+    const out = expandRepeat({ amount: 10, dueDate: "2026-08-31" }, "fixed", 3);
+    expect(out.map((x) => x.dueDate)).toEqual(["2026-08-31", "2026-09-30", "2026-10-31"]);
+  });
+});
