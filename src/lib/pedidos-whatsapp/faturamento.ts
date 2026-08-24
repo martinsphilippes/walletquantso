@@ -51,8 +51,9 @@ export interface FaturamentoResult {
   entregas: number;
   /** Valor das entregas pela tabela de bairros do cliente. */
   entregasValor: number;
-  /** Entregas cujo bairro não está na tabela (não somaram valor). */
-  semPreco: Array<{ bairro: string; count: number }>;
+  /** Entregas cujo bairro não está na tabela (não somaram valor), com as
+   *  linhas originais para o usuário localizar cada uma na conversa. */
+  semPreco: Array<{ bairro: string; count: number; exemplos: string[] }>;
   /** Diárias detectadas na conversa (turnos distintos de Dia × Período). */
   diariasDetectadas: number;
   /** Detalhe legível dos turnos, ex.: ["Noite × 3", "Manhã × 1"]. */
@@ -130,11 +131,23 @@ export function computeFaturamento(
     .sort((a, b) => b.tokens.length - a.tokens.length);
 
   let entregasValor = 0;
-  const misses = new Map<string, number>();
+  const misses = new Map<string, { count: number; exemplos: string[] }>();
   for (const r of rows) {
     const z = r.bairro ? matchZone(r.bairro, zones) : null;
-    if (z) entregasValor += z.price;
-    else misses.set(r.bairro || "—", (misses.get(r.bairro || "—") ?? 0) + 1);
+    if (z) {
+      entregasValor += z.price;
+    } else {
+      const key = r.bairro || "—";
+      const m = misses.get(key) ?? { count: 0, exemplos: [] };
+      m.count++;
+      if (m.exemplos.length < 3) {
+        m.exemplos.push(
+          `${r.cotacao} — ${r.bairro || "?"}` +
+            (r.dia ? ` (${r.dia}${r.periodo && r.periodo !== "—" ? `, ${r.periodo}` : ""})` : ""),
+        );
+      }
+      misses.set(key, m);
+    }
   }
 
   const rate = client.dailyRate ?? 0;
@@ -188,7 +201,7 @@ export function computeFaturamento(
     entregas: rows.length,
     entregasValor: round(entregasValor),
     semPreco: [...misses.entries()]
-      .map(([bairro, count]) => ({ bairro, count }))
+      .map(([bairro, m]) => ({ bairro, count: m.count, exemplos: m.exemplos }))
       .sort((a, b) => b.count - a.count),
     diariasDetectadas,
     turnos,

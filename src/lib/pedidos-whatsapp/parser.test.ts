@@ -456,3 +456,34 @@ Turno Noite de todas as diarias
     expect(shifts.length).toBe(1);
   });
 });
+
+describe("parseConversation — dia com data sem ano: 'Sabado (22/08)'", () => {
+  const TODAY = new Date(2026, 7, 24); // segunda, 24/08/2026
+
+  it("resolve 'Sabado (22/08)' e 'Domingo (23/08)' como dias, sem linha ignorada", () => {
+    const text = `Sexta - Feira (21/08)
+* Henrique - Rio Vermelho
+Sabado (22/08)
+* Mário - Rio Vermelho
+Domingo (23/08)
+* David - Pituba
+`;
+    const { rows, skipped } = parseConversation(text, TODAY);
+    expect(skipped).toEqual([]);
+    expect(rows.length).toBe(3);
+    expect(rows.map((r) => r.dia)).toEqual(["21/08/2026", "22/08/2026", "23/08/2026"]);
+  });
+
+  it("'Sexta - Feira (21/08)' é marcador de dia, não entrega fantasma 'Feira (21/08)'", () => {
+    const { rows } = parseConversation("Sexta - Feira (21/08)\n1234- Pituba\n", TODAY);
+    expect(rows.length).toBe(1);
+    expect(rows[0].bairro).toBe("Pituba");
+    expect(rows[0].dia).toBe("21/08/2026");
+  });
+
+  it("data sem ano que cairia no futuro pertence ao ano anterior", () => {
+    const jan = new Date(2027, 0, 5); // 05/01/2027
+    const { rows } = parseConversation("Sabado (28/12)\n1234- Pituba\n", jan);
+    expect(rows[0].dia).toBe("28/12/2026");
+  });
+});

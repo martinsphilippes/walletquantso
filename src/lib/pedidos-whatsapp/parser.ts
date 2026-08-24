@@ -58,9 +58,10 @@ export function rowValues(r: ParsedRow): string[] {
 // is normalized to a plain "-" before matching, so "Nome − Bairro" lines from
 // a photo parse the same as typed ones.
 const DASH_VARIANTS = /[‐-―−﹘－]/g;
-// An explicit date in a marker line ("Sexta-feira 07/08/26") wins over the
-// weekday resolution.
-const EXPLICIT_DATE = /\b(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})\b/;
+// An explicit date in a marker line wins over the weekday resolution. O ano é
+// opcional: "Sexta-feira 07/08/26" e "Sabado (22/08)" funcionam igual — sem
+// ano, assume o ano corrente (ou o anterior, se a data cair no futuro).
+const EXPLICIT_DATE = /\b(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2,4}))?\b/;
 
 const PERIOD_WORD = /(manh[aã]|tarde|noite|madrugada)/i;
 const HEADER_LINE = /^\*+\s*(.+?)\s*\*+$/;
@@ -149,9 +150,19 @@ function findDateInLine(line: string, today: Date): string | null {
   if (explicit) {
     const day = Number(explicit[1]);
     const month = Number(explicit[2]);
-    let year = Number(explicit[3]);
-    if (year < 100) year += 2000;
     if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+      if (explicit[3]) {
+        let year = Number(explicit[3]);
+        if (year < 100) year += 2000;
+        return pad2(day) + "/" + pad2(month) + "/" + year;
+      }
+      // Sem ano ("22/08"): ano corrente — mas dias de trabalho são passados,
+      // então uma data que cairia no futuro (ex.: "28/12" lida em janeiro)
+      // pertence ao ano anterior. Tolerância de 1 dia para fuso/relógio.
+      let year = today.getFullYear();
+      const candidate = new Date(year, month - 1, day);
+      const limit = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+      if (candidate.getTime() > limit.getTime()) year -= 1;
       return pad2(day) + "/" + pad2(month) + "/" + year;
     }
   }

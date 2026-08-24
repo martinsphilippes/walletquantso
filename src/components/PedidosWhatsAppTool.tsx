@@ -624,11 +624,33 @@ export function PedidosWhatsAppTool() {
               </div>
             )}
             {faturamento.semPreco.length > 0 && (
-              <div className="badge warn" style={{ alignSelf: "flex-start" }}>
-                ⚠ {faturamento.semPreco.reduce((s, x) => s + x.count, 0)} entrega(s) sem preço na
-                tabela:{" "}
-                {faturamento.semPreco.map((x) => `${x.bairro} (${x.count})`).join(", ")} — cadastre
-                esses bairros no cliente para somarem.
+              <div
+                style={{
+                  border: "1px solid var(--warn)",
+                  borderRadius: 8,
+                  padding: "0.5rem 0.7rem",
+                }}
+              >
+                <div style={{ color: "var(--warn)", fontWeight: 600, fontSize: "0.85rem" }}>
+                  ⚠ {faturamento.semPreco.reduce((s, x) => s + x.count, 0)} entrega(s) sem preço
+                  na tabela — cadastre esses bairros no cliente para somarem:
+                </div>
+                <div
+                  style={{
+                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                    fontSize: "0.78rem",
+                    marginTop: "0.35rem",
+                    maxHeight: 140,
+                    overflowY: "auto",
+                  }}
+                >
+                  {faturamento.semPreco.map((x) => (
+                    <div key={x.bairro}>
+                      <strong>{x.bairro}</strong> ({x.count}×): {x.exemplos.join(" · ")}
+                      {x.count > x.exemplos.length ? " · …" : ""}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             {liveParsed.skipped.length > 0 && (

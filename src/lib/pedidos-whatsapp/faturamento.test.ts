@@ -30,7 +30,9 @@ describe("computeFaturamento", () => {
     const f = computeFaturamento(c, rows);
     expect(f.entregas).toBe(4);
     expect(f.entregasValor).toBe(32.5); // 10 + 10 + 12,50
-    expect(f.semPreco).toEqual([{ bairro: "Ondina", count: 1 }]);
+    expect(f.semPreco).toEqual([
+      { bairro: "Ondina", count: 1, exemplos: ["0001 — Ondina (06/08/2026)"] },
+    ]);
   });
 
   it("conta diárias como turnos distintos de Dia × Período", () => {
