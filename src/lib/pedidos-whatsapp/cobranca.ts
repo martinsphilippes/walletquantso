@@ -103,7 +103,8 @@ export function buildCobrancaAoa(
       aoa.push([`Diárias consideradas: ${fat.turnos.join(", ")}`]);
     }
     if (declared.length > 0 && fat.diarias !== fat.diariasDetectadas) {
-      aoa.push([`Quantidade ajustada manualmente para ${fat.diarias} diária(s).`]);
+      aoa.push([`Quantidade de diárias: ${fat.diarias}`]);
+      aoa.push(["Busca automática falhou!"]);
     }
     aoa.push(["Total de diárias", fat.diarias, "", "", fat.diariasValor]);
     aoa.push([]);

@@ -242,7 +242,8 @@ export async function downloadCobrancaPdf(
       [`Total: ${fat.diarias} diária(s)`, "", "", brl(fat.diariasValor)],
     ];
     if (declared.length > 0 && fat.diarias !== fat.diariasDetectadas) {
-      diariasBody.push([`Quantidade ajustada manualmente para ${fat.diarias}.`, "", "", ""]);
+      diariasBody.push([`Quantidade de diárias: ${fat.diarias}`, "", "", ""]);
+      diariasBody.push(["Busca automática falhou!", "", "", ""]);
     }
     autoTable(doc, {
       ...tableStyles,
