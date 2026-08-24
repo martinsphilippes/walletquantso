@@ -40,21 +40,6 @@ interface RevenueField {
 }
 const emptyRevenueField = (id: number): RevenueField => ({ id, label: "", value: "" });
 
-const EXAMPLE = `*MANHÃ*
-
-7143- Caminho das Árvores
-2294- Pituaçu
-0574- Pituba
-5281- Candeal
-8810- Pituba
-8448- Garcia
-
-*NOITE*
-
-1436- Pituba
-7862- Pituba
-0292- Pituba`;
-
 type Tab = "text" | "image";
 type StatusType = "ok" | "error" | undefined;
 interface Status {
@@ -467,9 +452,6 @@ export function PedidosWhatsAppTool() {
           <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem", alignItems: "center", flexWrap: "wrap" }}>
             <button type="button" className="btn-primary" onClick={convert}>
               Converter e gerar Excel
-            </button>
-            <button type="button" className="btn-secondary" onClick={() => setText(EXAMPLE)}>
-              Carregar exemplo
             </button>
             {clients.length > 0 && (
               <select
