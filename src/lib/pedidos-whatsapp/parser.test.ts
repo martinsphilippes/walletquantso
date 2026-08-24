@@ -501,3 +501,45 @@ T 23:35
     expect(skipped).toEqual([]);
   });
 });
+
+describe("parseConversation — remetente + dia na mesma linha (cabeçalho do WhatsApp)", () => {
+  const TODAY = new Date(2026, 7, 24); // segunda, 24/08/2026
+
+  it("'Josias Cardoso Quantso sexta - feira' vira remetente + dia (não entrega 'feira')", () => {
+    const text = `Josias Cardoso Quantso sexta - feira
+1111- Pituba
+2222- Brotas
+`;
+    const { rows, shifts, skipped } = parseConversation(text, TODAY);
+    expect(skipped).toEqual([]);
+    expect(rows.length).toBe(2);
+    expect(rows.every((r) => r.dia === "21/08/2026")).toBe(true); // sexta
+    expect(rows.some((r) => r.bairro === "feira")).toBe(false);
+    // A diária do Josias entra pela regra de quem entrega no dia.
+    const doJosias = shifts.filter((s) => s.name.startsWith("Josias"));
+    expect(doJosias.length).toBe(1);
+    expect(doJosias[0].dia).toBe("21/08/2026");
+  });
+
+  it("com turno declarado depois do cabeçalho, a diária é uma só (sem dupla)", () => {
+    const text = `Josias Cardoso Quantso sexta - feira
+NOITE
+1111- Pituba
+`;
+    const { rows, shifts } = parseConversation(text, TODAY);
+    expect(rows.length).toBe(1);
+    expect(rows[0].periodo).toBe("Noite");
+    const doJosias = shifts.filter((s) => s.name.startsWith("Josias"));
+    expect(doJosias.length).toBe(1);
+    expect(doJosias[0].periodo).toBe("Noite");
+  });
+
+  it("remetente + dia com data: 'Erick Quantso Sábado (22/08)'", () => {
+    const text = `Erick Quantso Sábado (22/08)
+1111- Pituba
+`;
+    const { rows, skipped } = parseConversation(text, TODAY);
+    expect(skipped).toEqual([]);
+    expect(rows[0].dia).toBe("22/08/2026");
+  });
+});

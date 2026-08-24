@@ -92,6 +92,15 @@ const DELETED_MESSAGE = /mensagem\s+apagada|apagou\s+es[st]a\s+mensagem/;
 // Sobra de OCR que é só um horário ("10:56", "T 23:35", "1] 23:09 »"):
 // descartada em silêncio também.
 const TIME_ONLY_LINE = /^\S{0,2}\s*\d{1,2}[:.]\d{2}\s*[»><«]*$/;
+// Cabeçalho do WhatsApp que junta remetente e dia da mensagem numa linha só:
+// "Josias Cardoso Quantso sexta - feira" ou "... Sábado (22/08)". O nome vira
+// o remetente atual e o dia vira o marcador das linhas seguintes.
+const SENDER_DAY_LINE = new RegExp(
+  "^([" + LETTER + "][" + LETTER + "'.]*(?:\\s+[" + LETTER + "][" + LETTER + "'.]*){0,5})\\s+" +
+    "((?:segunda|ter[cç]a|quarta|quinta|sexta)\\s*-?\\s*feira|s[aá]bado|domingo|ontem|hoje)" +
+    "\\s*(?:\\(?\\s*\\d{1,2}[/.]\\d{1,2}(?:[/.]\\d{2,4})?\\s*\\)?)?\\s*$",
+  "i",
+);
 
 // "feira" days: the stem alone ("quinta"), or the stem plus "feira" with any
 // amount of spaces and/or a hyphen between them ("quinta-feira", "quinta
@@ -434,6 +443,19 @@ export function parseConversation(
     if (shift) {
       shifts.push({ name: shift.name, periodo: shift.periodo, dia: currentDate });
       continue;
+    }
+
+    // "Josias Cardoso Quantso sexta - feira": remetente + dia numa linha só
+    // (cabeçalho do WhatsApp). NÃO é entrega "feira" — define o remetente e o
+    // dia; a diária dele entra pelas regras de sempre (turno ou entregas).
+    const senderDay = stripTrailingNoise(line).match(SENDER_DAY_LINE);
+    if (senderDay) {
+      const resolved = findDateInLine(stripTrailingNoise(line).slice(senderDay[1].length), today);
+      if (resolved) {
+        currentSender = senderDay[1].trim();
+        currentDate = resolved;
+        continue;
+      }
     }
 
     const nameMatch = line.match(NAME_LINE);
