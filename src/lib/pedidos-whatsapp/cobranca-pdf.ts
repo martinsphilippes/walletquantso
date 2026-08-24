@@ -241,7 +241,7 @@ export async function downloadCobrancaPdf(
     const diariasFoot: string[][] = [
       [`Total: ${fat.diarias} diária(s)`, "", "", brl(fat.diariasValor)],
     ];
-    if (declared.length > 0 && fat.diarias !== declared.length) {
+    if (declared.length > 0 && fat.diarias !== fat.diariasDetectadas) {
       diariasBody.push([`Quantidade ajustada manualmente para ${fat.diarias}.`, "", "", ""]);
     }
     autoTable(doc, {

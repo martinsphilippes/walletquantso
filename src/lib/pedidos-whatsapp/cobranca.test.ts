@@ -50,12 +50,14 @@ describe("buildCobrancaAoa", () => {
     const i = flat.indexOf("DIÁRIAS (MOTOBOYS)");
     expect(flat[i + 2]).toContain("Josias|07/08/2026|Manhã");
     expect(flat[i + 3]).toContain("Erick|09/08/2026|Noite");
-    expect(flat[i + 4]).toContain("Total de diárias|2");
-    expect(flat[i + 4]).toContain("140");
+    // 2 declaradas (Josias, Erick) + 1 do dia 08/08, que tem entrega mas
+    // nenhuma diária declarada.
+    expect(flat[i + 4]).toContain("Total de diárias|3");
+    expect(flat[i + 4]).toContain("210");
   });
 
   it("mostra o total a pagar e a tabela de preços para conferência", () => {
-    expect(flat.find((l) => l.startsWith("TOTAL A PAGAR"))).toContain("182"); // 42 + 140
+    expect(flat.find((l) => l.startsWith("TOTAL A PAGAR"))).toContain("252"); // 42 + 210
     const i = flat.indexOf("TABELA DE PREÇOS POR BAIRRO");
     expect(flat[i + 2]).toContain("Brotas");
     expect(flat[i + 3]).toContain("Pituba");

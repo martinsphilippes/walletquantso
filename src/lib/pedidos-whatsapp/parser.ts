@@ -89,6 +89,9 @@ const TRAILING_NOISE = /\s*[[\]()]*\s*\d{1,2}[:.]\d{2}\s*[»>]?\s*[A-Za-z]?\s*$/
 // "Mensagem apagada" (e variantes) não é entrega nem diária: a linha inteira
 // é descartada em silêncio, sem nem aparecer entre as não reconhecidas.
 const DELETED_MESSAGE = /mensagem\s+apagada|apagou\s+es[st]a\s+mensagem/;
+// Sobra de OCR que é só um horário ("10:56", "T 23:35", "1] 23:09 »"):
+// descartada em silêncio também.
+const TIME_ONLY_LINE = /^\S{0,2}\s*\d{1,2}[:.]\d{2}\s*[»><«]*$/;
 
 // "feira" days: the stem alone ("quinta"), or the stem plus "feira" with any
 // amount of spaces and/or a hyphen between them ("quinta-feira", "quinta
@@ -380,6 +383,8 @@ export function parseConversation(
 
     // "Mensagem apagada" some por inteiro — não é entrega, diária nem dúvida.
     if (DELETED_MESSAGE.test(normalizeAccents(line.toLowerCase()))) continue;
+    // Linha que é só um horário de mensagem (sobra do OCR) também.
+    if (TIME_ONLY_LINE.test(line)) continue;
 
     // Vale só para a linha imediatamente seguinte a uma entrega sem traço.
     const afterNoDashRow = prevNoDashRow;

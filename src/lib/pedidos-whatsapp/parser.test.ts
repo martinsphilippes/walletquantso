@@ -487,3 +487,17 @@ Domingo (23/08)
     expect(rows[0].dia).toBe("28/12/2026");
   });
 });
+
+describe("parseConversation — sobras de horário do OCR somem em silêncio", () => {
+  it("'T 23:35', '1] 23:09 »' e '10:56' não aparecem nas não reconhecidas", () => {
+    const text = `Sabado (22/08)
+1234- Pituba
+T 23:35
+1] 23:09 »
+10:56
+`;
+    const { rows, skipped } = parseConversation(text, new Date(2026, 7, 24));
+    expect(rows.length).toBe(1);
+    expect(skipped).toEqual([]);
+  });
+});

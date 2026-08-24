@@ -159,13 +159,28 @@ export function computeFaturamento(
     // dia é uma diária (duplicatas de prints sobrepostos não contam duas vezes).
     const seen = new Set<string>();
     const byPeriod = new Map<string, number>();
+    const daysWithShifts = new Set<string>();
     for (const s of declaredShifts) {
       const key = `${s.dia}|${norm(s.periodo)}|${norm(s.name)}`;
       if (seen.has(key)) continue;
       seen.add(key);
+      daysWithShifts.add(s.dia);
       byPeriod.set(s.periodo, (byPeriod.get(s.periodo) ?? 0) + 1);
     }
-    diariasDetectadas = rate > 0 ? seen.size : 0;
+    // As declarações NÃO desligam a regra por dia: um dia que tem entregas
+    // mas nenhuma diária declarada (nem implícita) ainda vale 1 diária por
+    // turno — senão uma única declaração esconderia os outros dias.
+    const extraKeys = new Set<string>();
+    for (const r of rows) {
+      if (daysWithShifts.has(r.dia)) continue;
+      const periodo = r.periodo && r.periodo !== "—" ? r.periodo : "";
+      extraKeys.add(`${r.dia}|${periodo}`);
+    }
+    for (const k of extraKeys) {
+      const periodo = k.split("|")[1] || "Dia";
+      byPeriod.set(periodo, (byPeriod.get(periodo) ?? 0) + 1);
+    }
+    diariasDetectadas = rate > 0 ? seen.size + extraKeys.size : 0;
     turnos = [...byPeriod.entries()].map(([p, n]) => `${p} × ${n}`);
   } else {
     // Sem declarações: heurística por turnos distintos de Dia × Período.

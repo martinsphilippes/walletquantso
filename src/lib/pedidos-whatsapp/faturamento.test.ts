@@ -291,3 +291,33 @@ Pedido 0554 - Pituba Editada 22:24
     expect(computeFaturamento(semDiaria, rows).diariasDetectadas).toBe(0);
   });
 });
+
+describe("diárias: declaração única não esconde os outros dias", () => {
+  it("1 diária declarada num dia + entregas em outros 2 dias sem declaração = 3", () => {
+    // Caso real da Piaccere: uma linha virou diária implícita num único dia
+    // e os outros dois dias (só com entregas) ficavam de fora da contagem.
+    const c = client({ dailyRate: 50, zones: [{ id: "z1", name: "Pituba", price: 10 }] });
+    const rows = [
+      row({ dia: "21/08/2026", bairro: "Pituba" }),
+      row({ dia: "22/08/2026", bairro: "Pituba" }),
+      row({ dia: "23/08/2026", bairro: "Pituba" }),
+    ];
+    const shifts = [{ name: "Fulano", periodo: "—", dia: "22/08/2026" }];
+    const f = computeFaturamento(c, rows, undefined, shifts);
+    expect(f.diariasDetectadas).toBe(3); // 1 declarada + 2 dias sem declaração
+    expect(f.diariasValor).toBe(150);
+  });
+
+  it("dia com diária declarada não ganha extra pela regra por dia", () => {
+    const c = client({ dailyRate: 50, zones: [{ id: "z1", name: "Pituba", price: 10 }] });
+    const rows = [
+      row({ dia: "22/08/2026", bairro: "Pituba", periodo: "Manhã" }),
+      row({ dia: "22/08/2026", bairro: "Pituba", periodo: "Noite" }),
+    ];
+    const shifts = [
+      { name: "A", periodo: "Manhã", dia: "22/08/2026" },
+      { name: "B", periodo: "Noite", dia: "22/08/2026" },
+    ];
+    expect(computeFaturamento(c, rows, undefined, shifts).diariasDetectadas).toBe(2);
+  });
+});

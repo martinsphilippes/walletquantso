@@ -102,7 +102,7 @@ export function buildCobrancaAoa(
     } else if (fat.diarias > 0) {
       aoa.push([`Diárias consideradas: ${fat.turnos.join(", ")}`]);
     }
-    if (declared.length > 0 && fat.diarias !== declared.length) {
+    if (declared.length > 0 && fat.diarias !== fat.diariasDetectadas) {
       aoa.push([`Quantidade ajustada manualmente para ${fat.diarias} diária(s).`]);
     }
     aoa.push(["Total de diárias", fat.diarias, "", "", fat.diariasValor]);
