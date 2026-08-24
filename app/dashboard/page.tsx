@@ -12,6 +12,7 @@ import {
   listTransactions,
 } from "@/services/firestore";
 import { listBills } from "@/services/bills";
+import { onListsChange } from "@/services/live-store";
 import {
   createTransaction,
   updateTransaction,
@@ -127,6 +128,10 @@ function Dashboard() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Recarrega sozinho quando os dados mudam (ex.: lançamento feito no celular
+  // aparece no Dashboard aberto do iPad sem precisar recarregar).
+  useEffect(() => onListsChange(() => { void load(); }), [load]);
 
   // Período dos indicadores do topo (vazio = histórico inteiro). A última
   // escolha fica gravada e volta aplicada na próxima visita.

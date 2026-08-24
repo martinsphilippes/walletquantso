@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadErrorMessage } from "@/lib/errors";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
+import { onListsChange } from "@/services/live-store";
 import {
   listAccounts,
   listCategories,
@@ -114,6 +115,9 @@ function Lancamentos() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Recarrega sozinho quando os dados mudam em outro aparelho/tela.
+  useEffect(() => onListsChange(() => { void load(); }), [load]);
 
   const accountName = useMemo(
     () => new Map(accounts.map((x) => [x.id!, x.name])),

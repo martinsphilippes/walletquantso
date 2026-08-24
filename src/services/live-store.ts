@@ -32,6 +32,28 @@ interface Store {
 
 const stores = new Map<string, Store>();
 
+// Avisa as telas quando qualquer coleção muda (lançamento feito em outro
+// aparelho, baixa, sincronização): elas recarregam sozinhas, sem F5.
+type ChangeListener = () => void;
+const changeListeners = new Set<ChangeListener>();
+let notifyTimer: ReturnType<typeof setTimeout> | null = null;
+
+function notifyChange(): void {
+  if (notifyTimer) return; // agrupa rajadas de mudanças num aviso só
+  notifyTimer = setTimeout(() => {
+    notifyTimer = null;
+    for (const fn of [...changeListeners]) fn();
+  }, 400);
+}
+
+/** Registra um ouvinte de mudanças; devolve a função para cancelar. */
+export function onListsChange(fn: ChangeListener): () => void {
+  changeListeners.add(fn);
+  return () => {
+    changeListeners.delete(fn);
+  };
+}
+
 // O cache antigo em localStorage (wq.cache.*) não é mais usado — limpa uma vez.
 if (typeof window !== "undefined") {
   try {
@@ -63,14 +85,17 @@ function attach(collectionName: string, ownerId: string, key: string): Store {
   onSnapshot(
     q,
     (snap) => {
+      const first = !store.settled;
       store.docs = mapDocs(snap.docs);
       // Resolve na primeira emissão útil: dados do cache do aparelho (quando
       // existem) aparecem na hora; num primeiro acesso sem cache, espera a
       // resposta do servidor para não mostrar telas vazias por engano.
-      if (!store.settled && (!snap.metadata.fromCache || snap.docs.length > 0)) {
+      if (first && (!snap.metadata.fromCache || snap.docs.length > 0)) {
         store.settled = true;
         store.settle();
       }
+      // Emissões seguintes = algo mudou (aqui ou em outro aparelho).
+      if (!first) notifyChange();
     },
     (err) => {
       if (!store.settled) {

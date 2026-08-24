@@ -7,6 +7,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/services/auth-context";
+import { onListsChange } from "@/services/live-store";
 import {
   listAccounts,
   listCategories,
@@ -203,6 +204,9 @@ export function BillsManager({ kind }: { kind: BillKind }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Recarrega sozinho quando os dados mudam em outro aparelho/tela.
+  useEffect(() => onListsChange(() => { void load(); }), [load]);
 
   const t = today();
   const contactName = useMemo(

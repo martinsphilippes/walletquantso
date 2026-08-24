@@ -28,6 +28,7 @@ import { computeCashBalances, monthResult } from "@/lib/dashboard/cash";
 import { effectiveCostCenterId } from "@/lib/categories/tree";
 import { parseBrCurrency } from "@/lib/br/parse";
 import { todayBr, currentMonthBr } from "@/lib/br/date";
+import { onListsChange } from "@/services/live-store";
 import { DateParts } from "@/components/DateParts";
 import type { Account, Bill, Category, CostCenter, Transaction } from "@/types";
 
@@ -93,6 +94,9 @@ function Rapido() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Recarrega sozinho quando os dados mudam em outro aparelho/tela.
+  useEffect(() => onListsChange(() => { void load(); }), [load]);
 
   const cash = useMemo(
     () => computeCashBalances(accounts, txs, payables, receivables),

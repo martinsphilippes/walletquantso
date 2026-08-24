@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadErrorMessage } from "@/lib/errors";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
+import { onListsChange } from "@/services/live-store";
 import { listAccounts, listTransactions } from "@/services/firestore";
 import { listBills, backfillPaymentTransactions } from "@/services/bills";
 import { createTransaction, setReconciled } from "@/services/transactions";
@@ -82,6 +83,9 @@ function Conciliacao() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Recarrega sozinho quando os dados mudam em outro aparelho/tela.
+  useEffect(() => onListsChange(() => { void load(); }), [load]);
 
   const account = useMemo(
     () => accounts.find((a) => a.id === accountId),
