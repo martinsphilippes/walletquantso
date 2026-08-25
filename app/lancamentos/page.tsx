@@ -26,6 +26,8 @@ import { FilterField } from "@/components/FilterField";
 import { todayBr, daysAgoBr, monthRangeBr } from "@/lib/br/date";
 import { loadPeriod, savePreset, saveCustomPeriod } from "@/lib/period-presets";
 import { effectiveCostCenterId } from "@/lib/categories/tree";
+import { DateParts } from "@/components/DateParts";
+import { parseBrCurrency } from "@/lib/br/parse";
 import { transactionsToCsv } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
 import {
@@ -364,6 +366,75 @@ function Lancamentos() {
     contactId: t.contactId,
     notes: t.notes,
   });
+
+  // ── Edição na própria lista (faixa compacta, como no Contas a pagar) ─────
+  interface EditDraft {
+    date: string;
+    description: string;
+    type: TransactionType;
+    amount: string;
+    accountId: string;
+    transferAccountId: string;
+    costCenterId: string;
+    categoryId: string;
+    subcategoryId: string;
+    contactId: string;
+    notes: string;
+  }
+  const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
+
+  function draftFromTx(t: Transaction): EditDraft {
+    const cat = t.categoryId ? catById.get(t.categoryId) : undefined;
+    return {
+      date: t.date,
+      description: t.description,
+      type: t.type,
+      amount: t.amount.toLocaleString("pt-BR", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
+      accountId: t.accountId ?? "",
+      transferAccountId: t.transferAccountId ?? "",
+      costCenterId: t.costCenterId ?? "",
+      categoryId: cat ? (cat.parentId ?? cat.id!) : "",
+      subcategoryId: cat?.parentId ? cat.id! : "",
+      contactId: t.contactId ?? "",
+      notes: t.notes ?? "",
+    };
+  }
+
+  const editMains = (d: EditDraft) =>
+    mainCategories.filter(
+      (c) =>
+        c.kind === d.type &&
+        (!d.costCenterId || (c.costCenterId ?? "") === d.costCenterId),
+    );
+
+  async function saveInline() {
+    if (!editDraft || !form || form.mode === "new") return;
+    const value = parseBrCurrency(editDraft.amount);
+    if (value == null || value <= 0) {
+      setError("Informe um valor válido.");
+      return;
+    }
+    if (!editDraft.accountId) {
+      setError("Escolha a conta.");
+      return;
+    }
+    const isTransfer = editDraft.type === "transfer";
+    await handleSubmit({
+      date: editDraft.date,
+      amount: value,
+      type: editDraft.type,
+      description: editDraft.description.trim(),
+      accountId: editDraft.accountId,
+      transferAccountId: isTransfer ? editDraft.transferAccountId || null : null,
+      categoryId: isTransfer ? null : (editDraft.subcategoryId || editDraft.categoryId) || null,
+      costCenterId: isTransfer ? null : editDraft.costCenterId || null,
+      contactId: editDraft.contactId || null,
+      notes: editDraft.notes,
+    });
+  }
 
   const activeFilterCount = Object.values(filters).filter((v) => v).length;
 
@@ -832,13 +903,19 @@ function Lancamentos() {
                     <td style={{ whiteSpace: "nowrap" }}>
                       <button
                         style={{ background: "var(--border)", padding: "0.3rem 0.6rem" }}
-                        onClick={() => setForm({ mode: "edit", tx: t })}
+                        onClick={() => {
+                          setForm({ mode: "edit", tx: t });
+                          setEditDraft(draftFromTx(t));
+                        }}
                       >
                         Editar
                       </button>{" "}
                       <button
                         style={{ background: "var(--border)", padding: "0.3rem 0.6rem" }}
-                        onClick={() => setForm({ mode: "clone", tx: t })}
+                        onClick={() => {
+                          setForm({ mode: "clone", tx: t });
+                          setEditDraft(draftFromTx(t));
+                        }}
                       >
                         Clonar
                       </button>{" "}
@@ -850,22 +927,171 @@ function Lancamentos() {
                       </button>
                     </td>
                   </tr>
-                  {form && form.mode !== "new" && form.tx.id === t.id && (
+                  {form && form.mode !== "new" && form.tx.id === t.id && editDraft && (
                     <tr>
-                      <td colSpan={11} style={{ padding: "0.75rem", background: "var(--bg)" }}>
-                        <TransactionForm
-                          accounts={accounts}
-                          categories={categories}
-                          costCenters={costCenters}
-                          contacts={contacts}
-                          initial={txToInput(form.tx)}
-                          submitLabel={
-                            form.mode === "edit" ? "Salvar alterações" : "Duplicar lançamento"
-                          }
-                          busy={saving}
-                          onSubmit={handleSubmit}
-                          onCancel={() => setForm(null)}
-                        />
+                      <td colSpan={11} style={{ padding: "0.6rem 0.75rem", background: "var(--bg)" }}>
+                        <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+                          <InlineField label="Data">
+                            <DateParts
+                              value={editDraft.date}
+                              onChange={(iso) => setEditDraft({ ...editDraft, date: iso })}
+                            />
+                          </InlineField>
+                          <InlineField label="Descrição">
+                            <input
+                              value={editDraft.description}
+                              onChange={(e) => setEditDraft({ ...editDraft, description: e.target.value })}
+                              style={{ ...fieldStyle, minWidth: 180 }}
+                            />
+                          </InlineField>
+                          <InlineField label="Tipo">
+                            <select
+                              value={editDraft.type}
+                              onChange={(e) => {
+                                const type = e.target.value as TransactionType;
+                                // Trocar o tipo invalida a categoria (receita × despesa).
+                                setEditDraft({ ...editDraft, type, categoryId: "", subcategoryId: "" });
+                              }}
+                            >
+                              <option value="expense">Despesa</option>
+                              <option value="income">Receita</option>
+                              <option value="transfer">Transferência</option>
+                            </select>
+                          </InlineField>
+                          <InlineField label="Valor (R$)">
+                            <input
+                              value={editDraft.amount}
+                              onChange={(e) => setEditDraft({ ...editDraft, amount: e.target.value })}
+                              inputMode="decimal"
+                              style={{ ...fieldStyle, width: 110, textAlign: "right" }}
+                            />
+                          </InlineField>
+                          <InlineField label="Conta">
+                            <select
+                              value={editDraft.accountId}
+                              onChange={(e) => setEditDraft({ ...editDraft, accountId: e.target.value })}
+                            >
+                              <option value="">—</option>
+                              {accounts.map((a) => (
+                                <option key={a.id} value={a.id}>{a.name}</option>
+                              ))}
+                            </select>
+                          </InlineField>
+                          {editDraft.type === "transfer" && (
+                            <InlineField label="Para a conta">
+                              <select
+                                value={editDraft.transferAccountId}
+                                onChange={(e) =>
+                                  setEditDraft({ ...editDraft, transferAccountId: e.target.value })
+                                }
+                              >
+                                <option value="">—</option>
+                                {accounts
+                                  .filter((a) => a.id !== editDraft.accountId)
+                                  .map((a) => (
+                                    <option key={a.id} value={a.id}>{a.name}</option>
+                                  ))}
+                              </select>
+                            </InlineField>
+                          )}
+                          {editDraft.type !== "transfer" && (
+                            <>
+                              <InlineField label="Centro de custo">
+                                <select
+                                  value={editDraft.costCenterId}
+                                  onChange={(e) => {
+                                    const id = e.target.value;
+                                    const keep =
+                                      !id ||
+                                      (effectiveCostCenterId(
+                                        catById.get(editDraft.subcategoryId || editDraft.categoryId),
+                                        catById,
+                                      ) ?? "") === id;
+                                    setEditDraft({
+                                      ...editDraft,
+                                      costCenterId: id,
+                                      categoryId: keep ? editDraft.categoryId : "",
+                                      subcategoryId: keep ? editDraft.subcategoryId : "",
+                                    });
+                                  }}
+                                >
+                                  <option value="">—</option>
+                                  {costCenters.map((c) => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                  ))}
+                                </select>
+                              </InlineField>
+                              <InlineField label="Categoria">
+                                <select
+                                  value={editDraft.categoryId}
+                                  onChange={(e) => {
+                                    const id = e.target.value;
+                                    setEditDraft({
+                                      ...editDraft,
+                                      categoryId: id,
+                                      subcategoryId: "",
+                                      costCenterId:
+                                        editDraft.costCenterId ||
+                                        (effectiveCostCenterId(catById.get(id), catById) ?? ""),
+                                    });
+                                  }}
+                                >
+                                  <option value="">—</option>
+                                  {editMains(editDraft).map((c) => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                  ))}
+                                </select>
+                              </InlineField>
+                              {subsOf(editDraft.categoryId).length > 0 && (
+                                <InlineField label="Subcategoria">
+                                  <select
+                                    value={editDraft.subcategoryId}
+                                    onChange={(e) =>
+                                      setEditDraft({ ...editDraft, subcategoryId: e.target.value })
+                                    }
+                                  >
+                                    <option value="">— nenhuma —</option>
+                                    {subsOf(editDraft.categoryId).map((c) => (
+                                      <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                  </select>
+                                </InlineField>
+                              )}
+                            </>
+                          )}
+                          <InlineField label="Contato">
+                            <select
+                              value={editDraft.contactId}
+                              onChange={(e) => setEditDraft({ ...editDraft, contactId: e.target.value })}
+                            >
+                              <option value="">—</option>
+                              {contacts.map((c) => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                            </select>
+                          </InlineField>
+                          <InlineField label="Observações">
+                            <input
+                              value={editDraft.notes}
+                              onChange={(e) => setEditDraft({ ...editDraft, notes: e.target.value })}
+                              style={{ ...fieldStyle, minWidth: 140 }}
+                            />
+                          </InlineField>
+                          <div>
+                            <button disabled={saving} onClick={() => void saveInline()}>
+                              {form.mode === "edit" ? "Salvar" : "Duplicar"}
+                            </button>{" "}
+                            <button
+                              style={{ background: "var(--border)" }}
+                              onClick={() => {
+                                setForm(null);
+                                setEditDraft(null);
+                              }}
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
                       </td>
                     </tr>
                   )}
@@ -877,6 +1103,15 @@ function Lancamentos() {
         )}
       </div>
     </>
+  );
+}
+
+function InlineField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: "0.78rem" }}>
+      <span className="muted">{label}</span>
+      {children}
+    </label>
   );
 }
 
