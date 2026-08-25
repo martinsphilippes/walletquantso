@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { loadErrorMessage } from "@/lib/errors";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
@@ -390,22 +390,15 @@ function Lancamentos() {
         <Stat label="Lançamentos" value={String(summary.count)} />
       </div>
 
-      {form ? (
+      {form?.mode === "new" ? (
         <TransactionForm
           accounts={accounts}
           categories={categories}
           costCenters={costCenters}
           contacts={contacts}
-          initial={form.mode === "new" ? undefined : txToInput(form.tx)}
-          submitLabel={
-            form.mode === "edit"
-              ? "Salvar alterações"
-              : form.mode === "clone"
-                ? "Duplicar lançamento"
-                : "Adicionar lançamento"
-          }
+          submitLabel="Adicionar lançamento"
           busy={saving}
-          quickEntry={form.mode === "new"}
+          quickEntry
           onSubmit={handleSubmit}
           onCancel={() => setForm(null)}
         />
@@ -795,7 +788,8 @@ function Lancamentos() {
               </thead>
               <tbody>
                 {cf.filtered.map((t) => (
-                  <tr key={t.id}>
+                  <Fragment key={t.id}>
+                  <tr>
                     <td><RowCheckbox sel={sel} id={t.id} /></td>
                     <td>{t.date.split("-").reverse().join("/")}</td>
                     <td>{t.description}</td>
@@ -844,10 +838,7 @@ function Lancamentos() {
                       </button>{" "}
                       <button
                         style={{ background: "var(--border)", padding: "0.3rem 0.6rem" }}
-                        onClick={() => {
-                          setForm({ mode: "clone", tx: t });
-                          if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
-                        }}
+                        onClick={() => setForm({ mode: "clone", tx: t })}
                       >
                         Clonar
                       </button>{" "}
@@ -859,6 +850,26 @@ function Lancamentos() {
                       </button>
                     </td>
                   </tr>
+                  {form && form.mode !== "new" && form.tx.id === t.id && (
+                    <tr>
+                      <td colSpan={11} style={{ padding: "0.75rem", background: "var(--bg)" }}>
+                        <TransactionForm
+                          accounts={accounts}
+                          categories={categories}
+                          costCenters={costCenters}
+                          contacts={contacts}
+                          initial={txToInput(form.tx)}
+                          submitLabel={
+                            form.mode === "edit" ? "Salvar alterações" : "Duplicar lançamento"
+                          }
+                          busy={saving}
+                          onSubmit={handleSubmit}
+                          onCancel={() => setForm(null)}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
