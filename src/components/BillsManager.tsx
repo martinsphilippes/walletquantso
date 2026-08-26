@@ -24,7 +24,7 @@ import {
   backfillPaymentTransactions,
   settleBillAtPaid,
 } from "@/services/bills";
-import { parseBrCurrency } from "@/lib/br/parse";
+import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
 import { effectiveCostCenterId } from "@/lib/categories/tree";
 import { DateParts } from "@/components/DateParts";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
@@ -465,7 +465,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     const isSubCat = !!cat?.parentId;
     setDraft({
       description: b.description,
-      amount: String(b.amount).replace(".", ","),
+      amount: b.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       dueDate: b.dueDate,
       competenceDate: b.competenceDate ?? b.dueDate,
       documentNumber: b.documentNumber ?? "",
@@ -493,7 +493,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     setCreating({
       // Tira o sufixo de parcela "(2/8)" para o clone nascer limpo.
       description: b.description.replace(/\s*\(\d+\/\d+\)\s*$/, ""),
-      amount: String(b.amount).replace(".", ","),
+      amount: b.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       dueDate: b.dueDate,
       competenceDate: b.competenceDate ?? b.dueDate,
       documentNumber: String(nextDocumentNumber(bills ?? [])),
@@ -642,7 +642,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     setEditingId(null);
     setPartialId(null);
     setPayingId(b.id!);
-    setPayAmount(String(remaining(b)).replace(".", ","));
+    setPayAmount(remaining(b).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     setPayDate(today());
     setPayAccount(b.accountId ?? "");
     setPayMode("settle");
@@ -748,7 +748,8 @@ export function BillsManager({ kind }: { kind: BillKind }) {
             <input
               placeholder="0,00"
               value={creating.amount}
-              onChange={(e) => setCreating({ ...creating, amount: e.target.value })}
+              onChange={(e) => setCreating({ ...creating, amount: maskBrAmount(e.target.value) })}
+              inputMode="numeric"
               style={{ ...fieldStyle, width: 130, textAlign: "right" }}
             />
           </Field>
@@ -1257,7 +1258,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                               <input
                                 placeholder={`Valor ${isPayable ? "pago" : "recebido"} (R$)`}
                                 value={partialAmount}
-                                onChange={(e) => setPartialAmount(e.target.value)}
+                                onChange={(e) => setPartialAmount(maskBrAmount(e.target.value))}
                                 inputMode="decimal"
                                 style={{ ...fieldStyle, width: 130, textAlign: "right" }}
                               />
@@ -1314,7 +1315,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                               </select>
                               <input
                                 value={payAmount}
-                                onChange={(e) => setPayAmount(e.target.value)}
+                                onChange={(e) => setPayAmount(maskBrAmount(e.target.value))}
                                 style={{ ...fieldStyle, width: 110, textAlign: "right" }}
                               />
                               <DateParts value={payDate} onChange={setPayDate} />
@@ -1359,7 +1360,8 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                               <Field label="Valor">
                                 <input
                                   value={draft.amount}
-                                  onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
+                                  onChange={(e) => setDraft({ ...draft, amount: maskBrAmount(e.target.value) })}
+                                  inputMode="numeric"
                                   style={{ ...fieldStyle, width: 110, textAlign: "right" }}
                                 />
                               </Field>

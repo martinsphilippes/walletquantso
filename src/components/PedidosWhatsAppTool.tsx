@@ -25,7 +25,7 @@ import { listClients, addClientBilling } from "@/services/clients";
 import { listCategories, listCostCenters } from "@/services/firestore";
 import { createBill } from "@/services/bills";
 import { todayBr } from "@/lib/br/date";
-import { parseBrCurrency } from "@/lib/br/parse";
+import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
 import type { Category, Client, CostCenter } from "@/types";
 
 const brl = (n: number) =>
@@ -551,10 +551,10 @@ export function PedidosWhatsAppTool() {
                       value={f.value}
                       onChange={(e) =>
                         setRevenueFields((fs) =>
-                          fs.map((x) => (x.id === f.id ? { ...x, value: e.target.value } : x)),
+                          fs.map((x) => (x.id === f.id ? { ...x, value: maskBrAmount(e.target.value) } : x)),
                         )
                       }
-                      inputMode="decimal"
+                      inputMode="numeric"
                       placeholder="0,00"
                       style={{
                         width: 120,

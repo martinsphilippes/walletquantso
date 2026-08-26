@@ -140,3 +140,17 @@ export function parseBrCurrency(input: unknown): number | null {
   if (!Number.isFinite(value)) return null;
   return negative ? -value : value;
 }
+
+/**
+ * Máscara de dinheiro "centavos primeiro": conforme o usuário digita, os
+ * dígitos entram pela direita e a vírgula fica automática ("12345" → "123,45").
+ * Vazio quando não há dígito nenhum.
+ */
+export function maskBrAmount(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return "";
+  return (parseInt(digits, 10) / 100).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}

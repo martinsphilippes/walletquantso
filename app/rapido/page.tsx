@@ -26,7 +26,7 @@ import {
 } from "@/services/transactions";
 import { computeCashBalances, monthResult } from "@/lib/dashboard/cash";
 import { effectiveCostCenterId } from "@/lib/categories/tree";
-import { parseBrCurrency } from "@/lib/br/parse";
+import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
 import { todayBr, currentMonthBr } from "@/lib/br/date";
 import { onListsChange } from "@/services/live-store";
 import { DateParts } from "@/components/DateParts";
@@ -35,15 +35,7 @@ import type { Account, Bill, Category, CostCenter, Transaction } from "@/types";
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-/** Máscara centavos-primeiro ("12345" -> "123,45"), igual ao form principal. */
-function maskAmount(raw: string): string {
-  const digits = raw.replace(/\D/g, "");
-  if (!digits) return "";
-  return (parseInt(digits, 10) / 100).toLocaleString("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
+
 
 export default function RapidoPage() {
   return (
@@ -355,7 +347,7 @@ function Rapido() {
         <input
           ref={amountRef}
           value={amount}
-          onChange={(e) => setAmount(maskAmount(e.target.value))}
+          onChange={(e) => setAmount(maskBrAmount(e.target.value))}
           inputMode="numeric"
           placeholder="0,00"
           aria-label="Valor (R$)"

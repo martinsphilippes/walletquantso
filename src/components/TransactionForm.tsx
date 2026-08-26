@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { parseBrCurrency } from "@/lib/br/parse";
+import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
 import { effectiveCostCenterId } from "@/lib/categories/tree";
 import type { Account, Category, Contact, CostCenter, TransactionType } from "@/types";
 import type { TransactionInput } from "@/services/transactions";
@@ -35,16 +35,7 @@ function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
 }
 
-/** Format a raw digit string as a cents-first BRL value ("12345" -> "123,45"). */
-function maskAmount(raw: string): string {
-  const digits = raw.replace(/\D/g, "");
-  if (!digits) return "";
-  const cents = parseInt(digits, 10);
-  return (cents / 100).toLocaleString("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
+
 
 /** Format an existing numeric amount for editing (e.g. 123.4 -> "123,40"). */
 function formatAmount(value: number | undefined): string {
@@ -232,7 +223,7 @@ export function TransactionForm({
           <input
             ref={amountRef}
             value={amount}
-            onChange={(e) => setAmount(maskAmount(e.target.value))}
+            onChange={(e) => setAmount(maskBrAmount(e.target.value))}
             inputMode="numeric"
             placeholder="0,00"
             style={{ ...f, textAlign: "right" }}

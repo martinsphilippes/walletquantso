@@ -27,7 +27,7 @@ import { todayBr, daysAgoBr, monthRangeBr } from "@/lib/br/date";
 import { loadPeriod, savePreset, saveCustomPeriod } from "@/lib/period-presets";
 import { effectiveCostCenterId } from "@/lib/categories/tree";
 import { DateParts } from "@/components/DateParts";
-import { parseBrCurrency } from "@/lib/br/parse";
+import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
 import { transactionsToCsv } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
 import {
@@ -961,8 +961,8 @@ function Lancamentos() {
                           <InlineField label="Valor (R$)">
                             <input
                               value={editDraft.amount}
-                              onChange={(e) => setEditDraft({ ...editDraft, amount: e.target.value })}
-                              inputMode="decimal"
+                              onChange={(e) => setEditDraft({ ...editDraft, amount: maskBrAmount(e.target.value) })}
+                              inputMode="numeric"
                               style={{ ...fieldStyle, width: 110, textAlign: "right" }}
                             />
                           </InlineField>
