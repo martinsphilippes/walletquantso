@@ -21,12 +21,12 @@ import { computeFaturamento, summarizeRows } from "@/lib/pedidos-whatsapp/fatura
 import { downloadCobranca } from "@/lib/pedidos-whatsapp/cobranca";
 import { downloadCobrancaPdf } from "@/lib/pedidos-whatsapp/cobranca-pdf";
 import { useAuth } from "@/services/auth-context";
-import { listClients, addClientBilling } from "@/services/clients";
+import { listClients, addClientBilling, updateClient } from "@/services/clients";
 import { listCategories, listCostCenters } from "@/services/firestore";
 import { createBill } from "@/services/bills";
 import { todayBr } from "@/lib/br/date";
 import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
-import type { Category, Client, CostCenter } from "@/types";
+import type { Category, Client, CostCenter, DeliveryZone } from "@/types";
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -135,6 +135,47 @@ export function PedidosWhatsAppTool() {
   // podendo vir dividido por loja/canal.
   const [revenueFields, setRevenueFields] = useState<RevenueField[]>([emptyRevenueField(1)]);
   const revenueIdRef = useRef(2);
+
+  // Cadastro de bairro direto da caixa "entregas sem preço": nome editável +
+  // preço; ao salvar, a tabela do cliente atualiza e o cálculo refaz na hora.
+  const [zoneDrafts, setZoneDrafts] = useState<Record<string, { name: string; price: string }>>({});
+  const [zoneMsg, setZoneMsg] = useState("");
+  const [zoneBusy, setZoneBusy] = useState(false);
+  useEffect(() => {
+    setZoneDrafts({});
+    setZoneMsg("");
+  }, [clientId]);
+
+  async function addZoneFromMiss(bairroKey: string) {
+    if (!user || !selectedClient?.id) return;
+    const d = zoneDrafts[bairroKey] ?? { name: bairroKey, price: "" };
+    const name = (d.name || bairroKey).trim();
+    const price = parseBrCurrency(d.price);
+    if (!name) {
+      setZoneMsg("Informe o nome do bairro.");
+      return;
+    }
+    if (price == null || price <= 0) {
+      setZoneMsg(`Informe o preço da entrega em ${name}.`);
+      return;
+    }
+    setZoneBusy(true);
+    setZoneMsg("");
+    try {
+      const id =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const zones: DeliveryZone[] = [...(selectedClient.zones ?? []), { id, name, price }];
+      await updateClient(selectedClient.id, { zones });
+      setClients(await listClients(user.uid));
+      setZoneMsg(`✅ ${name} cadastrado por ${brl(price)} — entregas recalculadas.`);
+    } catch (err) {
+      setZoneMsg(`❌ Falha ao cadastrar: ${(err as Error).message}`);
+    } finally {
+      setZoneBusy(false);
+    }
+  }
 
   const liveParsed = useMemo(() => {
     if (!selectedClient || !text.trim())
@@ -626,12 +667,75 @@ export function PedidosWhatsAppTool() {
                     overflowY: "auto",
                   }}
                 >
-                  {faturamento.semPreco.map((x) => (
-                    <div key={x.bairro}>
-                      <strong>{x.bairro}</strong> ({x.count}×): {x.exemplos.join(" · ")}
-                      {x.count > x.exemplos.length ? " · …" : ""}
-                    </div>
-                  ))}
+                  {faturamento.semPreco.map((x) => {
+                    const d = zoneDrafts[x.bairro] ?? { name: x.bairro, price: "" };
+                    const setD = (patch: Partial<{ name: string; price: string }>) =>
+                      setZoneDrafts((prev) => ({ ...prev, [x.bairro]: { ...d, ...patch } }));
+                    return (
+                      <div key={x.bairro} style={{ marginBottom: "0.5rem" }}>
+                        <div>
+                          <strong>{x.bairro}</strong> ({x.count}×): {x.exemplos.join(" · ")}
+                          {x.count > x.exemplos.length ? " · …" : ""}
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "0.4rem",
+                            alignItems: "center",
+                            flexWrap: "wrap",
+                            marginTop: "0.25rem",
+                            fontFamily: "inherit",
+                          }}
+                        >
+                          <input
+                            value={d.name}
+                            onChange={(e) => setD({ name: e.target.value })}
+                            placeholder="Nome do bairro"
+                            title="Ajuste o nome se quiser (ex.: corrigir digitação) antes de cadastrar."
+                            style={{
+                              width: 170,
+                              padding: "0.25rem 0.4rem",
+                              borderRadius: 6,
+                              border: "1px solid var(--border)",
+                              background: "var(--bg)",
+                              color: "var(--text)",
+                              font: "inherit",
+                              fontSize: "0.82rem",
+                            }}
+                          />
+                          <input
+                            value={d.price}
+                            onChange={(e) => setD({ price: e.target.value })}
+                            placeholder="Preço (ex.: 13)"
+                            inputMode="decimal"
+                            style={{
+                              width: 100,
+                              textAlign: "right",
+                              padding: "0.25rem 0.4rem",
+                              borderRadius: 6,
+                              border: "1px solid var(--border)",
+                              background: "var(--bg)",
+                              color: "var(--text)",
+                              font: "inherit",
+                              fontSize: "0.82rem",
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            disabled={zoneBusy}
+                            onClick={() => void addZoneFromMiss(x.bairro)}
+                            style={{ fontSize: "0.8rem", padding: "0.25rem 0.6rem" }}
+                          >
+                            Cadastrar no cliente
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {zoneMsg && (
+                    <div style={{ marginTop: "0.3rem", fontSize: "0.82rem" }}>{zoneMsg}</div>
+                  )}
                 </div>
               </div>
             )}
