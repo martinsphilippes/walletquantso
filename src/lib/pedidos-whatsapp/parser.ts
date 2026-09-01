@@ -69,10 +69,10 @@ const LETTER = "A-Za-zÀ-ÖØ-öø-ÿ";
 // Tolerates a short OCR-noise token (misread icon/checkmark) before the digits, e.g. "D 2665- Candeal",
 // and the optional "Pedido" keyword ("Pedido 4583 - Pituba").
 // Separators aceitos após a cotação: - : = . (o OCR troca o hífen à vontade)…
-const DATA_LINE = /^(?:\S{1,3}\s+)?(?:pedidos?\s+)?(\d{2,6})\s*[-:=.]\s*(.+)$/i;
+const DATA_LINE = /^(?:\S{1,3}\s+)?(?:pedidos?\s*[:\-]?\s*)?(\d{2,6})\s*[-:=.]\s*(.+)$/i;
 // …ou apenas espaço, exigindo cotação de 3+ dígitos ("0963 Pituba") para não
 // engolir frases que começam com número pequeno ("24 linhas…").
-const DATA_LINE_SPACED = /^(?:\S{1,3}\s+)?(?:pedidos?\s+)?(\d{3,6})\s+(.+)$/i;
+const DATA_LINE_SPACED = /^(?:\S{1,3}\s+)?(?:pedidos?\s*[:\-]?\s*)?(\d{3,6})\s+(.+)$/i;
 const HAS_LETTER = new RegExp("[A-Za-zÀ-ÖØ-öø-ÿ]");
 const NAME_LINE = new RegExp(
   "^[^" + LETTER + "]*([" + LETTER + "][" + LETTER + "'.]*(?:\\s+[" + LETTER + "][" + LETTER + "'.]*)*)\\s*[-–—]\\s*(.+)$",
@@ -92,11 +92,16 @@ const DELETED_MESSAGE = /mensagem\s+apagada|apagou\s+es[st]a\s+mensagem/;
 // Sobra de OCR que é só um horário ("10:56", "T 23:35", "1] 23:09 »"):
 // descartada em silêncio também.
 const TIME_ONLY_LINE = /^\S{0,2}\s*\d{1,2}[:.]\d{2}\s*[»><«]*$/;
-// Linhas de resumo digitadas na conversa ("Total: 15 entregas 17:37") e o
-// divisor de data do WhatsApp ("ter., 25 de ago.") não são entrega nem
-// diária: somem em silêncio. (Aplicados sobre o texto normalizado.)
+// Linhas de resumo digitadas na conversa ("Total: 15 entregas 17:37") não
+// são entrega nem diária: somem em silêncio. O divisor de data do WhatsApp
+// ("ter., 25 de ago.") também não aparece — mas carrega a data verdadeira
+// da seção seguinte, então é usado como marcador de dia.
 const SUMMARY_LINE = /^total\b/;
-const WA_DATE_DIVIDER = /^[a-z]{3}\.?,?\s+\d{1,2}\s+de\s+[a-z]{3,9}\.?$/;
+const WA_DATE_DIVIDER = /^[a-z]{3}\.?,?\s+(\d{1,2})\s+de\s+([a-z]{3,9})\.?$/;
+const MONTH_ABBR: Record<string, number> = {
+  jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6,
+  jul: 7, ago: 8, set: 9, out: 10, nov: 11, dez: 12,
+};
 // Rabisco de OCR: uma palavra só, toda minúscula ("sdbauo") — silêncio.
 const GIBBERISH_WORD = /^[a-z]{2,14}$/;
 // Cabeçalho do WhatsApp que junta remetente e dia da mensagem numa linha só:
@@ -378,6 +383,22 @@ export function parseConversation(
   // de período atribui um turno ao remetente atual da conversa.
   function setPeriodAndDeclareShift(p: string) {
     currentPeriod = p;
+    // Mesmo remetente declarando um turno que JÁ declarou neste dia, depois
+    // de ter declarado OUTRO turno: é um novo dia de trabalho cujo marcador
+    // se perdeu no OCR (ninguém faz duas "Manhã" no mesmo dia). Avança 1 dia.
+    if (currentDate) {
+      const nrm = (x: string) => normalizeAccents(x.toLowerCase()).trim();
+      const mine = shifts.filter(
+        (sh) => sh.dia === currentDate && nrm(sh.name) === nrm(currentSender),
+      );
+      const alreadySame = mine.some((sh) => nrm(sh.periodo) === nrm(p));
+      const last = mine[mine.length - 1];
+      if (alreadySame && last && nrm(last.periodo) !== nrm(p)) {
+        const [dd, mm, yy] = currentDate.split("/").map(Number);
+        const next = new Date(yy, mm - 1, dd + 1);
+        currentDate = formatDateBR(next);
+      }
+    }
     shifts.push({ name: currentSender, periodo: p, dia: currentDate });
   }
 
@@ -402,9 +423,22 @@ export function parseConversation(
     if (DELETED_MESSAGE.test(normalizedLine)) continue;
     // Linha que é só um horário de mensagem (sobra do OCR) também.
     if (TIME_ONLY_LINE.test(line)) continue;
-    // Resumos ("Total: 15 entregas") e divisor de data do WhatsApp idem.
+    // Resumos ("Total: 15 entregas") somem em silêncio.
     if (SUMMARY_LINE.test(normalizedLine)) continue;
-    if (WA_DATE_DIVIDER.test(normalizedLine)) continue;
+    // Divisor de data do WhatsApp: some da lista, mas define o dia.
+    const divider = normalizedLine.match(WA_DATE_DIVIDER);
+    if (divider) {
+      const dd = Number(divider[1]);
+      const month = MONTH_ABBR[divider[2].slice(0, 3)];
+      if (month && dd >= 1 && dd <= 31) {
+        let year = today.getFullYear();
+        const candidate = new Date(year, month - 1, dd);
+        const limit = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+        if (candidate.getTime() > limit.getTime()) year -= 1;
+        currentDate = pad2(dd) + "/" + pad2(month) + "/" + year;
+      }
+      continue;
+    }
 
     // Vale só para a linha imediatamente seguinte a uma entrega sem traço.
     const afterNoDashRow = prevNoDashRow;

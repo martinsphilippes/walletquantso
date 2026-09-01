@@ -579,3 +579,62 @@ ter., 25 de ago.
     expect(skipped).toEqual([]);
   });
 });
+
+describe("parseConversation — bloco sem marcador de dia: mesmo turno de novo = dia novo", () => {
+  const TODAY = new Date(2026, 8, 1);
+
+  it("Josias com 2 blocos Manhã/Noite (o 2º sem data) = 4 diárias em 2 dias", () => {
+    const text = `domingo
+Josias Cardoso Quantso
+MANHÃ
+1123- Armação
+NOITE
+1322- Pituba
+
+Josias Cardoso Quantso
+MANHÃ
+4057- Barra
+NOITE
+3721- Graça
+`;
+    const { shifts } = parseConversation(text, TODAY);
+    const dias = new Set(shifts.map((s) => s.dia));
+    expect(shifts.length).toBe(4);
+    expect(dias.size).toBe(2); // domingo (30/08) + o dia seguinte (31/08)
+  });
+
+  it("print sobreposto (mesmo turno repetido em seguida) continua deduplicando", () => {
+    const text = `domingo
+Josias Cardoso Quantso
+MANHÃ
+1123- Armação
+MANHÃ
+1123- Armação
+`;
+    const { shifts } = parseConversation(text, TODAY);
+    const dedup = new Set(shifts.map((s) => `${s.dia}|${s.periodo}|${s.name}`));
+    expect(dedup.size).toBe(1);
+  });
+
+  it("divisor 'ter., 25 de ago.' define a data da seção seguinte", () => {
+    const text = `sexta-feira
+Josias Cardoso Quantso
+MANHÃ
+1111- Pituba
+ter., 25 de ago.
+Deus É Fiel
+NOITE
+2222- Pituba
+`;
+    const { rows, skipped } = parseConversation(text, TODAY);
+    expect(skipped).toEqual([]);
+    expect(rows[1].dia).toBe("25/08/2026");
+  });
+
+  it("'Pedido:7133 - Trobogy' (com dois-pontos) é entrega", () => {
+    const { rows } = parseConversation("domingo\nPedido:7133 - Trobogy\n", TODAY);
+    expect(rows.length).toBe(1);
+    expect(rows[0].cotacao).toBe("7133");
+    expect(rows[0].bairro).toBe("Trobogy");
+  });
+});
