@@ -543,3 +543,39 @@ NOITE
     expect(rows[0].dia).toBe("22/08/2026");
   });
 });
+
+describe("parseConversation — RETORNO herda o endereço da cotação igual", () => {
+  const TODAY = new Date(2026, 8, 1);
+
+  it("'8103- RETORNO' vira o bairro da entrega original 8103", () => {
+    const text = `Domingo (30/08)
+Noite
+8103- Pituba
+4444- Brotas
+8103- RETORNO
+`;
+    const { rows, skipped } = parseConversation(text, TODAY);
+    expect(skipped).toEqual([]);
+    expect(rows.length).toBe(3);
+    expect(rows[2].bairro).toBe("Pituba");
+  });
+
+  it("retorno sem cotação correspondente fica como está (vai para sem preço)", () => {
+    const { rows } = parseConversation("Domingo (30/08)\n9999- RETORNO\n", TODAY);
+    expect(rows[0].bairro).toBe("RETORNO");
+  });
+});
+
+describe("parseConversation — resumos, divisor de data e rabisco somem em silêncio", () => {
+  it("'Total: 15 entregas', 'ter., 25 de ago.' e 'sdbauo' não aparecem", () => {
+    const text = `Domingo (30/08)
+1234- Pituba
+Total: 15 entregas 17:37
+sdbauo
+ter., 25 de ago.
+`;
+    const { rows, skipped } = parseConversation(text, new Date(2026, 8, 1));
+    expect(rows.length).toBe(1);
+    expect(skipped).toEqual([]);
+  });
+});

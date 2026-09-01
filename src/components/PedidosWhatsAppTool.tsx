@@ -703,6 +703,33 @@ export function PedidosWhatsAppTool() {
                               fontSize: "0.82rem",
                             }}
                           />
+                          <select
+                            value=""
+                            title="Copiar o preço de um bairro já cadastrado no cliente."
+                            onChange={(e) => {
+                              const z = (selectedClient.zones ?? []).find(
+                                (zz) => zz.id === e.target.value,
+                              );
+                              if (z) {
+                                setD({
+                                  price: z.price.toLocaleString("pt-BR", {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  }),
+                                });
+                              }
+                            }}
+                            style={{ fontSize: "0.82rem", maxWidth: 230 }}
+                          >
+                            <option value="">preço igual ao de…</option>
+                            {[...(selectedClient.zones ?? [])]
+                              .sort((za, zb) => za.name.localeCompare(zb.name, "pt-BR"))
+                              .map((z) => (
+                                <option key={z.id} value={z.id}>
+                                  {z.name} — {brl(z.price)}
+                                </option>
+                              ))}
+                          </select>
                           <input
                             value={d.price}
                             onChange={(e) => setD({ price: e.target.value })}

@@ -92,6 +92,13 @@ const DELETED_MESSAGE = /mensagem\s+apagada|apagou\s+es[st]a\s+mensagem/;
 // Sobra de OCR que é só um horário ("10:56", "T 23:35", "1] 23:09 »"):
 // descartada em silêncio também.
 const TIME_ONLY_LINE = /^\S{0,2}\s*\d{1,2}[:.]\d{2}\s*[»><«]*$/;
+// Linhas de resumo digitadas na conversa ("Total: 15 entregas 17:37") e o
+// divisor de data do WhatsApp ("ter., 25 de ago.") não são entrega nem
+// diária: somem em silêncio. (Aplicados sobre o texto normalizado.)
+const SUMMARY_LINE = /^total\b/;
+const WA_DATE_DIVIDER = /^[a-z]{3}\.?,?\s+\d{1,2}\s+de\s+[a-z]{3,9}\.?$/;
+// Rabisco de OCR: uma palavra só, toda minúscula ("sdbauo") — silêncio.
+const GIBBERISH_WORD = /^[a-z]{2,14}$/;
 // Cabeçalho do WhatsApp que junta remetente e dia da mensagem numa linha só:
 // "Josias Cardoso Quantso sexta - feira" ou "... Sábado (22/08)". O nome vira
 // o remetente atual e o dia vira o marcador das linhas seguintes.
@@ -391,9 +398,13 @@ export function parseConversation(
     if (!line) continue;
 
     // "Mensagem apagada" some por inteiro — não é entrega, diária nem dúvida.
-    if (DELETED_MESSAGE.test(normalizeAccents(line.toLowerCase()))) continue;
+    const normalizedLine = normalizeAccents(line.toLowerCase());
+    if (DELETED_MESSAGE.test(normalizedLine)) continue;
     // Linha que é só um horário de mensagem (sobra do OCR) também.
     if (TIME_ONLY_LINE.test(line)) continue;
+    // Resumos ("Total: 15 entregas") e divisor de data do WhatsApp idem.
+    if (SUMMARY_LINE.test(normalizedLine)) continue;
+    if (WA_DATE_DIVIDER.test(normalizedLine)) continue;
 
     // Vale só para a linha imediatamente seguinte a uma entrega sem traço.
     const afterNoDashRow = prevNoDashRow;
@@ -496,7 +507,25 @@ export function parseConversation(
       continue;
     }
 
+    // Uma palavra só, toda minúscula, que não casou com nada: rabisco de OCR.
+    if (GIBBERISH_WORD.test(normalizedLine)) continue;
+
     skipped.push(raw);
+  }
+
+  // "RETORNO" com cotação repetida = voltar ao MESMO endereço da entrega
+  // original: a linha "8103 - RETORNO" herda o bairro da outra linha 8103.
+  for (const r of rows) {
+    const b = normalizeAccents(r.bairro.toLowerCase()).replace(/[^a-z]/g, "");
+    if (b !== "retorno" && b !== "reenvio") continue;
+    const twin = rows.find(
+      (o) =>
+        o !== r &&
+        o.cotacao === r.cotacao &&
+        o.bairro &&
+        normalizeAccents(o.bairro.toLowerCase()).replace(/[^a-z]/g, "") !== b,
+    );
+    if (twin) r.bairro = twin.bairro;
   }
 
   // Diárias implícitas: remetente que postou entregas num dia sem declarar
