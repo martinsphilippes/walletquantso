@@ -61,6 +61,8 @@ export interface FaturamentoResult {
   /** Diárias consideradas (override do usuário ou as detectadas). */
   diarias: number;
   diariasValor: number;
+  /** Detalhe de cada diária detectada (para conferência na tela). */
+  diariasDetalhe: Array<{ name: string; dia: string; periodo: string }>;
   /** Percentual sobre faturamento entregue (clientes com revenuePercent). */
   revenueBase: number | null;
   /** Divisão do faturamento por loja/canal, quando informado assim. */
@@ -153,6 +155,7 @@ export function computeFaturamento(
   const rate = client.dailyRate ?? 0;
   let diariasDetectadas: number;
   let turnos: string[];
+  const diariasDetalhe: Array<{ name: string; dia: string; periodo: string }> = [];
 
   if (declaredShifts && declaredShifts.length > 0) {
     // Diárias declaradas na conversa ("Josias - manhã"): cada nome × turno ×
@@ -166,6 +169,7 @@ export function computeFaturamento(
       seen.add(key);
       daysWithShifts.add(s.dia);
       byPeriod.set(s.periodo, (byPeriod.get(s.periodo) ?? 0) + 1);
+      diariasDetalhe.push({ name: s.name, dia: s.dia, periodo: s.periodo });
     }
     // As declarações NÃO desligam a regra por dia: um dia que tem entregas
     // mas nenhuma diária declarada (nem implícita) ainda vale 1 diária por
@@ -177,8 +181,10 @@ export function computeFaturamento(
       extraKeys.add(`${r.dia}|${periodo}`);
     }
     for (const k of extraKeys) {
-      const periodo = k.split("|")[1] || "Dia";
+      const [dia, p] = k.split("|");
+      const periodo = p || "Dia";
       byPeriod.set(periodo, (byPeriod.get(periodo) ?? 0) + 1);
+      diariasDetalhe.push({ name: "", dia, periodo: p || "—" });
     }
     diariasDetectadas = rate > 0 ? seen.size + extraKeys.size : 0;
     turnos = [...byPeriod.entries()].map(([p, n]) => `${p} × ${n}`);
@@ -188,7 +194,9 @@ export function computeFaturamento(
     const byPeriod = new Map<string, Set<string>>();
     for (const r of rows) {
       const periodo = r.periodo && r.periodo !== "—" ? r.periodo : "";
-      shiftKeys.add(`${r.dia}|${periodo}`);
+      const key = `${r.dia}|${periodo}`;
+      if (!shiftKeys.has(key)) diariasDetalhe.push({ name: "", dia: r.dia, periodo: periodo || "—" });
+      shiftKeys.add(key);
       const dias = byPeriod.get(periodo || "—") ?? new Set<string>();
       dias.add(r.dia);
       byPeriod.set(periodo || "—", dias);
@@ -222,6 +230,7 @@ export function computeFaturamento(
     turnos,
     diarias,
     diariasValor,
+    diariasDetalhe,
     revenueBase,
     revenueParts,
     revenueValor,

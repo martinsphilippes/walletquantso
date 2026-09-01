@@ -547,6 +547,34 @@ export function PedidosWhatsAppTool() {
                 <span className="muted" style={{ fontSize: "0.82rem" }}>
                   (detectadas {faturamento.diariasDetectadas}: {faturamento.turnos.join(", ")})
                 </span>
+                {faturamento.diariasDetalhe.length > 0 && (
+                  <details style={{ width: "100%", fontSize: "0.82rem" }}>
+                    <summary style={{ cursor: "pointer" }} className="muted">
+                      ver as {faturamento.diariasDetectadas} diária(s) contada(s)
+                    </summary>
+                    <div
+                      style={{
+                        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                        fontSize: "0.78rem",
+                        marginTop: "0.3rem",
+                        maxHeight: 180,
+                        overflowY: "auto",
+                      }}
+                    >
+                      {[...faturamento.diariasDetalhe]
+                        .sort((a, b) =>
+                          (a.dia.split("/").reverse().join("-") + a.periodo).localeCompare(
+                            b.dia.split("/").reverse().join("-") + b.periodo,
+                          ),
+                        )
+                        .map((d, i) => (
+                          <div key={i}>
+                            {d.dia || "—"} · {d.periodo} · {d.name || "(sem nome — pela regra do dia)"}
+                          </div>
+                        ))}
+                    </div>
+                  </details>
+                )}
               </div>
             )}
             {(faturamento.entregas > 0 || !clientHasPercent) && (
