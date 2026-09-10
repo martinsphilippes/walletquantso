@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { addMonthsIso, splitAmount, expandRepeat } from "./repeat";
+import { addMonthsIso, splitAmount, expandRepeat, withDayIso } from "./repeat";
 
 describe("addMonthsIso", () => {
   it("advances the month keeping the day", () => {
@@ -96,5 +96,18 @@ describe("repetição com intervalo (a cada N dias/semanas/meses)", () => {
   it("sem intervalo informado continua de mês em mês (dia 31 ajustado)", () => {
     const out = expandRepeat({ amount: 10, dueDate: "2026-08-31" }, "fixed", 3);
     expect(out.map((x) => x.dueDate)).toEqual(["2026-08-31", "2026-09-30", "2026-10-31"]);
+  });
+});
+
+describe("withDayIso", () => {
+  it("troca o dia mantendo mês e ano", () => {
+    expect(withDayIso("2026-09-01", 5)).toBe("2026-09-05");
+    expect(withDayIso("2026-12-20", 1)).toBe("2026-12-01");
+  });
+
+  it("limita ao último dia do mês (dia 31 em fevereiro)", () => {
+    expect(withDayIso("2026-02-10", 31)).toBe("2026-02-28");
+    expect(withDayIso("2028-02-10", 31)).toBe("2028-02-29"); // bissexto
+    expect(withDayIso("2026-04-10", 31)).toBe("2026-04-30");
   });
 });

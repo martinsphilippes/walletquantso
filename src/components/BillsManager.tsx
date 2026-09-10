@@ -29,7 +29,7 @@ import { effectiveCostCenterId } from "@/lib/categories/tree";
 import { DateParts } from "@/components/DateParts";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
-import { expandRepeat, type RepeatMode, type RepeatUnit } from "@/lib/bills/repeat";
+import { expandRepeat, withDayIso, type RepeatMode, type RepeatUnit } from "@/lib/bills/repeat";
 import {
   billStatus,
   remaining,
@@ -511,15 +511,53 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     createFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  async function saveEdit(id: string) {
+  /**
+   * Salva a edição do título. Com `alsoFuture`, aplica a mesma alteração aos
+   * títulos iguais futuros (mesma série ou mesma descrição, ainda sem baixa):
+   * descrição, valor, conta, contato, categoria/centro e observações. Cada
+   * futuro mantém a própria data e o próprio nº de documento/parcela — só o
+   * DIA do vencimento acompanha, quando foi ele que mudou (ex.: mensalidade
+   * que passou a vencer todo dia 5).
+   */
+  async function saveEdit(id: string, alsoFuture = false) {
     const fields = draftToBill(draft);
     if (!fields) return;
+    const target = (bills ?? []).find((b) => b.id === id) ?? null;
     setBusy(true);
     setError("");
     try {
       await updateBill(id, fields);
+      let applied = 0;
+      if (alsoFuture && target) {
+        const base = descBase(fields.description);
+        const newDay = Number(fields.dueDate.slice(8, 10));
+        const dayChanged = Number(target.dueDate.slice(8, 10)) !== newDay;
+        for (const sib of futureSiblings(target)) {
+          if (!sib.id) continue;
+          const patch: Partial<Bill> = {
+            description: sib.installment
+              ? `${base} (${sib.installment.number}/${sib.installment.total})`
+              : base,
+            amount: fields.amount,
+            contactId: fields.contactId,
+            categoryId: fields.categoryId,
+            costCenterId: fields.costCenterId,
+            accountId: fields.accountId,
+            notes: fields.notes,
+          };
+          if (dayChanged) {
+            patch.dueDate = withDayIso(sib.dueDate, newDay);
+            patch.competenceDate = withDayIso(sib.competenceDate ?? sib.dueDate, newDay);
+          }
+          await updateBill(sib.id, patch);
+          applied++;
+        }
+      }
       setEditingId(null);
       await load();
+      if (applied > 0) {
+        setError(`✅ Alteração aplicada a este título e a ${applied} futuro(s).`);
+      }
     } catch (err) {
       setError(`Falha ao salvar: ${(err as Error).message}`);
     } finally {
@@ -532,8 +570,9 @@ export function BillsManager({ kind }: { kind: BillKind }) {
   // vencendo desta data em diante e ainda sem nenhuma baixa.
   const [confirmDelId, setConfirmDelId] = useState<string | null>(null);
 
-  const baseDesc = (s: string) =>
-    s.replace(/\s*\(\d+\/\d+\)\s*$/, "").trim().toLowerCase();
+  /** Descrição sem o sufixo de parcela: "Aluguel (2/12)" → "Aluguel". */
+  const descBase = (s: string) => s.replace(/\s*\(\d+\/\d+\)\s*$/, "").trim();
+  const baseDesc = (s: string) => descBase(s).toLowerCase();
 
   function futureSiblings(b: Bill): Bill[] {
     return (bills ?? []).filter(
@@ -1460,17 +1499,43 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                   style={{ ...fieldStyle, width: 120 }}
                                 />
                               </Field>
-                              <div>
-                                <button disabled={busy} onClick={() => saveEdit(b.id!)}>
-                                  Salvar
-                                </button>{" "}
-                                <button
-                                  style={{ background: "var(--border)" }}
-                                  onClick={() => setEditingId(null)}
-                                >
-                                  Cancelar
-                                </button>
-                              </div>
+                              {(() => {
+                                const sibs = futureSiblings(b);
+                                return (
+                                  <div>
+                                    <button disabled={busy} onClick={() => void saveEdit(b.id!)}>
+                                      {sibs.length > 0 ? "Salvar só este" : "Salvar"}
+                                    </button>{" "}
+                                    {sibs.length > 0 && (
+                                      <>
+                                        <button
+                                          disabled={busy}
+                                          title={`Aplica descrição, valor, conta, ${contactLabel.toLowerCase()}, categoria/centro e observações aos ${sibs.length} título(s) iguais que vencem desta data em diante e ainda não têm baixa. Cada um mantém a própria data — só o dia do vencimento acompanha, se foi ele que você mudou.`}
+                                          onClick={() => void saveEdit(b.id!, true)}
+                                        >
+                                          Salvar este + {sibs.length} futuros
+                                        </button>{" "}
+                                      </>
+                                    )}
+                                    <button
+                                      style={{ background: "var(--border)" }}
+                                      onClick={() => setEditingId(null)}
+                                    >
+                                      Cancelar
+                                    </button>
+                                    {sibs.length > 0 && (
+                                      <div
+                                        className="muted"
+                                        style={{ fontSize: "0.78rem", marginTop: "0.35rem" }}
+                                      >
+                                        Título repetido: há {sibs.length} igual(is) com vencimento
+                                        desta data em diante (sem baixa). Cada futuro mantém a
+                                        própria data e nº de documento.
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </td>
                         </tr>

@@ -38,6 +38,18 @@ export interface ExpandedBill {
   installment: { number: number; total: number } | null;
 }
 
+/**
+ * Mesma data com outro dia do mês, limitado ao último dia daquele mês
+ * ("2026-02-10" com dia 31 → "2026-02-28"). Usado quando uma série passa a
+ * vencer noutro dia: cada título mantém o próprio mês.
+ */
+export function withDayIso(iso: string, day: number): string {
+  const [y, m] = iso.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const d = Math.min(Math.max(1, Math.floor(day)), lastDay);
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
 /** Add `n` days to an ISO date (calendar arithmetic in UTC). */
 export function addDaysIso(iso: string, n: number): string {
   const [y, m, d] = iso.split("-").map(Number);
