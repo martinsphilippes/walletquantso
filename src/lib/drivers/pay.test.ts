@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { nextPayDate, computeDriverPayout } from "./pay";
+import { nextPayDate, computeDriverPayout, nextWeekdayDate, payDueDate, describeDue } from "./pay";
 import type { RideEntry } from "@/types";
 
 describe("nextPayDate", () => {
@@ -59,5 +59,30 @@ describe("computeDriverPayout", () => {
     expect(p.total).toBe(0);
     expect(p.period).toBeNull();
     expect(p.rideIds).toEqual([]);
+  });
+});
+
+describe("nextWeekdayDate / payDueDate / describeDue", () => {
+  // 15/09/2026 é terça-feira.
+  it("gerando na própria terça, a 'próxima terça' é hoje", () => {
+    expect(nextWeekdayDate("2026-09-15", 2)).toBe("2026-09-15");
+    expect(describeDue("2026-09-15", "2026-09-15")).toBe("Hoje");
+  });
+  it("quarta pedindo terça → terça da semana que vem", () => {
+    expect(nextWeekdayDate("2026-09-16", 2)).toBe("2026-09-22");
+    expect(describeDue("2026-09-16", "2026-09-22")).toBe("terça-feira, 22/09");
+  });
+  it("segunda pedindo terça → amanhã", () => {
+    expect(nextWeekdayDate("2026-09-14", 2)).toBe("2026-09-15");
+    expect(describeDue("2026-09-14", "2026-09-15")).toBe("Amanhã (15/09)");
+  });
+  it("sexta pedindo segunda → segunda seguinte (vira o mês se precisar)", () => {
+    expect(nextWeekdayDate("2026-09-25", 1)).toBe("2026-09-28");
+    expect(nextWeekdayDate("2026-10-30", 1)).toBe("2026-11-02");
+  });
+  it("payDueDate escolhe o modo", () => {
+    expect(payDueDate("2026-09-16", { payMode: "weekday", payDay: 5, payWeekday: 2 })).toBe("2026-09-22");
+    expect(payDueDate("2026-09-16", { payMode: "monthDay", payDay: 5 })).toBe("2026-10-05");
+    expect(payDueDate("2026-09-16", { payDay: 20 })).toBe("2026-09-20"); // sem modo = dia do mês
   });
 });

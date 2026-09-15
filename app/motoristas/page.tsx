@@ -33,7 +33,7 @@ import {
   saveDriverSettings,
   updateRide,
 } from "@/services/drivers";
-import { computeDriverPayout, nextPayDate } from "@/lib/drivers/pay";
+import { computeDriverPayout, describeDue, payDueDate, WEEKDAY_NAMES } from "@/lib/drivers/pay";
 import { parseBrCurrency } from "@/lib/br/parse";
 import { todayBr } from "@/lib/br/date";
 import type {
@@ -237,7 +237,7 @@ function Motoristas() {
 
   function abrirPagamento(d: Driver) {
     setPayDriverId(d.id!);
-    setPayDue(nextPayDate(todayBr(), settings?.payDay ?? 5));
+    setPayDue(payDueDate(todayBr(), settings ?? { payDay: 5 }));
     setPayMsg("");
   }
 
@@ -286,6 +286,8 @@ function Motoristas() {
 
   // ── Configuração (só o dono) ─────────────────────────────────────────────
   const [cfg, setCfg] = useState({
+    payMode: "monthDay" as "monthDay" | "weekday",
+    payWeekday: "2",
     payDay: "5",
     diariaValue: "",
     corridaValue: "",
@@ -297,6 +299,8 @@ function Motoristas() {
   useEffect(() => {
     if (!settings) return;
     setCfg({
+      payMode: settings.payMode ?? "monthDay",
+      payWeekday: String(settings.payWeekday ?? 2),
       payDay: String(settings.payDay ?? 5),
       diariaValue: settings.diariaValue ? String(settings.diariaValue).replace(".", ",") : "",
       corridaValue: settings.corridaValue ? String(settings.corridaValue).replace(".", ",") : "",
@@ -309,7 +313,10 @@ function Motoristas() {
   async function salvarConfig() {
     if (!ownerId) return;
     const payDay = Math.floor(Number(cfg.payDay));
-    if (!Number.isFinite(payDay) || payDay < 1 || payDay > 31) return setCfgMsg("Dia de pagamento entre 1 e 31.");
+    if (cfg.payMode === "monthDay" && (!Number.isFinite(payDay) || payDay < 1 || payDay > 31)) {
+      return setCfgMsg("Dia de pagamento entre 1 e 31.");
+    }
+    const payWeekday = Math.floor(Number(cfg.payWeekday));
     const diariaValue = parseBrCurrency(cfg.diariaValue) ?? 0;
     const corridaValue = parseBrCurrency(cfg.corridaValue) ?? 0;
     setBusy(true);
@@ -317,7 +324,9 @@ function Motoristas() {
     try {
       await saveDriverSettings({
         ownerId,
-        payDay,
+        payMode: cfg.payMode,
+        payWeekday: Number.isFinite(payWeekday) ? payWeekday : 1,
+        payDay: Number.isFinite(payDay) && payDay >= 1 ? Math.min(31, payDay) : 5,
         diariaValue,
         corridaValue,
         accountId: cfg.accountId || null,
@@ -549,7 +558,7 @@ function Motoristas() {
               Total: <strong style={{ color: "var(--err)" }}>{brl(payout.total)}</strong>
             </div>
             <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap" }}>
-              <Field label={`Vencimento (dia ${settings?.payDay ?? 5} configurado)`}>
+              <Field label={`Vencimento: ${describeDue(todayBr(), payDue)}`}>
                 <DateParts value={payDue} onChange={setPayDue} />
               </Field>
               <button className="btn-primary" disabled={busy} onClick={() => void gerarTitulo()}>
@@ -635,16 +644,38 @@ function Motoristas() {
           <div className="panel">
             <h2>Configuração de pagamento</h2>
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
-              <Field label="Dia do pagamento (1–31)">
-                <input
-                  type="number"
-                  min={1}
-                  max={31}
-                  value={cfg.payDay}
-                  onChange={(e) => setCfg({ ...cfg, payDay: e.target.value })}
-                  style={{ ...fieldStyle, width: 80 }}
-                />
+              <Field label="Vencimento do título">
+                <select
+                  value={cfg.payMode}
+                  onChange={(e) => setCfg({ ...cfg, payMode: e.target.value as "monthDay" | "weekday" })}
+                >
+                  <option value="monthDay">Dia fixo do mês</option>
+                  <option value="weekday">Próximo dia da semana</option>
+                </select>
               </Field>
+              {cfg.payMode === "monthDay" ? (
+                <Field label="Dia do mês (1–31)">
+                  <input
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={cfg.payDay}
+                    onChange={(e) => setCfg({ ...cfg, payDay: e.target.value })}
+                    style={{ ...fieldStyle, width: 80 }}
+                  />
+                </Field>
+              ) : (
+                <Field label="Dia da semana">
+                  <select
+                    value={cfg.payWeekday}
+                    onChange={(e) => setCfg({ ...cfg, payWeekday: e.target.value })}
+                  >
+                    {WEEKDAY_NAMES.map((n, i) => (
+                      <option key={n} value={i}>{n}</option>
+                    ))}
+                  </select>
+                </Field>
+              )}
               <Field label="Valor pago por diária (R$)">
                 <input
                   value={cfg.diariaValue}
@@ -690,8 +721,11 @@ function Motoristas() {
               <button disabled={busy} onClick={() => void salvarConfig()}>Salvar configuração</button>
             </div>
             <p className="muted" style={{ fontSize: "0.8rem", marginBottom: 0 }}>
-              O título de cada motorista vence no próximo dia {cfg.payDay || "—"} (a data ainda pode ser
-              ajustada na hora de gerar). Valores por diária/corrida são o que VOCÊ paga ao motorista.
+              {cfg.payMode === "weekday"
+                ? `O título vence na próxima ${WEEKDAY_NAMES[Number(cfg.payWeekday) || 0]} — se for gerado nesse dia, vence hoje.`
+                : `O título vence no próximo dia ${cfg.payDay || "—"} do mês.`}{" "}
+              A data ainda pode ser ajustada na hora de gerar. Valores por diária/corrida são o que VOCÊ
+              paga ao motorista.
             </p>
             {cfgMsg && (
               <p style={{ marginBottom: 0 }}>

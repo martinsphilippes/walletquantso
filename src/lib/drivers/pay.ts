@@ -30,6 +30,53 @@ export function nextPayDate(todayIso: string, payDay: number): string {
   return `${year}-${String(month).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
 }
 
+export const WEEKDAY_NAMES = [
+  "domingo",
+  "segunda-feira",
+  "terça-feira",
+  "quarta-feira",
+  "quinta-feira",
+  "sexta-feira",
+  "sábado",
+] as const;
+
+/**
+ * Próxima ocorrência do dia da semana `weekday` (0 = domingo … 6 = sábado)
+ * a partir de `todayIso` — se hoje já é esse dia, é hoje.
+ */
+export function nextWeekdayDate(todayIso: string, weekday: number): string {
+  const [y, m, d] = todayIso.split("-").map(Number);
+  const wd = ((Math.floor(weekday) % 7) + 7) % 7;
+  const base = new Date(Date.UTC(y, m - 1, d));
+  const diff = (wd - base.getUTCDay() + 7) % 7;
+  base.setUTCDate(base.getUTCDate() + diff);
+  return `${base.getUTCFullYear()}-${String(base.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    base.getUTCDate(),
+  ).padStart(2, "0")}`;
+}
+
+/** Vencimento conforme a configuração: dia do mês ou dia da semana. */
+export function payDueDate(
+  todayIso: string,
+  settings: { payMode?: "monthDay" | "weekday"; payDay: number; payWeekday?: number },
+): string {
+  if (settings.payMode === "weekday") return nextWeekdayDate(todayIso, settings.payWeekday ?? 1);
+  return nextPayDate(todayIso, settings.payDay);
+}
+
+/** Rótulo humano do vencimento: "Hoje", "Amanhã" ou "terça-feira, 22/09". */
+export function describeDue(todayIso: string, dueIso: string): string {
+  if (dueIso === todayIso) return "Hoje";
+  const [y, m, d] = dueIso.split("-").map(Number);
+  const due = new Date(Date.UTC(y, m - 1, d));
+  const [ty, tm, td] = todayIso.split("-").map(Number);
+  const today = new Date(Date.UTC(ty, tm - 1, td));
+  const days = Math.round((due.getTime() - today.getTime()) / 86_400_000);
+  const br = `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}`;
+  if (days === 1) return `Amanhã (${br})`;
+  return `${WEEKDAY_NAMES[due.getUTCDay()]}, ${br}`;
+}
+
 export interface DriverPayout {
   diarias: number;
   corridas: number;

@@ -351,8 +351,12 @@ export interface RideEntry {
 /** Configuração da tela Motoristas (um doc por dono, id = ownerId). */
 export interface DriverSettings {
   ownerId: string;
-  /** Dia do mês em que os títulos dos motoristas vencem. */
+  /** Como o vencimento é calculado: dia do mês (padrão) ou dia da semana. */
+  payMode?: "monthDay" | "weekday";
+  /** Dia do mês em que os títulos dos motoristas vencem (modo monthDay). */
   payDay: number;
+  /** 0 = domingo … 6 = sábado (modo weekday): "próxima terça-feira". */
+  payWeekday?: number;
   /** Quanto o negócio paga ao motorista por diária e por corrida. */
   diariaValue: number;
   corridaValue: number;
