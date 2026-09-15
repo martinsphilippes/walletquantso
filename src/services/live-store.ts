@@ -32,6 +32,19 @@ interface Store {
 
 const stores = new Map<string, Store>();
 
+// Tempo máximo esperando a PRIMEIRA resposta do servidor. Passado isso a tela
+// abre com o que houver no cache (pode ser vazio) e o listener continua; quando
+// o servidor responder, `onListsChange` avisa e a tela recarrega sozinha.
+const FIRST_RESPONSE_TIMEOUT_MS = 6000;
+
+// Coleções que abriram pelo timeout e ainda não receberam o servidor.
+const pendingServer = new Set<string>();
+
+/** Alguma lista ainda está esperando a primeira resposta do servidor? */
+export function hasPendingSync(): boolean {
+  return pendingServer.size > 0;
+}
+
 // Avisa as telas quando qualquer coleção muda (lançamento feito em outro
 // aparelho, baixa, sincronização): elas recarregam sozinhas, sem F5.
 type ChangeListener = () => void;
@@ -82,15 +95,30 @@ function attach(collectionName: string, ownerId: string, key: string): Store {
   const store: Store = { docs: [], ready, settled: false, settle, fail };
 
   const q = query(collection(db, collectionName), where("ownerId", "==", ownerId));
+  let sawServer = false;
+  const timer = setTimeout(() => {
+    if (store.settled) return;
+    // Servidor não respondeu a tempo: abre com o cache e segue esperando.
+    pendingServer.add(key);
+    store.settled = true;
+    store.settle();
+  }, FIRST_RESPONSE_TIMEOUT_MS);
   onSnapshot(
     q,
     (snap) => {
       const first = !store.settled;
       store.docs = mapDocs(snap.docs);
+      if (!snap.metadata.fromCache && !sawServer) {
+        sawServer = true;
+        const wasPending = pendingServer.delete(key);
+        // Chegou o servidor depois de a tela abrir pelo timeout: avisa.
+        if (wasPending && !first) notifyChange();
+      }
       // Resolve na primeira emissão útil: dados do cache do aparelho (quando
       // existem) aparecem na hora; num primeiro acesso sem cache, espera a
       // resposta do servidor para não mostrar telas vazias por engano.
       if (first && (!snap.metadata.fromCache || snap.docs.length > 0)) {
+        clearTimeout(timer);
         store.settled = true;
         store.settle();
       }
@@ -98,9 +126,15 @@ function attach(collectionName: string, ownerId: string, key: string): Store {
       if (!first) notifyChange();
     },
     (err) => {
+      clearTimeout(timer);
+      pendingServer.delete(key);
       if (!store.settled) {
         store.settled = true;
         store.fail(err);
+      } else {
+        // A assinatura caiu depois de a tela já estar aberta: quem recarregar
+        // tenta de novo e recebe o erro de forma visível.
+        notifyChange();
       }
       // Remove a assinatura quebrada: a próxima leitura tenta de novo
       // (ex.: cota liberada, rede de volta, novo login).

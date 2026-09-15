@@ -64,8 +64,13 @@ export function removeRide(id: string): Promise<void> {
 // ── Configuração (um doc por dono) ────────────────────────────────────────
 
 export async function getDriverSettings(ownerId: string): Promise<DriverSettings | null> {
-  const snap = await getDoc(doc(db, COLLECTIONS.driverSettings, ownerId));
-  return snap.exists() ? (snap.data() as DriverSettings) : null;
+  // Não deixa a tela presa se o servidor demorar: depois de 6 s segue sem a
+  // configuração (a tela recarrega quando as listas sincronizarem).
+  const read = getDoc(doc(db, COLLECTIONS.driverSettings, ownerId)).then((snap) =>
+    snap.exists() ? (snap.data() as DriverSettings) : null,
+  );
+  const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000));
+  return Promise.race([read, timeout]);
 }
 
 export function saveDriverSettings(settings: DriverSettings): Promise<void> {

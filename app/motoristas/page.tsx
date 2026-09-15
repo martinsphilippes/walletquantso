@@ -15,7 +15,7 @@ import { loadErrorMessage } from "@/lib/errors";
 import { LoginGate } from "@/components/LoginGate";
 import { DateParts } from "@/components/DateParts";
 import { useAuth } from "@/services/auth-context";
-import { onListsChange } from "@/services/live-store";
+import { hasPendingSync, onListsChange } from "@/services/live-store";
 import { listAccounts, listCategories, listCostCenters } from "@/services/firestore";
 import { listClients } from "@/services/clients";
 import { createBill } from "@/services/bills";
@@ -91,6 +91,7 @@ function Motoristas() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -108,6 +109,7 @@ function Motoristas() {
       setRides(r);
       setClients(c);
       setSettings(s);
+      setSyncing(hasPendingSync());
       if (!restricted) {
         const [m, a, cat, cc] = await Promise.all([
           listMembers(ownerId),
@@ -514,6 +516,11 @@ function Motoristas() {
   return (
     <>
       {error && <p className="badge err">{error}</p>}
+      {syncing && (
+        <p className="badge warn" style={{ display: "inline-block" }}>
+          ⏳ Ainda sincronizando com o servidor… a tela atualiza sozinha quando terminar.
+        </p>
+      )}
       {restricted && (
         <p className="muted" style={{ marginTop: 0 }}>
           Acesso restrito: você lança corridas e gera os títulos dos motoristas. Logado como {me}.
