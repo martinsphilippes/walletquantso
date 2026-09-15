@@ -90,6 +90,18 @@ describe("nextWeekdayDate / payDueDate / describeDue", () => {
 
 describe("ruleForClient", () => {
   const base: DriverSettings = { ownerId: "u", accountId: null, categoryId: null, costCenterId: null, updatedAt: 0 };
+  it("regra com vários clientes vale para cada um deles", () => {
+    const s = {
+      ...base,
+      rules: [
+        { id: "r1", payMode: "weekday" as const, payDay: 5, payWeekday: 2, diariaValue: 25, corridaValue: 8, clientIds: ["piaccere", "gialla"] },
+        { id: "r2", payMode: "monthDay" as const, payDay: 5, payWeekday: 1, diariaValue: 70, corridaValue: 8, clientIds: ["qpaozinho"] },
+      ],
+    };
+    expect(ruleForClient(s, "gialla")?.diariaValue).toBe(25);
+    expect(ruleForClient(s, "qpaozinho")?.payMode).toBe("monthDay");
+    expect(ruleForClient(s, "outro")).toBeNull();
+  });
   it("usa a regra própria da empresa quando existe", () => {
     const s = { ...base, byClient: { c1: { payMode: "weekday" as const, payDay: 5, payWeekday: 2, diariaValue: 25, corridaValue: 8 } } };
     expect(ruleForClient(s, "c1")?.diariaValue).toBe(25);

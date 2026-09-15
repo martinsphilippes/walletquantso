@@ -359,10 +359,18 @@ export interface ClientPayRule {
   corridaValue: number;
 }
 
+/** Regra de pagamento aplicada a um conjunto de empresas (clientes). */
+export interface PayRule extends ClientPayRule {
+  id: string;
+  clientIds: string[];
+}
+
 /** Configuração da tela Motoristas (um doc por dono, id = ownerId). */
 export interface DriverSettings {
   ownerId: string;
-  /** Regra de pagamento por empresa (clientId → regra). */
+  /** Regras de pagamento, cada uma cobrindo um ou mais clientes. */
+  rules?: PayRule[];
+  /** Formato anterior (clientId → regra); lido só por compatibilidade. */
   byClient?: Record<string, ClientPayRule>;
   /** Classificação dos títulos gerados (vale para todas as empresas). */
   accountId: string | null;

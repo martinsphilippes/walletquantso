@@ -42,6 +42,7 @@ import type {
   Client,
   ClientPayRule,
   CostCenter,
+  PayRule,
   Driver,
   DriverSettings,
   Member,
@@ -304,27 +305,29 @@ function Motoristas() {
   }, [settings]);
 
   const emptyRule = {
-    clientId: "",
+    id: "",
     payMode: "weekday" as "monthDay" | "weekday",
     payWeekday: "2",
     payDay: "5",
     diariaValue: "",
     corridaValue: "",
+    clientIds: [] as string[],
   };
   const [rule, setRule] = useState(emptyRule);
-  const rulesByClient = settings?.byClient ?? {};
+  const [ruleClientPick, setRuleClientPick] = useState("");
+  const savedRules: PayRule[] = settings?.rules ?? [];
 
-  function editarRegra(clientId: string) {
-    const r = rulesByClient[clientId];
-    if (!r) return;
+  function editarRegra(r: PayRule) {
     setRule({
-      clientId,
+      id: r.id,
       payMode: r.payMode,
       payWeekday: String(r.payWeekday),
       payDay: String(r.payDay),
       diariaValue: r.diariaValue ? String(r.diariaValue).replace(".", ",") : "",
       corridaValue: r.corridaValue ? String(r.corridaValue).replace(".", ",") : "",
+      clientIds: [...r.clientIds],
     });
+    setCfgMsg("");
   }
 
   async function persistSettings(patch: Partial<DriverSettings>) {
@@ -334,7 +337,7 @@ function Motoristas() {
       accountId: cfg.accountId || null,
       categoryId: cfg.categoryId || null,
       costCenterId: cfg.costCenterId || null,
-      byClient: rulesByClient,
+      rules: savedRules,
       updatedAt: Date.now(),
       ...patch,
     });
@@ -355,7 +358,7 @@ function Motoristas() {
   }
 
   async function salvarRegra() {
-    if (!rule.clientId) return setCfgMsg("Escolha a empresa da regra.");
+    if (rule.clientIds.length === 0) return setCfgMsg("Adicione pelo menos um cliente à regra.");
     const payDay = Math.floor(Number(rule.payDay));
     if (rule.payMode === "monthDay" && (!Number.isFinite(payDay) || payDay < 1 || payDay > 31)) {
       return setCfgMsg("Dia do mês entre 1 e 31.");
@@ -363,18 +366,31 @@ function Motoristas() {
     const diariaValue = parseBrCurrency(rule.diariaValue) ?? 0;
     const corridaValue = parseBrCurrency(rule.corridaValue) ?? 0;
     if (diariaValue <= 0 && corridaValue <= 0) return setCfgMsg("Informe o valor da diária e/ou da corrida.");
-    const r: ClientPayRule = {
+    const id =
+      rule.id ||
+      (typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    const saved: PayRule = {
+      id,
       payMode: rule.payMode,
       payDay: Number.isFinite(payDay) && payDay >= 1 ? Math.min(31, payDay) : 5,
       payWeekday: Math.floor(Number(rule.payWeekday)) || 0,
       diariaValue,
       corridaValue,
+      clientIds: rule.clientIds,
     };
+    // Um cliente só pode estar numa regra: sai das outras ao entrar nesta.
+    const next = savedRules
+      .filter((r) => r.id !== id)
+      .map((r) => ({ ...r, clientIds: r.clientIds.filter((c) => !saved.clientIds.includes(c)) }))
+      .filter((r) => r.clientIds.length > 0);
+    next.push(saved);
     setBusy(true);
     setCfgMsg("");
     try {
-      await persistSettings({ byClient: { ...rulesByClient, [rule.clientId]: r } });
-      setCfgMsg(`✅ Regra de ${clientName.get(rule.clientId) ?? "?"} salva.`);
+      await persistSettings({ rules: next });
+      setCfgMsg(`✅ Regra salva para ${saved.clientIds.map((c) => clientName.get(c) ?? "?").join(", ")}.`);
       setRule(emptyRule);
       await load();
     } catch (err) {
@@ -384,13 +400,12 @@ function Motoristas() {
     }
   }
 
-  async function removerRegra(clientId: string) {
-    if (!confirm(`Remover a regra de pagamento de ${clientName.get(clientId) ?? "?"}?`)) return;
-    const next = { ...rulesByClient };
-    delete next[clientId];
+  async function removerRegra(r: PayRule) {
+    if (!confirm(`Remover a regra de ${r.clientIds.map((c) => clientName.get(c) ?? "?").join(", ")}?`)) return;
     setBusy(true);
     try {
-      await persistSettings({ byClient: next });
+      await persistSettings({ rules: savedRules.filter((x) => x.id !== r.id) });
+      if (rule.id === r.id) setRule(emptyRule);
       await load();
     } catch (err) {
       setCfgMsg(`❌ Falha ao remover: ${(err as Error).message}`);
@@ -549,7 +564,7 @@ function Motoristas() {
               ⚠ Sem regra de pagamento: {semRegra.map((cid) => clientName.get(cid) ?? "?").join(", ")}.{" "}
               {restricted
                 ? "O dono precisa configurar a regra dessa(s) empresa(s) para gerar o título."
-                : "Configure abaixo, em \"Regra por empresa\", para gerar os títulos."}
+                : "Configure abaixo, em \"Regras de pagamento\", para gerar os títulos."}
             </p>
           );
         })()}
@@ -733,22 +748,12 @@ function Motoristas() {
         <>
           <div className="panel">
             <h2>Configuração de pagamento</h2>
-            <h3 style={{ marginBottom: "0.25rem" }}>Regra por empresa</h3>
+            <h3 style={{ marginBottom: "0.25rem" }}>Regras de pagamento</h3>
             <p className="muted" style={{ marginTop: 0, fontSize: "0.85rem" }}>
-              Cada empresa tem o seu acerto com o motorista: quanto você paga por diária e por corrida, e
-              quando vence (dia fixo do mês ou próximo dia da semana — gerado nesse dia, vence hoje).
+              Cada regra diz quando vence e quanto você paga por diária e por corrida — e vale para os
+              clientes que você adicionar nela (um ou vários). Gerado no próprio dia da semana, vence hoje.
             </p>
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
-              <Field label="Empresa">
-                <select value={rule.clientId} onChange={(e) => setRule({ ...rule, clientId: e.target.value })}>
-                  <option value="">Escolha…</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}{rulesByClient[c.id!] ? " ✓" : ""}
-                    </option>
-                  ))}
-                </select>
-              </Field>
               <Field label="Vencimento">
                 <select
                   value={rule.payMode}
@@ -778,6 +783,29 @@ function Motoristas() {
                   </select>
                 </Field>
               )}
+              <Field label="Cliente">
+                <span style={{ display: "inline-flex", gap: "0.4rem" }}>
+                  <select value={ruleClientPick} onChange={(e) => setRuleClientPick(e.target.value)}>
+                    <option value="">Escolha…</option>
+                    {clients
+                      .filter((c) => !rule.clientIds.includes(c.id!))
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={!ruleClientPick}
+                    onClick={() => {
+                      if (!ruleClientPick) return;
+                      setRule({ ...rule, clientIds: [...rule.clientIds, ruleClientPick] });
+                      setRuleClientPick("");
+                    }}
+                  >
+                    + Adicionar
+                  </button>
+                </span>
+              </Field>
               <Field label="Valor pago por diária (R$)">
                 <input
                   value={rule.diariaValue}
@@ -794,45 +822,74 @@ function Motoristas() {
                   style={{ ...fieldStyle, width: 110, textAlign: "right" }}
                 />
               </Field>
-              <button disabled={busy} onClick={() => void salvarRegra()}>
-                {rule.clientId && rulesByClient[rule.clientId] ? "Atualizar regra" : "Salvar regra"}
+              <button className="btn-primary" disabled={busy} onClick={() => void salvarRegra()}>
+                {rule.id ? "Atualizar regra" : "Salvar regra"}
               </button>
+              {rule.id && (
+                <button style={{ background: "var(--border)" }} onClick={() => setRule(emptyRule)}>
+                  Cancelar edição
+                </button>
+              )}
             </div>
-            {Object.keys(rulesByClient).length > 0 && (
+            {rule.clientIds.length > 0 && (
+              <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "0.5rem" }}>
+                <span className="muted" style={{ fontSize: "0.82rem" }}>Clientes desta regra:</span>
+                {rule.clientIds.map((cid) => (
+                  <span
+                    key={cid}
+                    className="badge"
+                    style={{ background: "var(--border)", color: "var(--text)", display: "inline-flex", gap: 6 }}
+                  >
+                    {clientName.get(cid) ?? "?"}
+                    <button
+                      type="button"
+                      title="Tirar da regra"
+                      onClick={() => setRule({ ...rule, clientIds: rule.clientIds.filter((c) => c !== cid) })}
+                      style={{ background: "transparent", border: "none", color: "var(--err)", padding: 0, cursor: "pointer" }}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {savedRules.length > 0 && (
               <div style={{ overflowX: "auto", marginTop: "0.75rem" }}>
                 <table>
                   <thead>
                     <tr>
-                      <th>Empresa</th>
-                      <th>Regra</th>
+                      <th>Clientes</th>
+                      <th>Vencimento</th>
+                      <th style={{ textAlign: "right" }}>Diária</th>
+                      <th style={{ textAlign: "right" }}>Corrida</th>
                       <th></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.entries(rulesByClient)
-                      .sort(([a], [b]) => (clientName.get(a) ?? "").localeCompare(clientName.get(b) ?? "", "pt-BR"))
-                      .map(([cid, r]) => (
-                        <tr key={cid}>
-                          <td>{clientName.get(cid) ?? <span className="muted">(empresa excluída)</span>}</td>
-                          <td>{describeRule(r)}</td>
-                          <td style={{ whiteSpace: "nowrap" }}>
-                            <button
-                              style={{ background: "var(--border)", padding: "0.3rem 0.6rem" }}
-                              disabled={busy}
-                              onClick={() => editarRegra(cid)}
-                            >
-                              Editar
-                            </button>{" "}
-                            <button
-                              style={{ background: "var(--err)", padding: "0.3rem 0.6rem" }}
-                              disabled={busy}
-                              onClick={() => void removerRegra(cid)}
-                            >
-                              Remover
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                    {savedRules.map((r) => (
+                      <tr key={r.id}>
+                        <td>{r.clientIds.map((c) => clientName.get(c) ?? "(excluído)").join(", ")}</td>
+                        <td>{r.payMode === "weekday" ? `próxima ${WEEKDAY_NAMES[r.payWeekday] ?? "?"}` : `dia ${r.payDay} do mês`}</td>
+                        <td style={{ textAlign: "right" }}>{brl(r.diariaValue)}</td>
+                        <td style={{ textAlign: "right" }}>{brl(r.corridaValue)}</td>
+                        <td style={{ whiteSpace: "nowrap" }}>
+                          <button
+                            style={{ background: "var(--border)", padding: "0.3rem 0.6rem" }}
+                            disabled={busy}
+                            onClick={() => editarRegra(r)}
+                          >
+                            Editar
+                          </button>{" "}
+                          <button
+                            style={{ background: "var(--err)", padding: "0.3rem 0.6rem" }}
+                            disabled={busy}
+                            onClick={() => void removerRegra(r)}
+                          >
+                            Remover
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>

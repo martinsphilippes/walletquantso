@@ -74,6 +74,8 @@ export function ruleForClient(
   clientId: string,
 ): ClientPayRule | null {
   if (!settings) return null;
+  const inRules = settings.rules?.find((r) => r.clientIds?.includes(clientId));
+  if (inRules) return inRules;
   const own = settings.byClient?.[clientId];
   if (own) return own;
   if ((settings.diariaValue ?? 0) > 0 || (settings.corridaValue ?? 0) > 0) {
