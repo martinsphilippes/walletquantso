@@ -348,22 +348,34 @@ export interface RideEntry {
   billId: string | null;
 }
 
+/** Como e quanto o negócio paga ao motorista pelo trabalho numa empresa. */
+export interface ClientPayRule {
+  /** Vencimento: dia fixo do mês ou próximo dia da semana. */
+  payMode: "monthDay" | "weekday";
+  payDay: number;
+  /** 0 = domingo … 6 = sábado. */
+  payWeekday: number;
+  diariaValue: number;
+  corridaValue: number;
+}
+
 /** Configuração da tela Motoristas (um doc por dono, id = ownerId). */
 export interface DriverSettings {
   ownerId: string;
-  /** Como o vencimento é calculado: dia do mês (padrão) ou dia da semana. */
-  payMode?: "monthDay" | "weekday";
-  /** Dia do mês em que os títulos dos motoristas vencem (modo monthDay). */
-  payDay: number;
-  /** 0 = domingo … 6 = sábado (modo weekday): "próxima terça-feira". */
-  payWeekday?: number;
-  /** Quanto o negócio paga ao motorista por diária e por corrida. */
-  diariaValue: number;
-  corridaValue: number;
+  /** Regra de pagamento por empresa (clientId → regra). */
+  byClient?: Record<string, ClientPayRule>;
+  /** Classificação dos títulos gerados (vale para todas as empresas). */
   accountId: string | null;
   categoryId: string | null;
   costCenterId: string | null;
   updatedAt: number;
+  // Campos da primeira versão (regra única); hoje servem só como padrão
+  // para empresas ainda sem regra própria.
+  payMode?: "monthDay" | "weekday";
+  payDay?: number;
+  payWeekday?: number;
+  diariaValue?: number;
+  corridaValue?: number;
 }
 
 /** Acesso restrito: e-mail que só pode usar a tela Motoristas/Corridas. */

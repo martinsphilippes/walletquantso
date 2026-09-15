@@ -33,13 +33,14 @@ import {
   saveDriverSettings,
   updateRide,
 } from "@/services/drivers";
-import { computeDriverPayout, describeDue, payDueDate, WEEKDAY_NAMES } from "@/lib/drivers/pay";
+import { computeDriverPayout, describeDue, payDueDate, ruleForClient, WEEKDAY_NAMES } from "@/lib/drivers/pay";
 import { parseBrCurrency } from "@/lib/br/parse";
 import { todayBr } from "@/lib/br/date";
 import type {
   Account,
   Category,
   Client,
+  ClientPayRule,
   CostCenter,
   Driver,
   DriverSettings,
@@ -226,25 +227,33 @@ function Motoristas() {
     }
   }
 
-  // ── Gerar título a pagar ─────────────────────────────────────────────────
-  const [payDriverId, setPayDriverId] = useState<string | null>(null);
+  // ── Gerar título a pagar (por motorista × empresa) ───────────────────────
+  const [payTarget, setPayTarget] = useState<{ driverId: string; clientId: string } | null>(null);
   const [payDue, setPayDue] = useState("");
   const [payMsg, setPayMsg] = useState("");
 
-  const rates = { diariaValue: settings?.diariaValue ?? 0, corridaValue: settings?.corridaValue ?? 0 };
-  const settingsOk = !!settings && (settings.diariaValue > 0 || settings.corridaValue > 0);
-  const payout = payDriverId ? computeDriverPayout(rides, payDriverId, rates) : null;
+  const payRule = payTarget ? ruleForClient(settings, payTarget.clientId) : null;
+  const payout =
+    payTarget && payRule
+      ? computeDriverPayout(rides, payTarget.driverId, payTarget.clientId, payRule)
+      : null;
 
-  function abrirPagamento(d: Driver) {
-    setPayDriverId(d.id!);
-    setPayDue(payDueDate(todayBr(), settings ?? { payDay: 5 }));
+  function abrirPagamento(driverId: string, clientId: string) {
+    const rule = ruleForClient(settings, clientId);
+    if (!rule) {
+      setPayMsg(`A empresa ${clientName.get(clientId) ?? "?"} ainda não tem regra de pagamento configurada.`);
+      return;
+    }
+    setPayTarget({ driverId, clientId });
+    setPayDue(payDueDate(todayBr(), rule));
     setPayMsg("");
   }
 
   async function gerarTitulo() {
-    if (!ownerId || !payDriverId || !payout || !settings) return;
-    if (payout.total <= 0) return setPayMsg("Não há corridas em aberto para este motorista.");
-    const d = drivers.find((x) => x.id === payDriverId);
+    if (!ownerId || !payTarget || !payout || !payRule || !settings) return;
+    if (payout.total <= 0) return setPayMsg("Não há corridas em aberto para este motorista nesta empresa.");
+    const d = drivers.find((x) => x.id === payTarget.driverId);
+    const empresa = clientName.get(payTarget.clientId) ?? "?";
     if (!d) return;
     setBusy(true);
     setPayMsg("");
@@ -252,13 +261,10 @@ function Motoristas() {
       const parts: string[] = [];
       if (payout.diarias > 0) parts.push(`${payout.diarias} diária(s)`);
       if (payout.corridas > 0) parts.push(`${payout.corridas} corrida(s)`);
-      const porEmpresa = payout.porEmpresa
-        .map((e) => `${clientName.get(e.clientId) ?? "?"}: ${e.diarias} diária(s), ${e.corridas} corrida(s)`)
-        .join("; ");
       const billId = await createBill({
         ownerId,
         kind: "payable",
-        description: `Motorista ${d.name} — ${parts.join(" + ")}${payout.period ? ` (${payout.period})` : ""}`,
+        description: `Motorista ${d.name} — ${empresa} — ${parts.join(" + ")}${payout.period ? ` (${payout.period})` : ""}`,
         amount: payout.total,
         dueDate: payDue,
         competenceDate: payDue,
@@ -268,14 +274,15 @@ function Motoristas() {
         costCenterId: settings.costCenterId ?? null,
         accountId: settings.accountId ?? null,
         notes:
-          `Corridas: ${porEmpresa}. Diárias ${brl(payout.diariasValor)} + corridas ${brl(payout.corridasValor)}. ` +
+          `${empresa}: ${payout.diarias} diária(s) × ${brl(payRule.diariaValue)} = ${brl(payout.diariasValor)}; ` +
+          `${payout.corridas} corrida(s) × ${brl(payRule.corridaValue)} = ${brl(payout.corridasValor)}. ` +
           `Gerado na tela Motoristas por ${me}.`,
         payments: [],
         createdAt: Date.now(),
       });
       for (const id of payout.rideIds) await updateRide(id, { billId });
       setPayMsg(`✅ Título de ${brl(payout.total)} criado em Contas a pagar (venc. ${brDate(payDue)}).`);
-      setPayDriverId(null);
+      setPayTarget(null);
       await load();
     } catch (err) {
       setPayMsg(`❌ Falha ao gerar título: ${(err as Error).message}`);
@@ -284,57 +291,61 @@ function Motoristas() {
     }
   }
 
-  // ── Configuração (só o dono) ─────────────────────────────────────────────
-  const [cfg, setCfg] = useState({
-    payMode: "monthDay" as "monthDay" | "weekday",
-    payWeekday: "2",
-    payDay: "5",
-    diariaValue: "",
-    corridaValue: "",
-    accountId: "",
-    categoryId: "",
-    costCenterId: "",
-  });
+  // ── Configuração (só o dono): classificação geral + regra por empresa ────
+  const [cfg, setCfg] = useState({ accountId: "", categoryId: "", costCenterId: "" });
   const [cfgMsg, setCfgMsg] = useState("");
   useEffect(() => {
     if (!settings) return;
     setCfg({
-      payMode: settings.payMode ?? "monthDay",
-      payWeekday: String(settings.payWeekday ?? 2),
-      payDay: String(settings.payDay ?? 5),
-      diariaValue: settings.diariaValue ? String(settings.diariaValue).replace(".", ",") : "",
-      corridaValue: settings.corridaValue ? String(settings.corridaValue).replace(".", ",") : "",
       accountId: settings.accountId ?? "",
       categoryId: settings.categoryId ?? "",
       costCenterId: settings.costCenterId ?? "",
     });
   }, [settings]);
 
-  async function salvarConfig() {
+  const emptyRule = {
+    clientId: "",
+    payMode: "weekday" as "monthDay" | "weekday",
+    payWeekday: "2",
+    payDay: "5",
+    diariaValue: "",
+    corridaValue: "",
+  };
+  const [rule, setRule] = useState(emptyRule);
+  const rulesByClient = settings?.byClient ?? {};
+
+  function editarRegra(clientId: string) {
+    const r = rulesByClient[clientId];
+    if (!r) return;
+    setRule({
+      clientId,
+      payMode: r.payMode,
+      payWeekday: String(r.payWeekday),
+      payDay: String(r.payDay),
+      diariaValue: r.diariaValue ? String(r.diariaValue).replace(".", ",") : "",
+      corridaValue: r.corridaValue ? String(r.corridaValue).replace(".", ",") : "",
+    });
+  }
+
+  async function persistSettings(patch: Partial<DriverSettings>) {
     if (!ownerId) return;
-    const payDay = Math.floor(Number(cfg.payDay));
-    if (cfg.payMode === "monthDay" && (!Number.isFinite(payDay) || payDay < 1 || payDay > 31)) {
-      return setCfgMsg("Dia de pagamento entre 1 e 31.");
-    }
-    const payWeekday = Math.floor(Number(cfg.payWeekday));
-    const diariaValue = parseBrCurrency(cfg.diariaValue) ?? 0;
-    const corridaValue = parseBrCurrency(cfg.corridaValue) ?? 0;
+    await saveDriverSettings({
+      ownerId,
+      accountId: cfg.accountId || null,
+      categoryId: cfg.categoryId || null,
+      costCenterId: cfg.costCenterId || null,
+      byClient: rulesByClient,
+      updatedAt: Date.now(),
+      ...patch,
+    });
+  }
+
+  async function salvarClassificacao() {
     setBusy(true);
     setCfgMsg("");
     try {
-      await saveDriverSettings({
-        ownerId,
-        payMode: cfg.payMode,
-        payWeekday: Number.isFinite(payWeekday) ? payWeekday : 1,
-        payDay: Number.isFinite(payDay) && payDay >= 1 ? Math.min(31, payDay) : 5,
-        diariaValue,
-        corridaValue,
-        accountId: cfg.accountId || null,
-        categoryId: cfg.categoryId || null,
-        costCenterId: cfg.costCenterId || null,
-        updatedAt: Date.now(),
-      });
-      setCfgMsg("✅ Configuração salva.");
+      await persistSettings({});
+      setCfgMsg("✅ Classificação dos títulos salva.");
       await load();
     } catch (err) {
       setCfgMsg(`❌ Falha ao salvar: ${(err as Error).message}`);
@@ -342,6 +353,55 @@ function Motoristas() {
       setBusy(false);
     }
   }
+
+  async function salvarRegra() {
+    if (!rule.clientId) return setCfgMsg("Escolha a empresa da regra.");
+    const payDay = Math.floor(Number(rule.payDay));
+    if (rule.payMode === "monthDay" && (!Number.isFinite(payDay) || payDay < 1 || payDay > 31)) {
+      return setCfgMsg("Dia do mês entre 1 e 31.");
+    }
+    const diariaValue = parseBrCurrency(rule.diariaValue) ?? 0;
+    const corridaValue = parseBrCurrency(rule.corridaValue) ?? 0;
+    if (diariaValue <= 0 && corridaValue <= 0) return setCfgMsg("Informe o valor da diária e/ou da corrida.");
+    const r: ClientPayRule = {
+      payMode: rule.payMode,
+      payDay: Number.isFinite(payDay) && payDay >= 1 ? Math.min(31, payDay) : 5,
+      payWeekday: Math.floor(Number(rule.payWeekday)) || 0,
+      diariaValue,
+      corridaValue,
+    };
+    setBusy(true);
+    setCfgMsg("");
+    try {
+      await persistSettings({ byClient: { ...rulesByClient, [rule.clientId]: r } });
+      setCfgMsg(`✅ Regra de ${clientName.get(rule.clientId) ?? "?"} salva.`);
+      setRule(emptyRule);
+      await load();
+    } catch (err) {
+      setCfgMsg(`❌ Falha ao salvar: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removerRegra(clientId: string) {
+    if (!confirm(`Remover a regra de pagamento de ${clientName.get(clientId) ?? "?"}?`)) return;
+    const next = { ...rulesByClient };
+    delete next[clientId];
+    setBusy(true);
+    try {
+      await persistSettings({ byClient: next });
+      await load();
+    } catch (err) {
+      setCfgMsg(`❌ Falha ao remover: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const describeRule = (r: ClientPayRule) =>
+    (r.payMode === "weekday" ? `próxima ${WEEKDAY_NAMES[r.payWeekday] ?? "?"}` : `dia ${r.payDay} do mês`) +
+    ` · diária ${brl(r.diariaValue)} · corrida ${brl(r.corridaValue)}`;
 
   // ── Acessos restritos (só o dono) ────────────────────────────────────────
   const [newEmail, setNewEmail] = useState("");
@@ -479,13 +539,20 @@ function Motoristas() {
             <span className={`badge ${driverMsg.startsWith("✅") ? "ok" : "warn"}`}>{driverMsg}</span>
           </p>
         )}
-        {!settingsOk && (
-          <p className="badge warn" style={{ display: "inline-block" }}>
-            ⚠ {restricted
-              ? "O dono ainda não configurou os valores pagos por diária/corrida — os títulos não podem ser gerados."
-              : "Configure abaixo os valores pagos por diária/corrida e o dia de pagamento para gerar títulos."}
-          </p>
-        )}
+        {(() => {
+          const semRegra = [...new Set(rides.filter((r) => !r.billId).map((r) => r.clientId))].filter(
+            (cid) => !ruleForClient(settings, cid),
+          );
+          if (semRegra.length === 0) return null;
+          return (
+            <p className="badge warn" style={{ display: "inline-block" }}>
+              ⚠ Sem regra de pagamento: {semRegra.map((cid) => clientName.get(cid) ?? "?").join(", ")}.{" "}
+              {restricted
+                ? "O dono precisa configurar a regra dessa(s) empresa(s) para gerar o título."
+                : "Configure abaixo, em \"Regra por empresa\", para gerar os títulos."}
+            </p>
+          );
+        })()}
         {drivers.length === 0 ? (
           <p className="muted">Nenhum motorista cadastrado.</p>
         ) : (
@@ -494,46 +561,70 @@ function Motoristas() {
               <thead>
                 <tr>
                   <th>Motorista</th>
+                  <th>Empresa</th>
                   <th style={{ textAlign: "right" }}>Diárias em aberto</th>
                   <th style={{ textAlign: "right" }}>Corridas em aberto</th>
                   <th style={{ textAlign: "right" }}>A pagar</th>
+                  <th>Vence</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {drivers.map((d) => {
-                  const p = computeDriverPayout(rides, d.id!, rates);
-                  return (
-                    <tr key={d.id}>
-                      <td>{d.name}</td>
-                      <td style={{ textAlign: "right" }}>{p.diarias}</td>
-                      <td style={{ textAlign: "right" }}>{p.corridas}</td>
-                      <td style={{ textAlign: "right", fontWeight: 600 }}>{brl(p.total)}</td>
-                      <td style={{ whiteSpace: "nowrap" }}>
-                        <button
-                          className="btn-primary"
-                          disabled={busy || !settingsOk || p.rideIds.length === 0}
-                          onClick={() => abrirPagamento(d)}
-                        >
-                          Gerar título a pagar
-                        </button>{" "}
-                        <button
-                          style={{ background: "var(--err)", padding: "0.3rem 0.6rem" }}
-                          disabled={busy}
-                          onClick={() => void excluirMotorista(d)}
-                        >
-                          Excluir
-                        </button>
-                      </td>
-                    </tr>
-                  );
+                  const clientIds = [
+                    ...new Set(rides.filter((r) => r.driverId === d.id && !r.billId).map((r) => r.clientId)),
+                  ].sort((a, b) => (clientName.get(a) ?? "").localeCompare(clientName.get(b) ?? "", "pt-BR"));
+                  if (clientIds.length === 0) {
+                    return (
+                      <tr key={d.id}>
+                        <td>{d.name}</td>
+                        <td className="muted" colSpan={5}>sem corridas em aberto</td>
+                        <td>
+                          <button
+                            style={{ background: "var(--err)", padding: "0.3rem 0.6rem" }}
+                            disabled={busy}
+                            onClick={() => void excluirMotorista(d)}
+                          >
+                            Excluir
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return clientIds.map((cid, i) => {
+                    const r = ruleForClient(settings, cid);
+                    const p = computeDriverPayout(rides, d.id!, cid, r ?? { diariaValue: 0, corridaValue: 0 });
+                    return (
+                      <tr key={`${d.id}-${cid}`}>
+                        <td>{i === 0 ? d.name : ""}</td>
+                        <td>{clientName.get(cid) ?? "—"}</td>
+                        <td style={{ textAlign: "right" }}>{p.diarias}</td>
+                        <td style={{ textAlign: "right" }}>{p.corridas}</td>
+                        <td style={{ textAlign: "right", fontWeight: 600 }}>
+                          {r ? brl(p.total) : <span className="muted">sem regra</span>}
+                        </td>
+                        <td className="muted" style={{ whiteSpace: "nowrap" }}>
+                          {r ? describeDue(todayBr(), payDueDate(todayBr(), r)) : "—"}
+                        </td>
+                        <td style={{ whiteSpace: "nowrap" }}>
+                          <button
+                            className="btn-primary"
+                            disabled={busy || !r || p.rideIds.length === 0}
+                            onClick={() => abrirPagamento(d.id!, cid)}
+                          >
+                            Gerar título a pagar
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  });
                 })}
               </tbody>
             </table>
           </div>
         )}
 
-        {payDriverId && payout && (
+        {payTarget && payout && payRule && (
           <div
             style={{
               marginTop: "0.75rem",
@@ -542,17 +633,16 @@ function Motoristas() {
               padding: "0.75rem",
             }}
           >
-            <strong>Título a pagar — {driverName.get(payDriverId)}</strong>
+            <strong>
+              Título a pagar — {driverName.get(payTarget.driverId)} · {clientName.get(payTarget.clientId)}
+            </strong>
             <div className="muted" style={{ fontSize: "0.85rem", margin: "0.3rem 0" }}>
-              {payout.period ? `Período ${payout.period}. ` : ""}
-              {payout.porEmpresa
-                .map((e) => `${clientName.get(e.clientId) ?? "?"}: ${e.diarias} diária(s), ${e.corridas} corrida(s)`)
-                .join(" · ")}
+              {payout.period ? `Período ${payout.period}. ` : ""}Regra da empresa: {describeRule(payRule)}.
             </div>
             <div>
-              {payout.diarias} diária(s) × {brl(rates.diariaValue)} = <strong>{brl(payout.diariasValor)}</strong>
+              {payout.diarias} diária(s) × {brl(payRule.diariaValue)} = <strong>{brl(payout.diariasValor)}</strong>
               {" · "}
-              {payout.corridas} corrida(s) × {brl(rates.corridaValue)} = <strong>{brl(payout.corridasValor)}</strong>
+              {payout.corridas} corrida(s) × {brl(payRule.corridaValue)} = <strong>{brl(payout.corridasValor)}</strong>
             </div>
             <div style={{ fontSize: "1.1rem", margin: "0.3rem 0" }}>
               Total: <strong style={{ color: "var(--err)" }}>{brl(payout.total)}</strong>
@@ -564,7 +654,7 @@ function Motoristas() {
               <button className="btn-primary" disabled={busy} onClick={() => void gerarTitulo()}>
                 Confirmar e gerar título
               </button>
-              <button style={{ background: "var(--border)" }} onClick={() => setPayDriverId(null)}>
+              <button style={{ background: "var(--border)" }} onClick={() => setPayTarget(null)}>
                 Cancelar
               </button>
             </div>
@@ -643,33 +733,45 @@ function Motoristas() {
         <>
           <div className="panel">
             <h2>Configuração de pagamento</h2>
+            <h3 style={{ marginBottom: "0.25rem" }}>Regra por empresa</h3>
+            <p className="muted" style={{ marginTop: 0, fontSize: "0.85rem" }}>
+              Cada empresa tem o seu acerto com o motorista: quanto você paga por diária e por corrida, e
+              quando vence (dia fixo do mês ou próximo dia da semana — gerado nesse dia, vence hoje).
+            </p>
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
-              <Field label="Vencimento do título">
-                <select
-                  value={cfg.payMode}
-                  onChange={(e) => setCfg({ ...cfg, payMode: e.target.value as "monthDay" | "weekday" })}
-                >
-                  <option value="monthDay">Dia fixo do mês</option>
-                  <option value="weekday">Próximo dia da semana</option>
+              <Field label="Empresa">
+                <select value={rule.clientId} onChange={(e) => setRule({ ...rule, clientId: e.target.value })}>
+                  <option value="">Escolha…</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}{rulesByClient[c.id!] ? " ✓" : ""}
+                    </option>
+                  ))}
                 </select>
               </Field>
-              {cfg.payMode === "monthDay" ? (
+              <Field label="Vencimento">
+                <select
+                  value={rule.payMode}
+                  onChange={(e) => setRule({ ...rule, payMode: e.target.value as "monthDay" | "weekday" })}
+                >
+                  <option value="weekday">Próximo dia da semana</option>
+                  <option value="monthDay">Dia fixo do mês</option>
+                </select>
+              </Field>
+              {rule.payMode === "monthDay" ? (
                 <Field label="Dia do mês (1–31)">
                   <input
                     type="number"
                     min={1}
                     max={31}
-                    value={cfg.payDay}
-                    onChange={(e) => setCfg({ ...cfg, payDay: e.target.value })}
+                    value={rule.payDay}
+                    onChange={(e) => setRule({ ...rule, payDay: e.target.value })}
                     style={{ ...fieldStyle, width: 80 }}
                   />
                 </Field>
               ) : (
                 <Field label="Dia da semana">
-                  <select
-                    value={cfg.payWeekday}
-                    onChange={(e) => setCfg({ ...cfg, payWeekday: e.target.value })}
-                  >
+                  <select value={rule.payWeekday} onChange={(e) => setRule({ ...rule, payWeekday: e.target.value })}>
                     {WEEKDAY_NAMES.map((n, i) => (
                       <option key={n} value={i}>{n}</option>
                     ))}
@@ -678,20 +780,66 @@ function Motoristas() {
               )}
               <Field label="Valor pago por diária (R$)">
                 <input
-                  value={cfg.diariaValue}
-                  onChange={(e) => setCfg({ ...cfg, diariaValue: e.target.value })}
+                  value={rule.diariaValue}
+                  onChange={(e) => setRule({ ...rule, diariaValue: e.target.value })}
                   placeholder="ex.: 70"
-                  style={{ ...fieldStyle, width: 120, textAlign: "right" }}
+                  style={{ ...fieldStyle, width: 110, textAlign: "right" }}
                 />
               </Field>
               <Field label="Valor pago por corrida (R$)">
                 <input
-                  value={cfg.corridaValue}
-                  onChange={(e) => setCfg({ ...cfg, corridaValue: e.target.value })}
+                  value={rule.corridaValue}
+                  onChange={(e) => setRule({ ...rule, corridaValue: e.target.value })}
                   placeholder="ex.: 8"
-                  style={{ ...fieldStyle, width: 120, textAlign: "right" }}
+                  style={{ ...fieldStyle, width: 110, textAlign: "right" }}
                 />
               </Field>
+              <button disabled={busy} onClick={() => void salvarRegra()}>
+                {rule.clientId && rulesByClient[rule.clientId] ? "Atualizar regra" : "Salvar regra"}
+              </button>
+            </div>
+            {Object.keys(rulesByClient).length > 0 && (
+              <div style={{ overflowX: "auto", marginTop: "0.75rem" }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Empresa</th>
+                      <th>Regra</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(rulesByClient)
+                      .sort(([a], [b]) => (clientName.get(a) ?? "").localeCompare(clientName.get(b) ?? "", "pt-BR"))
+                      .map(([cid, r]) => (
+                        <tr key={cid}>
+                          <td>{clientName.get(cid) ?? <span className="muted">(empresa excluída)</span>}</td>
+                          <td>{describeRule(r)}</td>
+                          <td style={{ whiteSpace: "nowrap" }}>
+                            <button
+                              style={{ background: "var(--border)", padding: "0.3rem 0.6rem" }}
+                              disabled={busy}
+                              onClick={() => editarRegra(cid)}
+                            >
+                              Editar
+                            </button>{" "}
+                            <button
+                              style={{ background: "var(--err)", padding: "0.3rem 0.6rem" }}
+                              disabled={busy}
+                              onClick={() => void removerRegra(cid)}
+                            >
+                              Remover
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <h3 style={{ marginBottom: "0.25rem", marginTop: "1rem" }}>Classificação dos títulos</h3>
+            <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
               <Field label="Conta do título">
                 <select value={cfg.accountId} onChange={(e) => setCfg({ ...cfg, accountId: e.target.value })}>
                   <option value="">—</option>
@@ -718,15 +866,8 @@ function Motoristas() {
                     ))}
                 </select>
               </Field>
-              <button disabled={busy} onClick={() => void salvarConfig()}>Salvar configuração</button>
+              <button disabled={busy} onClick={() => void salvarClassificacao()}>Salvar classificação</button>
             </div>
-            <p className="muted" style={{ fontSize: "0.8rem", marginBottom: 0 }}>
-              {cfg.payMode === "weekday"
-                ? `O título vence na próxima ${WEEKDAY_NAMES[Number(cfg.payWeekday) || 0]} — se for gerado nesse dia, vence hoje.`
-                : `O título vence no próximo dia ${cfg.payDay || "—"} do mês.`}{" "}
-              A data ainda pode ser ajustada na hora de gerar. Valores por diária/corrida são o que VOCÊ
-              paga ao motorista.
-            </p>
             {cfgMsg && (
               <p style={{ marginBottom: 0 }}>
                 <span className={`badge ${cfgMsg.startsWith("✅") ? "ok" : "warn"}`}>{cfgMsg}</span>

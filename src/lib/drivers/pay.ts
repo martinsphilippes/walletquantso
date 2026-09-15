@@ -1,10 +1,11 @@
 // WalletQuantso — pagamento de motoristas (lógica pura).
 //
-// Soma as corridas em aberto de um motorista (diárias e corridas por
-// empresa) pelos valores configurados e calcula o vencimento no dia de
-// pagamento definido pelo dono.
+// Cada empresa (cliente) tem a própria regra de pagamento ao motorista:
+// valores por diária/corrida e vencimento (dia do mês ou dia da semana).
+// Soma as corridas em aberto de um motorista NAQUELA empresa e calcula o
+// vencimento pela regra dela.
 
-import type { RideEntry } from "@/types";
+import type { ClientPayRule, DriverSettings, RideEntry } from "@/types";
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
@@ -55,13 +56,36 @@ export function nextWeekdayDate(todayIso: string, weekday: number): string {
   ).padStart(2, "0")}`;
 }
 
-/** Vencimento conforme a configuração: dia do mês ou dia da semana. */
+/** Vencimento conforme a regra: dia do mês ou dia da semana. */
 export function payDueDate(
   todayIso: string,
-  settings: { payMode?: "monthDay" | "weekday"; payDay: number; payWeekday?: number },
+  rule: { payMode?: "monthDay" | "weekday"; payDay?: number; payWeekday?: number },
 ): string {
-  if (settings.payMode === "weekday") return nextWeekdayDate(todayIso, settings.payWeekday ?? 1);
-  return nextPayDate(todayIso, settings.payDay);
+  if (rule.payMode === "weekday") return nextWeekdayDate(todayIso, rule.payWeekday ?? 1);
+  return nextPayDate(todayIso, rule.payDay ?? 5);
+}
+
+/**
+ * Regra de pagamento de uma empresa: a específica dela ou, na falta, a
+ * regra única da primeira versão da configuração (se existir e tiver valor).
+ */
+export function ruleForClient(
+  settings: DriverSettings | null,
+  clientId: string,
+): ClientPayRule | null {
+  if (!settings) return null;
+  const own = settings.byClient?.[clientId];
+  if (own) return own;
+  if ((settings.diariaValue ?? 0) > 0 || (settings.corridaValue ?? 0) > 0) {
+    return {
+      payMode: settings.payMode ?? "monthDay",
+      payDay: settings.payDay ?? 5,
+      payWeekday: settings.payWeekday ?? 1,
+      diariaValue: settings.diariaValue ?? 0,
+      corridaValue: settings.corridaValue ?? 0,
+    };
+  }
+  return null;
 }
 
 /** Rótulo humano do vencimento: "Hoje", "Amanhã" ou "terça-feira, 22/09". */
@@ -85,30 +109,27 @@ export interface DriverPayout {
   total: number;
   /** "05/09/2026 a 12/09/2026", data única ou null (sem corridas). */
   period: string | null;
-  /** Detalhe por empresa (clientId), maiores primeiro. */
-  porEmpresa: Array<{ clientId: string; diarias: number; corridas: number }>;
   rideIds: string[];
 }
 
-/** Soma as corridas ainda sem título (billId nulo) de um motorista. */
+/**
+ * Soma as corridas ainda sem título (billId nulo) de um motorista numa
+ * empresa, pelos valores da regra daquela empresa.
+ */
 export function computeDriverPayout(
   rides: RideEntry[],
   driverId: string,
+  clientId: string,
   rates: { diariaValue: number; corridaValue: number },
 ): DriverPayout {
-  const open = rides.filter((r) => r.driverId === driverId && !r.billId);
+  const open = rides.filter((r) => r.driverId === driverId && r.clientId === clientId && !r.billId);
   let diarias = 0;
   let corridas = 0;
-  const byClient = new Map<string, { diarias: number; corridas: number }>();
   const dias = new Set<string>();
   for (const r of open) {
     diarias += r.diarias || 0;
     corridas += r.corridas || 0;
     if (r.date) dias.add(r.date);
-    const c = byClient.get(r.clientId) ?? { diarias: 0, corridas: 0 };
-    c.diarias += r.diarias || 0;
-    c.corridas += r.corridas || 0;
-    byClient.set(r.clientId, c);
   }
   const ordered = [...dias].sort();
   const br = (iso: string) => iso.split("-").reverse().join("/");
@@ -127,9 +148,6 @@ export function computeDriverPayout(
     corridasValor,
     total: round(diariasValor + corridasValor),
     period,
-    porEmpresa: [...byClient.entries()]
-      .map(([clientId, c]) => ({ clientId, ...c }))
-      .sort((a, b) => b.diarias + b.corridas - (a.diarias + a.corridas)),
     rideIds: open.map((r) => r.id!).filter(Boolean),
   };
 }
