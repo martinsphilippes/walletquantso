@@ -2,7 +2,9 @@
 //
 // Cada empresa (cliente) tem a própria regra de pagamento ao motorista: um
 // ou mais TIPOS de diária (ex.: "Manhã" R$ 50, "Noite" R$ 70), uma ou mais
-// TAXAS de corrida (ex.: "Normal" R$ 8, "Longa" R$ 12) e o vencimento (dia do mês ou próximo dia da semana). Soma as
+// TAXAS de corrida (ex.: "Normal" R$ 8, "Longa" R$ 12) e o vencimento. Um
+// lançamento pode ainda trazer um VALOR AVULSO justificado (ex.: ajuda de
+// combustível), somado ao título (dia do mês ou próximo dia da semana). Soma as
 // corridas em aberto de um motorista naquela empresa e calcula o vencimento.
 
 import type { ClientPayRule, DriverSettings, RideEntry, RideRate } from "@/types";
@@ -132,6 +134,9 @@ export interface DriverPayout {
   porTaxa: Array<{ id: string; label: string; value: number; qty: number; total: number }>;
   /** Diárias por tipo (só os que tiveram quantidade). */
   porDiaria: Array<{ id: string; label: string; value: number; qty: number; total: number }>;
+  /** Valores avulsos lançados (com a justificativa). */
+  avulsos: Array<{ rideId: string; date: string; description: string; value: number }>;
+  avulsosValor: number;
   rideIds: string[];
 }
 
@@ -178,8 +183,17 @@ export function computeDriverPayout(
   const diariasB = makeBuckets(kinds, "tipo removido");
 
   const dias = new Set<string>();
+  const avulsos: DriverPayout["avulsos"] = [];
   for (const r of open) {
     if (r.date) dias.add(r.date);
+    if ((r.extraValue ?? 0) > 0) {
+      avulsos.push({
+        rideId: r.id ?? "",
+        date: r.date,
+        description: (r.extraDescription ?? "").trim() || "Valor avulso",
+        value: round(r.extraValue!),
+      });
+    }
     if (r.diariasPorTipo && Object.keys(r.diariasPorTipo).length > 0) {
       for (const [id, qty] of Object.entries(r.diariasPorTipo)) diariasB.bump(id, qty || 0);
     } else if (r.diarias) {
@@ -206,15 +220,18 @@ export function computeDriverPayout(
   const corridasValor = round(porTaxa.reduce((s, b) => s + b.total, 0));
   const diarias = porDiaria.reduce((s, b) => s + b.qty, 0);
   const diariasValor = round(porDiaria.reduce((s, b) => s + b.total, 0));
+  const avulsosValor = round(avulsos.reduce((s, a) => s + a.value, 0));
   return {
     diarias,
     corridas,
     diariasValor,
     corridasValor,
-    total: round(diariasValor + corridasValor),
+    total: round(diariasValor + corridasValor + avulsosValor),
     period,
     porTaxa,
     porDiaria,
+    avulsos,
+    avulsosValor,
     rideIds: open.map((r) => r.id!).filter(Boolean),
   };
 }

@@ -142,6 +142,18 @@ describe("computeDriverPayout", () => {
     expect(diariasOf(rule)).toEqual([{ id: "default", label: "Diária", value: 70 }]);
   });
 
+  it("valor avulso com justificativa entra no total", () => {
+    const rides = [
+      ride({ id: "r1", diarias: 1, corridas: 2, corridasPorTaxa: { n: 2 }, extraValue: 30, extraDescription: "Gasolina" }),
+      ride({ id: "r2", extraValue: 15.5, extraDescription: "  " }),
+    ];
+    const p = computeDriverPayout(rides, "d1", "c1", rule);
+    expect(p.avulsosValor).toBe(45.5);
+    expect(p.avulsos.map((a) => a.description)).toEqual(["Gasolina", "Valor avulso"]);
+    expect(p.total).toBe(70 + 16 + 45.5);
+    expect(p.rideIds.sort()).toEqual(["r1", "r2"]);
+  });
+
   it("sem corridas em aberto: tudo zero e período nulo", () => {
     const p = computeDriverPayout([], "d1", "c1", rule);
     expect(p.total).toBe(0);

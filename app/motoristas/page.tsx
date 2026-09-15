@@ -43,7 +43,7 @@ import {
   ruleForClient,
   WEEKDAY_NAMES,
 } from "@/lib/drivers/pay";
-import { parseBrCurrency } from "@/lib/br/parse";
+import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
 import { todayBr } from "@/lib/br/date";
 import type {
   Account,
@@ -155,6 +155,9 @@ function Motoristas() {
   // Quantidade por taxa (rateId → texto); "single" quando a empresa não tem regra.
   const [rQty, setRQty] = useState<Record<string, string>>({});
   const [rNotes, setRNotes] = useState("");
+  // Valor avulso (não ligado a entregas) com a justificativa obrigatória.
+  const [rExtra, setRExtra] = useState("");
+  const [rExtraDesc, setRExtraDesc] = useState("");
   const [rideMsg, setRideMsg] = useState("");
   const rRule = rClient ? ruleForClient(settings, rClient) : null;
   const rRates: RideRate[] = rRule ? ratesOf(rRule) : [];
@@ -190,7 +193,13 @@ function Motoristas() {
     }
     if (!rDriver) return setRideMsg("Escolha o motorista.");
     if (!rClient) return setRideMsg("Escolha a empresa.");
-    if (diarias === 0 && corridas === 0) return setRideMsg("Informe as diárias e/ou as corridas.");
+    const extra = parseBrCurrency(rExtra) ?? 0;
+    const extraDesc = rExtraDesc.trim();
+    if (diarias === 0 && corridas === 0 && extra <= 0) {
+      return setRideMsg("Informe as diárias, as corridas e/ou um valor avulso.");
+    }
+    if (extra > 0 && !extraDesc) return setRideMsg("Descreva o motivo do valor avulso.");
+    if (extra <= 0 && extraDesc) return setRideMsg("Informe o valor avulso (ou apague a descrição).");
     setBusy(true);
     setRideMsg("");
     try {
@@ -203,6 +212,8 @@ function Motoristas() {
         diariasPorTipo: porTipo,
         corridas,
         corridasPorTaxa: porTaxa,
+        extraValue: extra > 0 ? extra : 0,
+        extraDescription: extra > 0 ? extraDesc : null,
         notes: rNotes.trim() || null,
         createdAt: Date.now(),
         createdBy: me,
@@ -217,11 +228,13 @@ function Motoristas() {
         .map((dt) => `${porTipo[dt.id]} ${dt.label}`)
         .join(" + ");
       setRideMsg(
-        `✅ ${driverName.get(rDriver)}: ${diarias} diária(s)${detDia ? ` (${detDia})` : ""} e ${corridas} corrida(s)${detalhe ? ` (${detalhe})` : ""} em ${clientName.get(rClient)} (${brDate(rDate)}).`,
+        `✅ ${driverName.get(rDriver)}: ${diarias} diária(s)${detDia ? ` (${detDia})` : ""} e ${corridas} corrida(s)${detalhe ? ` (${detalhe})` : ""}${extra > 0 ? ` + avulso ${brl(extra)} (${extraDesc})` : ""} em ${clientName.get(rClient)} (${brDate(rDate)}).`,
       );
       setRQty({});
       setRDia({});
       setRNotes("");
+      setRExtra("");
+      setRExtraDesc("");
       await load();
     } catch (err) {
       setRideMsg(`❌ Falha ao lançar: ${(err as Error).message}`);
@@ -341,11 +354,15 @@ function Motoristas() {
       const parts: string[] = [];
       if (payout.diarias > 0) parts.push(`${payout.diarias} diária(s)`);
       if (payout.corridas > 0) parts.push(`${payout.corridas} corrida(s)`);
+      if (payout.avulsosValor > 0) parts.push(`avulso ${brl(payout.avulsosValor)}`);
       const taxas = payout.porTaxa
         .map((t) => `${t.qty} × ${t.label} (${brl(t.value)}) = ${brl(t.total)}`)
         .join("; ");
       const dias = payout.porDiaria
         .map((t) => `${t.qty} × ${t.label} (${brl(t.value)}) = ${brl(t.total)}`)
+        .join("; ");
+      const avulsos = payout.avulsos
+        .map((a) => `${brDate(a.date)} ${a.description} = ${brl(a.value)}`)
         .join("; ");
       const billId = await createBill({
         ownerId,
@@ -361,7 +378,9 @@ function Motoristas() {
         accountId: payRule.accountId ?? settings.accountId ?? null,
         notes:
           `${empresa}: diárias: ${dias || "—"}; ` +
-          `corridas: ${taxas || "—"}. Gerado na tela Motoristas por ${me}.`,
+          `corridas: ${taxas || "—"}` +
+          `${payout.avulsosValor > 0 ? `; avulsos: ${avulsos} (total ${brl(payout.avulsosValor)})` : ""}. ` +
+          `Gerado na tela Motoristas por ${me}.`,
         payments: [],
         createdAt: Date.now(),
       });
@@ -640,6 +659,23 @@ function Motoristas() {
                 />
               </Field>
             )}
+            <Field label="Valor avulso (R$)">
+              <input
+                inputMode="decimal"
+                value={rExtra}
+                onChange={(e) => setRExtra(maskBrAmount(e.target.value))}
+                placeholder="0,00"
+                style={{ ...fieldStyle, width: 110, textAlign: "right" }}
+              />
+            </Field>
+            <Field label="Motivo do valor avulso">
+              <input
+                value={rExtraDesc}
+                onChange={(e) => setRExtraDesc(e.target.value)}
+                placeholder="ex.: ajuda combustível"
+                style={{ ...fieldStyle, minWidth: 180 }}
+              />
+            </Field>
             <Field label="Observações">
               <input
                 value={rNotes}
@@ -758,8 +794,13 @@ function Motoristas() {
                             </span>
                           )}
                         </td>
-                        <td style={{ textAlign: "right", fontWeight: 600 }}>
+                        <td style={{ textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>
                           {r ? brl(p.total) : <span className="muted">sem regra</span>}
+                          {p.avulsosValor > 0 && (
+                            <span className="muted" style={{ fontSize: "0.78rem", fontWeight: 400 }}>
+                              {" "}(inclui avulso {brl(p.avulsosValor)})
+                            </span>
+                          )}
                         </td>
                         <td className="muted" style={{ whiteSpace: "nowrap" }}>
                           {r ? describeDue(today, payDueDate(today, r)) : "—"}
@@ -807,6 +848,11 @@ function Motoristas() {
                 {t.qty} corrida(s) {t.label} × {brl(t.value)} = <strong>{brl(t.total)}</strong>
               </div>
             ))}
+            {payout.avulsos.map((a) => (
+              <div key={`a-${a.rideId}`}>
+                Avulso {brDate(a.date)} — {a.description} = <strong>{brl(a.value)}</strong>
+              </div>
+            ))}
             <div style={{ fontSize: "1.1rem", margin: "0.3rem 0" }}>
               Total: <strong style={{ color: "var(--err)" }}>{brl(payout.total)}</strong>
             </div>
@@ -848,6 +894,7 @@ function Motoristas() {
                   <th>Empresa</th>
                   <th style={{ textAlign: "right" }}>Diárias</th>
                   <th style={{ textAlign: "right" }}>Corridas</th>
+                  <th style={{ textAlign: "right" }}>Avulso</th>
                   <th>Obs.</th>
                   <th>Status</th>
                   <th></th>
@@ -869,6 +916,16 @@ function Motoristas() {
                       {r.corridas}
                       {rideBreakdown(r) && (
                         <span className="muted" style={{ fontSize: "0.78rem" }}> ({rideBreakdown(r)})</span>
+                      )}
+                    </td>
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      {(r.extraValue ?? 0) > 0 ? (
+                        <>
+                          {brl(r.extraValue!)}
+                          <span className="muted" style={{ fontSize: "0.78rem" }}> {r.extraDescription ?? ""}</span>
+                        </>
+                      ) : (
+                        <span className="muted">—</span>
                       )}
                     </td>
                     <td className="muted">{r.notes ?? ""}</td>

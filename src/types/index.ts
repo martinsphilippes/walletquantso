@@ -346,6 +346,9 @@ export interface RideEntry {
   corridasPorTaxa?: Record<string, number>;
   /** Diárias por tipo (id do tipo em `ClientPayRule.diarias` → quantidade). */
   diariasPorTipo?: Record<string, number>;
+  /** Valor avulso (não ligado a entregas), com a justificativa. */
+  extraValue?: number;
+  extraDescription?: string | null;
   notes: string | null;
   createdAt: number;
   createdBy: string;
