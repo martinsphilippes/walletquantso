@@ -835,12 +835,10 @@ function Motoristas() {
           <div className="panel">
             <h2>Configuração de pagamento</h2>
             <p className="muted" style={{ marginTop: 0, fontSize: "0.85rem" }}>
-              Uma regra por cliente: quando vence, quanto você paga por diária, as taxas de entrega (uma ou
-              várias — ex.: Normal R$ 8 e Longa R$ 12) e como o título é classificado. Ao salvar, a regra vira
-              uma linha na tabela e o formulário volta em branco para a próxima empresa.
+              Uma regra por cliente: vencimento, valor da diária, taxas de entrega (uma ou várias — ex.:
+              Normal R$ 8 e Longa R$ 12) e a classificação do título. Tudo é gravado junto ao salvar, a regra
+              vira uma linha na tabela e o formulário volta em branco.
             </p>
-
-            <h3 style={{ marginBottom: "0.25rem" }}>1. Cliente e vencimento</h3>
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
               <Field label="Cliente">
                 <select
@@ -888,60 +886,35 @@ function Motoristas() {
                   </select>
                 </Field>
               )}
-            </div>
-
-            <h3 style={{ marginBottom: "0.25rem", marginTop: "1rem" }}>2. Valores pagos ao motorista</h3>
-            <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
-              <Field label="Valor pago por diária (R$)">
+              <Field label="Diária (R$)">
                 <input
                   value={rule.diariaValue}
                   onChange={(e) => setRule({ ...rule, diariaValue: e.target.value })}
                   placeholder="ex.: 70"
-                  style={{ ...fieldStyle, width: 110, textAlign: "right" }}
+                  style={{ ...fieldStyle, width: 90, textAlign: "right" }}
                 />
               </Field>
-            </div>
-            <div
-              style={{
-                marginTop: "0.6rem",
-                border: "1px solid var(--border)",
-                borderRadius: 8,
-                padding: "0.6rem 0.75rem",
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
-                <strong style={{ fontSize: "0.9rem" }}>Taxas de entrega</strong>
-                <button
-                  type="button"
-                  style={{ background: "var(--border)", padding: "0.3rem 0.7rem" }}
-                  onClick={() => setRule({ ...rule, rates: [...rule.rates, { id: rid(), label: "", value: "" }] })}
-                >
-                  + Adicionar outra taxa
-                </button>
-              </div>
-              <p className="muted" style={{ fontSize: "0.8rem", margin: "0.25rem 0 0.4rem" }}>
-                Valor pago por entrega de cada tipo. Uma empresa pode ter várias (ex.: Normal R$ 8, Longa R$ 12).
-              </p>
+
               {rule.rates.map((rt, i) => (
-                <div key={rt.id} style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end", marginTop: "0.35rem", flexWrap: "wrap" }}>
-                  <Field label={`Taxa ${i + 1} — nome`}>
+                <div key={rt.id} style={{ display: "flex", gap: "0.35rem", alignItems: "flex-end" }}>
+                  <Field label={`Taxa de entrega ${rule.rates.length > 1 ? i + 1 : ""}`.trim()}>
                     <input
                       value={rt.label}
                       onChange={(e) =>
                         setRule({ ...rule, rates: rule.rates.map((x) => (x.id === rt.id ? { ...x, label: e.target.value } : x)) })
                       }
-                      placeholder={i === 0 ? "ex.: Normal" : i === 1 ? "ex.: Longa" : "ex.: Especial"}
-                      style={{ ...fieldStyle, width: 170 }}
+                      placeholder={i === 0 ? "ex.: Normal" : i === 1 ? "ex.: Longa" : "nome"}
+                      style={{ ...fieldStyle, width: 120 }}
                     />
                   </Field>
-                  <Field label="Valor (R$)">
+                  <Field label="R$">
                     <input
                       value={rt.value}
                       onChange={(e) =>
                         setRule({ ...rule, rates: rule.rates.map((x) => (x.id === rt.id ? { ...x, value: e.target.value } : x)) })
                       }
-                      placeholder="ex.: 8"
-                      style={{ ...fieldStyle, width: 100, textAlign: "right" }}
+                      placeholder="8"
+                      style={{ ...fieldStyle, width: 80, textAlign: "right" }}
                     />
                   </Field>
                   {rule.rates.length > 1 && (
@@ -949,17 +922,22 @@ function Motoristas() {
                       type="button"
                       title="Remover esta taxa"
                       onClick={() => setRule({ ...rule, rates: rule.rates.filter((x) => x.id !== rt.id) })}
-                      style={{ background: "var(--border)", padding: "0.35rem 0.6rem" }}
+                      style={{ background: "var(--border)", padding: "0.35rem 0.55rem" }}
                     >
                       ✕
                     </button>
                   )}
                 </div>
               ))}
-            </div>
+              <button
+                type="button"
+                title="Mais um tipo de taxa para este cliente"
+                style={{ background: "var(--border)", padding: "0.35rem 0.7rem" }}
+                onClick={() => setRule({ ...rule, rates: [...rule.rates, { id: rid(), label: "", value: "" }] })}
+              >
+                + taxa
+              </button>
 
-            <h3 style={{ marginBottom: "0.25rem", marginTop: "1rem" }}>3. Classificação do título desta empresa</h3>
-            <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
               <Field label="Conta do título">
                 <select value={rule.accountId} onChange={(e) => setRule({ ...rule, accountId: e.target.value })}>
                   <option value="">—</option>
@@ -991,7 +969,7 @@ function Motoristas() {
               </Field>
             </div>
 
-            <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", marginTop: "1rem", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", marginTop: "0.75rem", flexWrap: "wrap" }}>
               <button className="btn-primary" disabled={busy} onClick={() => void salvarRegra()}>
                 {rule.clientId && byClient[rule.clientId] ? "Atualizar regra" : "Salvar regra"}
               </button>
