@@ -1,11 +1,11 @@
 // WalletQuantso — pagamento de motoristas (lógica pura).
 //
-// Cada empresa (cliente) tem a própria regra de pagamento ao motorista:
-// valores por diária/corrida e vencimento (dia do mês ou dia da semana).
-// Soma as corridas em aberto de um motorista NAQUELA empresa e calcula o
-// vencimento pela regra dela.
+// Cada empresa (cliente) tem a própria regra de pagamento ao motorista: valor
+// por diária, uma ou mais TAXAS de corrida (ex.: "Normal" R$ 8, "Longa"
+// R$ 12) e o vencimento (dia do mês ou próximo dia da semana). Soma as
+// corridas em aberto de um motorista naquela empresa e calcula o vencimento.
 
-import type { ClientPayRule, DriverSettings, RideEntry } from "@/types";
+import type { ClientPayRule, DriverSettings, RideEntry, RideRate } from "@/types";
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
@@ -65,32 +65,7 @@ export function payDueDate(
   return nextPayDate(todayIso, rule.payDay ?? 5);
 }
 
-/**
- * Regra de pagamento de uma empresa: a específica dela ou, na falta, a
- * regra única da primeira versão da configuração (se existir e tiver valor).
- */
-export function ruleForClient(
-  settings: DriverSettings | null,
-  clientId: string,
-): ClientPayRule | null {
-  if (!settings) return null;
-  const inRules = settings.rules?.find((r) => r.clientIds?.includes(clientId));
-  if (inRules) return inRules;
-  const own = settings.byClient?.[clientId];
-  if (own) return own;
-  if ((settings.diariaValue ?? 0) > 0 || (settings.corridaValue ?? 0) > 0) {
-    return {
-      payMode: settings.payMode ?? "monthDay",
-      payDay: settings.payDay ?? 5,
-      payWeekday: settings.payWeekday ?? 1,
-      diariaValue: settings.diariaValue ?? 0,
-      corridaValue: settings.corridaValue ?? 0,
-    };
-  }
-  return null;
-}
-
-/** Rótulo humano do vencimento: "Hoje", "Amanhã" ou "terça-feira, 22/09". */
+/** Rótulo humano do vencimento: "Hoje", "Amanhã (16/09)" ou "terça-feira, 22/09". */
 export function describeDue(todayIso: string, dueIso: string): string {
   if (dueIso === todayIso) return "Hoje";
   const [y, m, d] = dueIso.split("-").map(Number);
@@ -103,6 +78,41 @@ export function describeDue(todayIso: string, dueIso: string): string {
   return `${WEEKDAY_NAMES[due.getUTCDay()]}, ${br}`;
 }
 
+/** Taxas de corrida da regra (o valor único antigo vira uma taxa "Corrida"). */
+export function ratesOf(rule: ClientPayRule): RideRate[] {
+  if (rule.rates && rule.rates.length > 0) return rule.rates;
+  if ((rule.corridaValue ?? 0) > 0) return [{ id: "default", label: "Corrida", value: rule.corridaValue! }];
+  return [];
+}
+
+/**
+ * Regra de pagamento de uma empresa: a específica dela; na falta, a de uma
+ * regra compartilhada antiga que a inclua; na falta, a regra única da
+ * primeira versão (se tiver valor). Sempre com `rates` preenchido.
+ */
+export function ruleForClient(
+  settings: DriverSettings | null,
+  clientId: string,
+): ClientPayRule | null {
+  if (!settings) return null;
+  const norm = (r: ClientPayRule): ClientPayRule => ({ ...r, rates: ratesOf(r) });
+  const own = settings.byClient?.[clientId];
+  if (own) return norm(own);
+  const shared = settings.rules?.find((r) => r.clientIds?.includes(clientId));
+  if (shared) return norm(shared);
+  if ((settings.diariaValue ?? 0) > 0 || (settings.corridaValue ?? 0) > 0) {
+    return norm({
+      payMode: settings.payMode ?? "monthDay",
+      payDay: settings.payDay ?? 5,
+      payWeekday: settings.payWeekday ?? 1,
+      diariaValue: settings.diariaValue ?? 0,
+      corridaValue: settings.corridaValue ?? 0,
+      rates: [],
+    });
+  }
+  return null;
+}
+
 export interface DriverPayout {
   diarias: number;
   corridas: number;
@@ -111,27 +121,46 @@ export interface DriverPayout {
   total: number;
   /** "05/09/2026 a 12/09/2026", data única ou null (sem corridas). */
   period: string | null;
+  /** Corridas por taxa (só as que tiveram quantidade). */
+  porTaxa: Array<{ id: string; label: string; value: number; qty: number; total: number }>;
   rideIds: string[];
 }
 
 /**
  * Soma as corridas ainda sem título (billId nulo) de um motorista numa
- * empresa, pelos valores da regra daquela empresa.
+ * empresa, pelos valores da regra daquela empresa (diária + cada taxa).
+ * Lançamentos antigos sem taxa contam na primeira taxa da regra.
  */
 export function computeDriverPayout(
   rides: RideEntry[],
   driverId: string,
   clientId: string,
-  rates: { diariaValue: number; corridaValue: number },
+  rule: ClientPayRule,
 ): DriverPayout {
   const open = rides.filter((r) => r.driverId === driverId && r.clientId === clientId && !r.billId);
+  const rates = ratesOf(rule);
+  const byRate = new Map<string, { id: string; label: string; value: number; qty: number }>();
+  for (const rt of rates) byRate.set(rt.id, { ...rt, qty: 0 });
+  const bump = (rateId: string, qty: number) => {
+    if (!qty) return;
+    let b = byRate.get(rateId);
+    if (!b) {
+      b = { id: rateId, label: "taxa removida", value: 0, qty: 0 };
+      byRate.set(rateId, b);
+    }
+    b.qty += qty;
+  };
+
   let diarias = 0;
-  let corridas = 0;
   const dias = new Set<string>();
   for (const r of open) {
     diarias += r.diarias || 0;
-    corridas += r.corridas || 0;
     if (r.date) dias.add(r.date);
+    if (r.corridasPorTaxa && Object.keys(r.corridasPorTaxa).length > 0) {
+      for (const [rateId, qty] of Object.entries(r.corridasPorTaxa)) bump(rateId, qty || 0);
+    } else if (r.corridas) {
+      bump(rates[0]?.id ?? "default", r.corridas);
+    }
   }
   const ordered = [...dias].sort();
   const br = (iso: string) => iso.split("-").reverse().join("/");
@@ -141,8 +170,13 @@ export function computeDriverPayout(
       : ordered.length === 1
         ? br(ordered[0])
         : `${br(ordered[0])} a ${br(ordered[ordered.length - 1])}`;
-  const diariasValor = round(diarias * (rates.diariaValue || 0));
-  const corridasValor = round(corridas * (rates.corridaValue || 0));
+
+  const porTaxa = [...byRate.values()]
+    .filter((b) => b.qty > 0)
+    .map((b) => ({ ...b, total: round(b.qty * b.value) }));
+  const corridas = porTaxa.reduce((s, b) => s + b.qty, 0);
+  const corridasValor = round(porTaxa.reduce((s, b) => s + b.total, 0));
+  const diariasValor = round(diarias * (rule.diariaValue || 0));
   return {
     diarias,
     corridas,
@@ -150,6 +184,7 @@ export function computeDriverPayout(
     corridasValor,
     total: round(diariasValor + corridasValor),
     period,
+    porTaxa,
     rideIds: open.map((r) => r.id!).filter(Boolean),
   };
 }

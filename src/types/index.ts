@@ -340,12 +340,23 @@ export interface RideEntry {
   /** ISO YYYY-MM-DD. */
   date: string;
   diarias: number;
+  /** Total de corridas (soma de todas as taxas). */
   corridas: number;
+  /** Corridas por tipo de taxa (rateId → quantidade). */
+  corridasPorTaxa?: Record<string, number>;
   notes: string | null;
   createdAt: number;
   createdBy: string;
   /** Título a pagar gerado com este lançamento (null = ainda em aberto). */
   billId: string | null;
+}
+
+/** Um tipo de corrida e quanto o negócio paga ao motorista por ela. */
+export interface RideRate {
+  id: string;
+  /** Ex.: "Normal", "Longa", "Até 5 km". */
+  label: string;
+  value: number;
 }
 
 /** Como e quanto o negócio paga ao motorista pelo trabalho numa empresa. */
@@ -356,10 +367,13 @@ export interface ClientPayRule {
   /** 0 = domingo … 6 = sábado. */
   payWeekday: number;
   diariaValue: number;
-  corridaValue: number;
+  /** Tipos de corrida da empresa, cada um com seu valor (pode ser só um). */
+  rates: RideRate[];
+  /** Formato anterior: valor único de corrida (lido só por compatibilidade). */
+  corridaValue?: number;
 }
 
-/** Regra de pagamento aplicada a um conjunto de empresas (clientes). */
+/** Formato anterior: regra compartilhada por vários clientes. */
 export interface PayRule extends ClientPayRule {
   id: string;
   clientIds: string[];
@@ -368,17 +382,15 @@ export interface PayRule extends ClientPayRule {
 /** Configuração da tela Motoristas (um doc por dono, id = ownerId). */
 export interface DriverSettings {
   ownerId: string;
-  /** Regras de pagamento, cada uma cobrindo um ou mais clientes. */
-  rules?: PayRule[];
-  /** Formato anterior (clientId → regra); lido só por compatibilidade. */
+  /** Regra de pagamento por empresa (clientId → regra). */
   byClient?: Record<string, ClientPayRule>;
   /** Classificação dos títulos gerados (vale para todas as empresas). */
   accountId: string | null;
   categoryId: string | null;
   costCenterId: string | null;
   updatedAt: number;
-  // Campos da primeira versão (regra única); hoje servem só como padrão
-  // para empresas ainda sem regra própria.
+  /** Formatos anteriores, lidos só por compatibilidade. */
+  rules?: PayRule[];
   payMode?: "monthDay" | "weekday";
   payDay?: number;
   payWeekday?: number;

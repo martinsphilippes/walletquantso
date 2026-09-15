@@ -3,10 +3,11 @@
 // WalletQuantso — Motoristas / Corridas.
 //
 // A tela dos motoristas (e das contas de acesso restrito): cadastrar
-// motoristas, lançar quantas diárias e corridas cada um fez em cada empresa
-// (cliente) e, com isso, gerar o título a pagar do motorista no dia de
-// pagamento configurado pelo dono. O dono ainda define os valores pagos por
-// diária/corrida, a classificação do título e quais e-mails têm acesso
+// motoristas, lançar quantas diárias e corridas (por tipo de taxa) cada um
+// fez em cada empresa (cliente) e, com isso, gerar o título a pagar do
+// motorista no vencimento configurado para aquela empresa. O dono define,
+// por empresa, o valor da diária, as taxas de corrida (uma ou várias) e o
+// vencimento; a classificação do título; e quais e-mails têm acesso
 // restrito a esta tela.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -33,7 +34,14 @@ import {
   saveDriverSettings,
   updateRide,
 } from "@/services/drivers";
-import { computeDriverPayout, describeDue, payDueDate, ruleForClient, WEEKDAY_NAMES } from "@/lib/drivers/pay";
+import {
+  computeDriverPayout,
+  describeDue,
+  payDueDate,
+  ratesOf,
+  ruleForClient,
+  WEEKDAY_NAMES,
+} from "@/lib/drivers/pay";
 import { parseBrCurrency } from "@/lib/br/parse";
 import { todayBr } from "@/lib/br/date";
 import type {
@@ -42,16 +50,22 @@ import type {
   Client,
   ClientPayRule,
   CostCenter,
-  PayRule,
   Driver,
   DriverSettings,
   Member,
   RideEntry,
+  RideRate,
 } from "@/types";
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const brDate = (iso: string) => (iso ? iso.split("-").reverse().join("/") : "—");
+const rid = () =>
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const fmtMoney = (n: number) =>
+  n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function MotoristasPage() {
   return (
@@ -122,20 +136,40 @@ function Motoristas() {
   const driverName = useMemo(() => new Map(drivers.map((d) => [d.id!, d.name])), [drivers]);
   const clientName = useMemo(() => new Map(clients.map((c) => [c.id!, c.name])), [clients]);
   const activeDrivers = drivers.filter((d) => d.active !== false);
+  const today = todayBr();
+
+  const describeRule = (r: ClientPayRule) =>
+    r.payMode === "weekday" ? `próxima ${WEEKDAY_NAMES[r.payWeekday] ?? "?"}` : `dia ${r.payDay} do mês`;
 
   // ── Lançar corridas ──────────────────────────────────────────────────────
   const [rDriver, setRDriver] = useState("");
   const [rClient, setRClient] = useState("");
-  const [rDate, setRDate] = useState(todayBr());
+  const [rDate, setRDate] = useState(today);
   const [rDiarias, setRDiarias] = useState("1");
-  const [rCorridas, setRCorridas] = useState("");
+  // Quantidade por taxa (rateId → texto); "single" quando a empresa não tem regra.
+  const [rQty, setRQty] = useState<Record<string, string>>({});
   const [rNotes, setRNotes] = useState("");
   const [rideMsg, setRideMsg] = useState("");
+  const rRule = rClient ? ruleForClient(settings, rClient) : null;
+  const rRates: RideRate[] = rRule ? ratesOf(rRule) : [];
+  useEffect(() => {
+    setRQty({});
+  }, [rClient]);
 
   async function lancar() {
     if (!ownerId) return;
     const diarias = Math.max(0, Math.floor(Number(rDiarias) || 0));
-    const corridas = Math.max(0, Math.floor(Number(rCorridas) || 0));
+    const porTaxa: Record<string, number> = {};
+    let corridas = 0;
+    if (rRates.length > 0) {
+      for (const rt of rRates) {
+        const q = Math.max(0, Math.floor(Number(rQty[rt.id]) || 0));
+        if (q > 0) porTaxa[rt.id] = q;
+        corridas += q;
+      }
+    } else {
+      corridas = Math.max(0, Math.floor(Number(rQty.single) || 0));
+    }
     if (!rDriver) return setRideMsg("Escolha o motorista.");
     if (!rClient) return setRideMsg("Escolha a empresa.");
     if (diarias === 0 && corridas === 0) return setRideMsg("Informe as diárias e/ou as corridas.");
@@ -149,15 +183,20 @@ function Motoristas() {
         date: rDate,
         diarias,
         corridas,
+        corridasPorTaxa: porTaxa,
         notes: rNotes.trim() || null,
         createdAt: Date.now(),
         createdBy: me,
         billId: null,
       });
+      const detalhe = rRates
+        .filter((rt) => porTaxa[rt.id])
+        .map((rt) => `${porTaxa[rt.id]} ${rt.label}`)
+        .join(" + ");
       setRideMsg(
-        `✅ ${driverName.get(rDriver)}: ${diarias} diária(s) e ${corridas} corrida(s) em ${clientName.get(rClient)} (${brDate(rDate)}).`,
+        `✅ ${driverName.get(rDriver)}: ${diarias} diária(s) e ${corridas} corrida(s)${detalhe ? ` (${detalhe})` : ""} em ${clientName.get(rClient)} (${brDate(rDate)}).`,
       );
-      setRCorridas("");
+      setRQty({});
       setRNotes("");
       await load();
     } catch (err) {
@@ -183,6 +222,17 @@ function Motoristas() {
     } finally {
       setBusy(false);
     }
+  }
+
+  /** "7 Normal + 3 Longa" para a lista de lançamentos. */
+  function rideBreakdown(r: RideEntry): string {
+    const rule = ruleForClient(settings, r.clientId);
+    const rates = rule ? ratesOf(rule) : [];
+    const pt = r.corridasPorTaxa ?? {};
+    const parts = Object.entries(pt)
+      .filter(([, q]) => q > 0)
+      .map(([id, q]) => `${q} ${rates.find((x) => x.id === id)?.label ?? "?"}`);
+    return parts.length > 1 || (parts.length === 1 && rates.length > 1) ? parts.join(" + ") : "";
   }
 
   // ── Motoristas ───────────────────────────────────────────────────────────
@@ -246,7 +296,7 @@ function Motoristas() {
       return;
     }
     setPayTarget({ driverId, clientId });
-    setPayDue(payDueDate(todayBr(), rule));
+    setPayDue(payDueDate(today, rule));
     setPayMsg("");
   }
 
@@ -262,6 +312,9 @@ function Motoristas() {
       const parts: string[] = [];
       if (payout.diarias > 0) parts.push(`${payout.diarias} diária(s)`);
       if (payout.corridas > 0) parts.push(`${payout.corridas} corrida(s)`);
+      const taxas = payout.porTaxa
+        .map((t) => `${t.qty} × ${t.label} (${brl(t.value)}) = ${brl(t.total)}`)
+        .join("; ");
       const billId = await createBill({
         ownerId,
         kind: "payable",
@@ -276,8 +329,7 @@ function Motoristas() {
         accountId: settings.accountId ?? null,
         notes:
           `${empresa}: ${payout.diarias} diária(s) × ${brl(payRule.diariaValue)} = ${brl(payout.diariasValor)}; ` +
-          `${payout.corridas} corrida(s) × ${brl(payRule.corridaValue)} = ${brl(payout.corridasValor)}. ` +
-          `Gerado na tela Motoristas por ${me}.`,
+          `corridas: ${taxas || "—"}. Gerado na tela Motoristas por ${me}.`,
         payments: [],
         createdAt: Date.now(),
       });
@@ -292,7 +344,7 @@ function Motoristas() {
     }
   }
 
-  // ── Configuração (só o dono): classificação geral + regra por empresa ────
+  // ── Configuração (só o dono): regra por cliente + classificação ──────────
   const [cfg, setCfg] = useState({ accountId: "", categoryId: "", costCenterId: "" });
   const [cfgMsg, setCfgMsg] = useState("");
   useEffect(() => {
@@ -304,28 +356,32 @@ function Motoristas() {
     });
   }, [settings]);
 
-  const emptyRule = {
-    id: "",
+  interface RateDraft {
+    id: string;
+    label: string;
+    value: string;
+  }
+  const emptyRule = () => ({
+    clientId: "",
     payMode: "weekday" as "monthDay" | "weekday",
     payWeekday: "2",
     payDay: "5",
     diariaValue: "",
-    corridaValue: "",
-    clientIds: [] as string[],
-  };
+    rates: [{ id: rid(), label: "Corrida", value: "" }] as RateDraft[],
+  });
   const [rule, setRule] = useState(emptyRule);
-  const [ruleClientPick, setRuleClientPick] = useState("");
-  const savedRules: PayRule[] = settings?.rules ?? [];
+  const byClient = settings?.byClient ?? {};
 
-  function editarRegra(r: PayRule) {
+  function editarRegra(clientId: string) {
+    const r = ruleForClient(settings, clientId);
+    if (!r) return;
     setRule({
-      id: r.id,
+      clientId,
       payMode: r.payMode,
       payWeekday: String(r.payWeekday),
       payDay: String(r.payDay),
-      diariaValue: r.diariaValue ? String(r.diariaValue).replace(".", ",") : "",
-      corridaValue: r.corridaValue ? String(r.corridaValue).replace(".", ",") : "",
-      clientIds: [...r.clientIds],
+      diariaValue: r.diariaValue ? fmtMoney(r.diariaValue) : "",
+      rates: ratesOf(r).map((x) => ({ id: x.id, label: x.label, value: fmtMoney(x.value) })),
     });
     setCfgMsg("");
   }
@@ -337,7 +393,7 @@ function Motoristas() {
       accountId: cfg.accountId || null,
       categoryId: cfg.categoryId || null,
       costCenterId: cfg.costCenterId || null,
-      rules: savedRules,
+      byClient,
       updatedAt: Date.now(),
       ...patch,
     });
@@ -358,40 +414,31 @@ function Motoristas() {
   }
 
   async function salvarRegra() {
-    if (rule.clientIds.length === 0) return setCfgMsg("Adicione pelo menos um cliente à regra.");
+    if (!rule.clientId) return setCfgMsg("Escolha o cliente da regra.");
     const payDay = Math.floor(Number(rule.payDay));
     if (rule.payMode === "monthDay" && (!Number.isFinite(payDay) || payDay < 1 || payDay > 31)) {
       return setCfgMsg("Dia do mês entre 1 e 31.");
     }
     const diariaValue = parseBrCurrency(rule.diariaValue) ?? 0;
-    const corridaValue = parseBrCurrency(rule.corridaValue) ?? 0;
-    if (diariaValue <= 0 && corridaValue <= 0) return setCfgMsg("Informe o valor da diária e/ou da corrida.");
-    const id =
-      rule.id ||
-      (typeof crypto !== "undefined" && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    const saved: PayRule = {
-      id,
+    const rates: RideRate[] = rule.rates
+      .map((x) => ({ id: x.id, label: x.label.trim() || "Corrida", value: parseBrCurrency(x.value) ?? 0 }))
+      .filter((x) => x.value > 0);
+    if (diariaValue <= 0 && rates.length === 0) {
+      return setCfgMsg("Informe o valor da diária e/ou pelo menos uma taxa de corrida.");
+    }
+    const saved: ClientPayRule = {
       payMode: rule.payMode,
       payDay: Number.isFinite(payDay) && payDay >= 1 ? Math.min(31, payDay) : 5,
       payWeekday: Math.floor(Number(rule.payWeekday)) || 0,
       diariaValue,
-      corridaValue,
-      clientIds: rule.clientIds,
+      rates,
     };
-    // Um cliente só pode estar numa regra: sai das outras ao entrar nesta.
-    const next = savedRules
-      .filter((r) => r.id !== id)
-      .map((r) => ({ ...r, clientIds: r.clientIds.filter((c) => !saved.clientIds.includes(c)) }))
-      .filter((r) => r.clientIds.length > 0);
-    next.push(saved);
     setBusy(true);
     setCfgMsg("");
     try {
-      await persistSettings({ rules: next });
-      setCfgMsg(`✅ Regra salva para ${saved.clientIds.map((c) => clientName.get(c) ?? "?").join(", ")}.`);
-      setRule(emptyRule);
+      await persistSettings({ byClient: { ...byClient, [rule.clientId]: saved } });
+      setCfgMsg(`✅ Regra de ${clientName.get(rule.clientId) ?? "?"} salva.`);
+      setRule(emptyRule());
       await load();
     } catch (err) {
       setCfgMsg(`❌ Falha ao salvar: ${(err as Error).message}`);
@@ -400,12 +447,14 @@ function Motoristas() {
     }
   }
 
-  async function removerRegra(r: PayRule) {
-    if (!confirm(`Remover a regra de ${r.clientIds.map((c) => clientName.get(c) ?? "?").join(", ")}?`)) return;
+  async function removerRegra(clientId: string) {
+    if (!confirm(`Remover a regra de pagamento de ${clientName.get(clientId) ?? "?"}?`)) return;
+    const next = { ...byClient };
+    delete next[clientId];
     setBusy(true);
     try {
-      await persistSettings({ rules: savedRules.filter((x) => x.id !== r.id) });
-      if (rule.id === r.id) setRule(emptyRule);
+      await persistSettings({ byClient: next });
+      if (rule.clientId === clientId) setRule(emptyRule());
       await load();
     } catch (err) {
       setCfgMsg(`❌ Falha ao remover: ${(err as Error).message}`);
@@ -414,9 +463,12 @@ function Motoristas() {
     }
   }
 
-  const describeRule = (r: ClientPayRule) =>
-    (r.payMode === "weekday" ? `próxima ${WEEKDAY_NAMES[r.payWeekday] ?? "?"}` : `dia ${r.payDay} do mês`) +
-    ` · diária ${brl(r.diariaValue)} · corrida ${brl(r.corridaValue)}`;
+  // Clientes que aparecem na tabela de regras: os com regra própria e os que
+  // ainda herdam um formato antigo (mostrados como "(padrão)").
+  const ruledClients = clients
+    .map((c) => ({ c, r: ruleForClient(settings, c.id!), own: !!byClient[c.id!] }))
+    .filter((x) => x.r)
+    .sort((a, b) => a.c.name.localeCompare(b.c.name, "pt-BR"));
 
   // ── Acessos restritos (só o dono) ────────────────────────────────────────
   const [newEmail, setNewEmail] = useState("");
@@ -459,6 +511,7 @@ function Motoristas() {
   if (!loaded) return <p className="muted">Carregando…</p>;
 
   const openRides = rides.filter((r) => !r.billId);
+  const semRegra = [...new Set(openRides.map((r) => r.clientId))].filter((cid) => !ruleForClient(settings, cid));
 
   return (
     <>
@@ -506,16 +559,31 @@ function Motoristas() {
                 style={{ ...fieldStyle, width: 80 }}
               />
             </Field>
-            <Field label="Corridas">
-              <input
-                type="number"
-                min={0}
-                value={rCorridas}
-                onChange={(e) => setRCorridas(e.target.value)}
-                placeholder="0"
-                style={{ ...fieldStyle, width: 90 }}
-              />
-            </Field>
+            {rRates.length > 0 ? (
+              rRates.map((rt) => (
+                <Field key={rt.id} label={`Corridas ${rt.label} (${brl(rt.value)})`}>
+                  <input
+                    type="number"
+                    min={0}
+                    value={rQty[rt.id] ?? ""}
+                    onChange={(e) => setRQty({ ...rQty, [rt.id]: e.target.value })}
+                    placeholder="0"
+                    style={{ ...fieldStyle, width: 90 }}
+                  />
+                </Field>
+              ))
+            ) : (
+              <Field label="Corridas">
+                <input
+                  type="number"
+                  min={0}
+                  value={rQty.single ?? ""}
+                  onChange={(e) => setRQty({ ...rQty, single: e.target.value })}
+                  placeholder="0"
+                  style={{ ...fieldStyle, width: 90 }}
+                />
+              </Field>
+            )}
             <Field label="Observações">
               <input
                 value={rNotes}
@@ -527,6 +595,12 @@ function Motoristas() {
               Lançar
             </button>
           </div>
+        )}
+        {rClient && !rRule && (
+          <p className="muted" style={{ fontSize: "0.82rem", marginBottom: 0 }}>
+            Esta empresa ainda não tem regra de pagamento — as corridas ficam registradas, mas o título só
+            pode ser gerado depois que {restricted ? "o dono" : "você"} configurar a regra.
+          </p>
         )}
         {rideMsg && (
           <p style={{ marginBottom: 0 }}>
@@ -554,20 +628,14 @@ function Motoristas() {
             <span className={`badge ${driverMsg.startsWith("✅") ? "ok" : "warn"}`}>{driverMsg}</span>
           </p>
         )}
-        {(() => {
-          const semRegra = [...new Set(rides.filter((r) => !r.billId).map((r) => r.clientId))].filter(
-            (cid) => !ruleForClient(settings, cid),
-          );
-          if (semRegra.length === 0) return null;
-          return (
-            <p className="badge warn" style={{ display: "inline-block" }}>
-              ⚠ Sem regra de pagamento: {semRegra.map((cid) => clientName.get(cid) ?? "?").join(", ")}.{" "}
-              {restricted
-                ? "O dono precisa configurar a regra dessa(s) empresa(s) para gerar o título."
-                : "Configure abaixo, em \"Regras de pagamento\", para gerar os títulos."}
-            </p>
-          );
-        })()}
+        {semRegra.length > 0 && (
+          <p className="badge warn" style={{ display: "inline-block" }}>
+            ⚠ Sem regra de pagamento: {semRegra.map((cid) => clientName.get(cid) ?? "?").join(", ")}.{" "}
+            {restricted
+              ? "O dono precisa configurar a regra dessa(s) empresa(s) para gerar o título."
+              : "Configure abaixo, em \"Regras de pagamento por cliente\", para gerar os títulos."}
+          </p>
+        )}
         {drivers.length === 0 ? (
           <p className="muted">Nenhum motorista cadastrado.</p>
         ) : (
@@ -587,7 +655,7 @@ function Motoristas() {
               <tbody>
                 {drivers.map((d) => {
                   const clientIds = [
-                    ...new Set(rides.filter((r) => r.driverId === d.id && !r.billId).map((r) => r.clientId)),
+                    ...new Set(openRides.filter((r) => r.driverId === d.id).map((r) => r.clientId)),
                   ].sort((a, b) => (clientName.get(a) ?? "").localeCompare(clientName.get(b) ?? "", "pt-BR"));
                   if (clientIds.length === 0) {
                     return (
@@ -608,18 +676,30 @@ function Motoristas() {
                   }
                   return clientIds.map((cid, i) => {
                     const r = ruleForClient(settings, cid);
-                    const p = computeDriverPayout(rides, d.id!, cid, r ?? { diariaValue: 0, corridaValue: 0 });
+                    const p = computeDriverPayout(
+                      rides,
+                      d.id!,
+                      cid,
+                      r ?? { payMode: "monthDay", payDay: 5, payWeekday: 1, diariaValue: 0, rates: [] },
+                    );
                     return (
                       <tr key={`${d.id}-${cid}`}>
                         <td>{i === 0 ? d.name : ""}</td>
                         <td>{clientName.get(cid) ?? "—"}</td>
                         <td style={{ textAlign: "right" }}>{p.diarias}</td>
-                        <td style={{ textAlign: "right" }}>{p.corridas}</td>
+                        <td style={{ textAlign: "right" }}>
+                          {p.corridas}
+                          {p.porTaxa.length > 1 && (
+                            <span className="muted" style={{ fontSize: "0.78rem" }}>
+                              {" "}({p.porTaxa.map((t) => `${t.qty} ${t.label}`).join(" + ")})
+                            </span>
+                          )}
+                        </td>
                         <td style={{ textAlign: "right", fontWeight: 600 }}>
                           {r ? brl(p.total) : <span className="muted">sem regra</span>}
                         </td>
                         <td className="muted" style={{ whiteSpace: "nowrap" }}>
-                          {r ? describeDue(todayBr(), payDueDate(todayBr(), r)) : "—"}
+                          {r ? describeDue(today, payDueDate(today, r)) : "—"}
                         </td>
                         <td style={{ whiteSpace: "nowrap" }}>
                           <button
@@ -652,18 +732,21 @@ function Motoristas() {
               Título a pagar — {driverName.get(payTarget.driverId)} · {clientName.get(payTarget.clientId)}
             </strong>
             <div className="muted" style={{ fontSize: "0.85rem", margin: "0.3rem 0" }}>
-              {payout.period ? `Período ${payout.period}. ` : ""}Regra da empresa: {describeRule(payRule)}.
+              {payout.period ? `Período ${payout.period}. ` : ""}Vencimento da empresa: {describeRule(payRule)}.
             </div>
             <div>
               {payout.diarias} diária(s) × {brl(payRule.diariaValue)} = <strong>{brl(payout.diariasValor)}</strong>
-              {" · "}
-              {payout.corridas} corrida(s) × {brl(payRule.corridaValue)} = <strong>{brl(payout.corridasValor)}</strong>
             </div>
+            {payout.porTaxa.map((t) => (
+              <div key={t.id}>
+                {t.qty} corrida(s) {t.label} × {brl(t.value)} = <strong>{brl(t.total)}</strong>
+              </div>
+            ))}
             <div style={{ fontSize: "1.1rem", margin: "0.3rem 0" }}>
               Total: <strong style={{ color: "var(--err)" }}>{brl(payout.total)}</strong>
             </div>
             <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap" }}>
-              <Field label={`Vencimento: ${describeDue(todayBr(), payDue)}`}>
+              <Field label={`Vencimento: ${describeDue(today, payDue)}`}>
                 <DateParts value={payDue} onChange={setPayDue} />
               </Field>
               <button className="btn-primary" disabled={busy} onClick={() => void gerarTitulo()}>
@@ -712,7 +795,12 @@ function Motoristas() {
                     <td>{driverName.get(r.driverId) ?? "—"}</td>
                     <td>{clientName.get(r.clientId) ?? "—"}</td>
                     <td style={{ textAlign: "right" }}>{r.diarias}</td>
-                    <td style={{ textAlign: "right" }}>{r.corridas}</td>
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      {r.corridas}
+                      {rideBreakdown(r) && (
+                        <span className="muted" style={{ fontSize: "0.78rem" }}> ({rideBreakdown(r)})</span>
+                      )}
+                    </td>
                     <td className="muted">{r.notes ?? ""}</td>
                     <td>
                       {r.billId ? (
@@ -748,12 +836,29 @@ function Motoristas() {
         <>
           <div className="panel">
             <h2>Configuração de pagamento</h2>
-            <h3 style={{ marginBottom: "0.25rem" }}>Regras de pagamento</h3>
+            <h3 style={{ marginBottom: "0.25rem" }}>Regras de pagamento por cliente</h3>
             <p className="muted" style={{ marginTop: 0, fontSize: "0.85rem" }}>
-              Cada regra diz quando vence e quanto você paga por diária e por corrida — e vale para os
-              clientes que você adicionar nela (um ou vários). Gerado no próprio dia da semana, vence hoje.
+              Para cada cliente: quando vence, quanto você paga por diária e as taxas de corrida (uma ou
+              várias — ex.: Normal R$ 8 e Longa R$ 12). Gerado no próprio dia da semana, vence hoje.
             </p>
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+              <Field label="Cliente">
+                <select
+                  value={rule.clientId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    if (id && byClient[id]) editarRegra(id);
+                    else setRule({ ...rule, clientId: id });
+                  }}
+                >
+                  <option value="">Escolha…</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}{byClient[c.id!] ? " ✓" : ""}
+                    </option>
+                  ))}
+                </select>
+              </Field>
               <Field label="Vencimento">
                 <select
                   value={rule.payMode}
@@ -783,29 +888,6 @@ function Motoristas() {
                   </select>
                 </Field>
               )}
-              <Field label="Cliente">
-                <span style={{ display: "inline-flex", gap: "0.4rem" }}>
-                  <select value={ruleClientPick} onChange={(e) => setRuleClientPick(e.target.value)}>
-                    <option value="">Escolha…</option>
-                    {clients
-                      .filter((c) => !rule.clientIds.includes(c.id!))
-                      .map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                  </select>
-                  <button
-                    type="button"
-                    disabled={!ruleClientPick}
-                    onClick={() => {
-                      if (!ruleClientPick) return;
-                      setRule({ ...rule, clientIds: [...rule.clientIds, ruleClientPick] });
-                      setRuleClientPick("");
-                    }}
-                  >
-                    + Adicionar
-                  </button>
-                </span>
-              </Field>
               <Field label="Valor pago por diária (R$)">
                 <input
                   value={rule.diariaValue}
@@ -814,79 +896,98 @@ function Motoristas() {
                   style={{ ...fieldStyle, width: 110, textAlign: "right" }}
                 />
               </Field>
-              <Field label="Valor pago por corrida (R$)">
-                <input
-                  value={rule.corridaValue}
-                  onChange={(e) => setRule({ ...rule, corridaValue: e.target.value })}
-                  placeholder="ex.: 8"
-                  style={{ ...fieldStyle, width: 110, textAlign: "right" }}
-                />
-              </Field>
-              <button className="btn-primary" disabled={busy} onClick={() => void salvarRegra()}>
-                {rule.id ? "Atualizar regra" : "Salvar regra"}
-              </button>
-              {rule.id && (
-                <button style={{ background: "var(--border)" }} onClick={() => setRule(emptyRule)}>
-                  Cancelar edição
-                </button>
-              )}
             </div>
-            {rule.clientIds.length > 0 && (
-              <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "0.5rem" }}>
-                <span className="muted" style={{ fontSize: "0.82rem" }}>Clientes desta regra:</span>
-                {rule.clientIds.map((cid) => (
-                  <span
-                    key={cid}
-                    className="badge"
-                    style={{ background: "var(--border)", color: "var(--text)", display: "inline-flex", gap: 6 }}
-                  >
-                    {clientName.get(cid) ?? "?"}
+
+            <div style={{ marginTop: "0.6rem" }}>
+              <span className="muted" style={{ fontSize: "0.8rem" }}>Taxas de corrida (valor pago por corrida de cada tipo)</span>
+              {rule.rates.map((rt, i) => (
+                <div key={rt.id} style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "0.35rem", flexWrap: "wrap" }}>
+                  <input
+                    value={rt.label}
+                    onChange={(e) =>
+                      setRule({ ...rule, rates: rule.rates.map((x) => (x.id === rt.id ? { ...x, label: e.target.value } : x)) })
+                    }
+                    placeholder={i === 0 ? "Normal" : i === 1 ? "Longa" : `Taxa ${i + 1}`}
+                    style={{ ...fieldStyle, width: 160 }}
+                  />
+                  <input
+                    value={rt.value}
+                    onChange={(e) =>
+                      setRule({ ...rule, rates: rule.rates.map((x) => (x.id === rt.id ? { ...x, value: e.target.value } : x)) })
+                    }
+                    placeholder="R$"
+                    style={{ ...fieldStyle, width: 100, textAlign: "right" }}
+                  />
+                  {rule.rates.length > 1 && (
                     <button
                       type="button"
-                      title="Tirar da regra"
-                      onClick={() => setRule({ ...rule, clientIds: rule.clientIds.filter((c) => c !== cid) })}
-                      style={{ background: "transparent", border: "none", color: "var(--err)", padding: 0, cursor: "pointer" }}
+                      title="Remover esta taxa"
+                      onClick={() => setRule({ ...rule, rates: rule.rates.filter((x) => x.id !== rt.id) })}
+                      style={{ background: "var(--border)", padding: "0.3rem 0.6rem" }}
                     >
                       ✕
                     </button>
-                  </span>
-                ))}
+                  )}
+                </div>
+              ))}
+              <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", marginTop: "0.5rem", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  style={{ background: "var(--border)" }}
+                  onClick={() => setRule({ ...rule, rates: [...rule.rates, { id: rid(), label: "", value: "" }] })}
+                >
+                  + Adicionar taxa
+                </button>
+                <button className="btn-primary" disabled={busy} onClick={() => void salvarRegra()}>
+                  {rule.clientId && byClient[rule.clientId] ? "Atualizar regra" : "Salvar regra"}
+                </button>
+                {rule.clientId && (
+                  <button style={{ background: "var(--border)" }} onClick={() => setRule(emptyRule())}>
+                    Limpar
+                  </button>
+                )}
               </div>
-            )}
-            {savedRules.length > 0 && (
+            </div>
+
+            {ruledClients.length > 0 && (
               <div style={{ overflowX: "auto", marginTop: "0.75rem" }}>
                 <table>
                   <thead>
                     <tr>
-                      <th>Clientes</th>
+                      <th>Cliente</th>
                       <th>Vencimento</th>
                       <th style={{ textAlign: "right" }}>Diária</th>
-                      <th style={{ textAlign: "right" }}>Corrida</th>
+                      <th>Taxas de corrida</th>
                       <th></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {savedRules.map((r) => (
-                      <tr key={r.id}>
-                        <td>{r.clientIds.map((c) => clientName.get(c) ?? "(excluído)").join(", ")}</td>
-                        <td>{r.payMode === "weekday" ? `próxima ${WEEKDAY_NAMES[r.payWeekday] ?? "?"}` : `dia ${r.payDay} do mês`}</td>
-                        <td style={{ textAlign: "right" }}>{brl(r.diariaValue)}</td>
-                        <td style={{ textAlign: "right" }}>{brl(r.corridaValue)}</td>
+                    {ruledClients.map(({ c, r, own }) => (
+                      <tr key={c.id}>
+                        <td>
+                          {c.name}
+                          {!own && <span className="muted" style={{ fontSize: "0.78rem" }}> (padrão antigo)</span>}
+                        </td>
+                        <td>{describeRule(r!)}</td>
+                        <td style={{ textAlign: "right" }}>{brl(r!.diariaValue)}</td>
+                        <td>{ratesOf(r!).map((t) => `${t.label} ${brl(t.value)}`).join(" · ") || "—"}</td>
                         <td style={{ whiteSpace: "nowrap" }}>
                           <button
                             style={{ background: "var(--border)", padding: "0.3rem 0.6rem" }}
                             disabled={busy}
-                            onClick={() => editarRegra(r)}
+                            onClick={() => editarRegra(c.id!)}
                           >
                             Editar
                           </button>{" "}
-                          <button
-                            style={{ background: "var(--err)", padding: "0.3rem 0.6rem" }}
-                            disabled={busy}
-                            onClick={() => void removerRegra(r)}
-                          >
-                            Remover
-                          </button>
+                          {own && (
+                            <button
+                              style={{ background: "var(--err)", padding: "0.3rem 0.6rem" }}
+                              disabled={busy}
+                              onClick={() => void removerRegra(c.id!)}
+                            >
+                              Remover
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
