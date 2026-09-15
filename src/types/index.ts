@@ -344,6 +344,8 @@ export interface RideEntry {
   corridas: number;
   /** Corridas por tipo de taxa (rateId → quantidade). */
   corridasPorTaxa?: Record<string, number>;
+  /** Diárias por tipo (id do tipo em `ClientPayRule.diarias` → quantidade). */
+  diariasPorTipo?: Record<string, number>;
   notes: string | null;
   createdAt: number;
   createdBy: string;
@@ -366,7 +368,10 @@ export interface ClientPayRule {
   payDay: number;
   /** 0 = domingo … 6 = sábado. */
   payWeekday: number;
+  /** Formato anterior: valor único de diária (lido só por compatibilidade). */
   diariaValue: number;
+  /** Tipos de diária da empresa (ex.: Manhã, Tarde, Noite), cada um com seu valor. */
+  diarias?: RideRate[];
   /** Tipos de corrida da empresa, cada um com seu valor (pode ser só um). */
   rates: RideRate[];
   /** Classificação do título gerado para esta empresa. */

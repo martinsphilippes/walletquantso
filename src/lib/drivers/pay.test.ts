@@ -7,6 +7,7 @@ import {
   describeDue,
   ruleForClient,
   ratesOf,
+  diariasOf,
 } from "./pay";
 import type { ClientPayRule, DriverSettings, RideEntry } from "@/types";
 
@@ -112,6 +113,33 @@ describe("computeDriverPayout", () => {
     expect(p.corridas).toBe(2);
     expect(p.corridasValor).toBe(0);
     expect(p.porTaxa[0].label).toBe("taxa removida");
+  });
+
+  it("diárias por tipo (manhã/tarde/noite) com valores diferentes", () => {
+    const r: ClientPayRule = {
+      ...rule,
+      diariaValue: 0,
+      diarias: [
+        { id: "m", label: "Manhã", value: 50 },
+        { id: "t", label: "Tarde", value: 60 },
+        { id: "no", label: "Noite", value: 80 },
+      ],
+    };
+    const rides = [
+      ride({ id: "r1", diarias: 2, diariasPorTipo: { m: 1, t: 1 } }),
+      ride({ id: "r2", diarias: 1, diariasPorTipo: { no: 1 } }),
+    ];
+    const p = computeDriverPayout(rides, "d1", "c1", r);
+    expect(p.diarias).toBe(3);
+    expect(p.diariasValor).toBe(190);
+    expect(p.porDiaria.map((d) => `${d.label}:${d.qty}=${d.total}`)).toEqual(["Manhã:1=50", "Tarde:1=60", "Noite:1=80"]);
+  });
+
+  it("lançamento antigo sem tipo de diária conta no primeiro tipo; valor único vira 'Diária'", () => {
+    const p = computeDriverPayout([ride({ id: "r1", diarias: 2 })], "d1", "c1", rule);
+    expect(p.diariasValor).toBe(140);
+    expect(p.porDiaria).toEqual([{ id: "default", label: "Diária", value: 70, qty: 2, total: 140 }]);
+    expect(diariasOf(rule)).toEqual([{ id: "default", label: "Diária", value: 70 }]);
   });
 
   it("sem corridas em aberto: tudo zero e período nulo", () => {

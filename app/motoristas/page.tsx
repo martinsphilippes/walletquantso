@@ -37,6 +37,7 @@ import {
 import {
   computeDriverPayout,
   describeDue,
+  diariasOf,
   payDueDate,
   ratesOf,
   ruleForClient,
@@ -149,20 +150,33 @@ function Motoristas() {
   const [rDriver, setRDriver] = useState("");
   const [rClient, setRClient] = useState("");
   const [rDate, setRDate] = useState(today);
-  const [rDiarias, setRDiarias] = useState("1");
+  // Quantidade por tipo de diária (id → texto); "single" quando a empresa não tem regra.
+  const [rDia, setRDia] = useState<Record<string, string>>({});
   // Quantidade por taxa (rateId → texto); "single" quando a empresa não tem regra.
   const [rQty, setRQty] = useState<Record<string, string>>({});
   const [rNotes, setRNotes] = useState("");
   const [rideMsg, setRideMsg] = useState("");
   const rRule = rClient ? ruleForClient(settings, rClient) : null;
   const rRates: RideRate[] = rRule ? ratesOf(rRule) : [];
+  const rDiarias: RideRate[] = rRule ? diariasOf(rRule) : [];
   useEffect(() => {
     setRQty({});
+    setRDia({});
   }, [rClient]);
 
   async function lancar() {
     if (!ownerId) return;
-    const diarias = Math.max(0, Math.floor(Number(rDiarias) || 0));
+    const porTipo: Record<string, number> = {};
+    let diarias = 0;
+    if (rDiarias.length > 0) {
+      for (const dt of rDiarias) {
+        const q = Math.max(0, Math.floor(Number(rDia[dt.id]) || 0));
+        if (q > 0) porTipo[dt.id] = q;
+        diarias += q;
+      }
+    } else {
+      diarias = Math.max(0, Math.floor(Number(rDia.single) || 0));
+    }
     const porTaxa: Record<string, number> = {};
     let corridas = 0;
     if (rRates.length > 0) {
@@ -186,6 +200,7 @@ function Motoristas() {
         clientId: rClient,
         date: rDate,
         diarias,
+        diariasPorTipo: porTipo,
         corridas,
         corridasPorTaxa: porTaxa,
         notes: rNotes.trim() || null,
@@ -197,10 +212,15 @@ function Motoristas() {
         .filter((rt) => porTaxa[rt.id])
         .map((rt) => `${porTaxa[rt.id]} ${rt.label}`)
         .join(" + ");
+      const detDia = rDiarias
+        .filter((dt) => porTipo[dt.id])
+        .map((dt) => `${porTipo[dt.id]} ${dt.label}`)
+        .join(" + ");
       setRideMsg(
-        `✅ ${driverName.get(rDriver)}: ${diarias} diária(s) e ${corridas} corrida(s)${detalhe ? ` (${detalhe})` : ""} em ${clientName.get(rClient)} (${brDate(rDate)}).`,
+        `✅ ${driverName.get(rDriver)}: ${diarias} diária(s)${detDia ? ` (${detDia})` : ""} e ${corridas} corrida(s)${detalhe ? ` (${detalhe})` : ""} em ${clientName.get(rClient)} (${brDate(rDate)}).`,
       );
       setRQty({});
+      setRDia({});
       setRNotes("");
       await load();
     } catch (err) {
@@ -229,14 +249,19 @@ function Motoristas() {
   }
 
   /** "7 Normal + 3 Longa" para a lista de lançamentos. */
+  function breakdown(kinds: RideRate[], qtys: Record<string, number> | undefined): string {
+    const parts = Object.entries(qtys ?? {})
+      .filter(([, q]) => q > 0)
+      .map(([id, q]) => `${q} ${kinds.find((x) => x.id === id)?.label ?? "?"}`);
+    return parts.length > 1 || (parts.length === 1 && kinds.length > 1) ? parts.join(" + ") : "";
+  }
   function rideBreakdown(r: RideEntry): string {
     const rule = ruleForClient(settings, r.clientId);
-    const rates = rule ? ratesOf(rule) : [];
-    const pt = r.corridasPorTaxa ?? {};
-    const parts = Object.entries(pt)
-      .filter(([, q]) => q > 0)
-      .map(([id, q]) => `${q} ${rates.find((x) => x.id === id)?.label ?? "?"}`);
-    return parts.length > 1 || (parts.length === 1 && rates.length > 1) ? parts.join(" + ") : "";
+    return breakdown(rule ? ratesOf(rule) : [], r.corridasPorTaxa);
+  }
+  function diariaBreakdown(r: RideEntry): string {
+    const rule = ruleForClient(settings, r.clientId);
+    return breakdown(rule ? diariasOf(rule) : [], r.diariasPorTipo);
   }
 
   // ── Motoristas ───────────────────────────────────────────────────────────
@@ -319,6 +344,9 @@ function Motoristas() {
       const taxas = payout.porTaxa
         .map((t) => `${t.qty} × ${t.label} (${brl(t.value)}) = ${brl(t.total)}`)
         .join("; ");
+      const dias = payout.porDiaria
+        .map((t) => `${t.qty} × ${t.label} (${brl(t.value)}) = ${brl(t.total)}`)
+        .join("; ");
       const billId = await createBill({
         ownerId,
         kind: "payable",
@@ -332,7 +360,7 @@ function Motoristas() {
         costCenterId: payRule.costCenterId ?? settings.costCenterId ?? null,
         accountId: payRule.accountId ?? settings.accountId ?? null,
         notes:
-          `${empresa}: ${payout.diarias} diária(s) × ${brl(payRule.diariaValue)} = ${brl(payout.diariasValor)}; ` +
+          `${empresa}: diárias: ${dias || "—"}; ` +
           `corridas: ${taxas || "—"}. Gerado na tela Motoristas por ${me}.`,
         payments: [],
         createdAt: Date.now(),
@@ -364,7 +392,7 @@ function Motoristas() {
     payMode: "weekday" as "monthDay" | "weekday",
     payWeekday: "2",
     payDay: "5",
-    diariaValue: "",
+    diarias: [{ id: rid(), label: "", value: "" }] as RateDraft[],
     rates: [{ id: rid(), label: "", value: "" }] as RateDraft[],
     accountId: "",
     costCenterId: "",
@@ -381,7 +409,7 @@ function Motoristas() {
       payMode: r.payMode,
       payWeekday: String(r.payWeekday),
       payDay: String(r.payDay),
-      diariaValue: r.diariaValue ? fmtMoney(r.diariaValue) : "",
+      diarias: diariasOf(r).map((x) => ({ id: x.id, label: x.label, value: fmtMoney(x.value) })),
       rates: ratesOf(r).map((x) => ({ id: x.id, label: x.label, value: fmtMoney(x.value) })),
       accountId: r.accountId ?? settings?.accountId ?? "",
       costCenterId: r.costCenterId ?? settings?.costCenterId ?? "",
@@ -409,7 +437,13 @@ function Motoristas() {
     if (rule.payMode === "monthDay" && (!Number.isFinite(payDay) || payDay < 1 || payDay > 31)) {
       return setCfgMsg("Dia do mês entre 1 e 31.");
     }
-    const diariaValue = parseBrCurrency(rule.diariaValue) ?? 0;
+    const diarias: RideRate[] = rule.diarias
+      .map((x, i) => ({
+        id: x.id,
+        label: x.label.trim() || (rule.diarias.length > 1 ? `Diária ${i + 1}` : "Diária"),
+        value: parseBrCurrency(x.value) ?? 0,
+      }))
+      .filter((x) => x.value > 0);
     const rates: RideRate[] = rule.rates
       .map((x, i) => ({
         id: x.id,
@@ -417,8 +451,8 @@ function Motoristas() {
         value: parseBrCurrency(x.value) ?? 0,
       }))
       .filter((x) => x.value > 0);
-    if (diariaValue <= 0 && rates.length === 0) {
-      return setCfgMsg("Informe o valor da diária e/ou pelo menos uma taxa de entrega.");
+    if (diarias.length === 0 && rates.length === 0) {
+      return setCfgMsg("Informe pelo menos um valor de diária ou uma taxa de entrega.");
     }
     if (!rule.costCenterId || !rule.categoryId) {
       return setCfgMsg("Escolha o centro de custo e a categoria do título desta empresa.");
@@ -427,7 +461,8 @@ function Motoristas() {
       payMode: rule.payMode,
       payDay: Number.isFinite(payDay) && payDay >= 1 ? Math.min(31, payDay) : 5,
       payWeekday: Math.floor(Number(rule.payWeekday)) || 0,
-      diariaValue,
+      diariaValue: diarias[0]?.value ?? 0,
+      diarias,
       rates,
       accountId: rule.accountId || null,
       costCenterId: rule.costCenterId || null,
@@ -555,15 +590,31 @@ function Motoristas() {
             <Field label="Data">
               <DateParts value={rDate} onChange={setRDate} />
             </Field>
-            <Field label="Diárias">
-              <input
-                type="number"
-                min={0}
-                value={rDiarias}
-                onChange={(e) => setRDiarias(e.target.value)}
-                style={{ ...fieldStyle, width: 80 }}
-              />
-            </Field>
+            {rDiarias.length > 0 ? (
+              rDiarias.map((dt) => (
+                <Field key={dt.id} label={`Diárias ${dt.label} (${brl(dt.value)})`}>
+                  <input
+                    type="number"
+                    min={0}
+                    value={rDia[dt.id] ?? ""}
+                    onChange={(e) => setRDia({ ...rDia, [dt.id]: e.target.value })}
+                    placeholder="0"
+                    style={{ ...fieldStyle, width: 90 }}
+                  />
+                </Field>
+              ))
+            ) : (
+              <Field label="Diárias">
+                <input
+                  type="number"
+                  min={0}
+                  value={rDia.single ?? ""}
+                  onChange={(e) => setRDia({ ...rDia, single: e.target.value })}
+                  placeholder="0"
+                  style={{ ...fieldStyle, width: 80 }}
+                />
+              </Field>
+            )}
             {rRates.length > 0 ? (
               rRates.map((rt) => (
                 <Field key={rt.id} label={`Corridas ${rt.label} (${brl(rt.value)})`}>
@@ -685,13 +736,20 @@ function Motoristas() {
                       rides,
                       d.id!,
                       cid,
-                      r ?? { payMode: "monthDay", payDay: 5, payWeekday: 1, diariaValue: 0, rates: [] },
+                      r ?? { payMode: "monthDay", payDay: 5, payWeekday: 1, diariaValue: 0, diarias: [], rates: [] },
                     );
                     return (
                       <tr key={`${d.id}-${cid}`}>
                         <td>{i === 0 ? d.name : ""}</td>
                         <td>{clientName.get(cid) ?? "—"}</td>
-                        <td style={{ textAlign: "right" }}>{p.diarias}</td>
+                        <td style={{ textAlign: "right" }}>
+                          {p.diarias}
+                          {p.porDiaria.length > 1 && (
+                            <span className="muted" style={{ fontSize: "0.78rem" }}>
+                              {" "}({p.porDiaria.map((t) => `${t.qty} ${t.label}`).join(" + ")})
+                            </span>
+                          )}
+                        </td>
                         <td style={{ textAlign: "right" }}>
                           {p.corridas}
                           {p.porTaxa.length > 1 && (
@@ -739,9 +797,11 @@ function Motoristas() {
             <div className="muted" style={{ fontSize: "0.85rem", margin: "0.3rem 0" }}>
               {payout.period ? `Período ${payout.period}. ` : ""}Vencimento da empresa: {describeRule(payRule)}.
             </div>
-            <div>
-              {payout.diarias} diária(s) × {brl(payRule.diariaValue)} = <strong>{brl(payout.diariasValor)}</strong>
-            </div>
+            {payout.porDiaria.map((t) => (
+              <div key={`d-${t.id}`}>
+                {t.qty} diária(s) {t.label} × {brl(t.value)} = <strong>{brl(t.total)}</strong>
+              </div>
+            ))}
             {payout.porTaxa.map((t) => (
               <div key={t.id}>
                 {t.qty} corrida(s) {t.label} × {brl(t.value)} = <strong>{brl(t.total)}</strong>
@@ -799,7 +859,12 @@ function Motoristas() {
                     <td style={{ whiteSpace: "nowrap" }}>{brDate(r.date)}</td>
                     <td>{driverName.get(r.driverId) ?? "—"}</td>
                     <td>{clientName.get(r.clientId) ?? "—"}</td>
-                    <td style={{ textAlign: "right" }}>{r.diarias}</td>
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      {r.diarias}
+                      {diariaBreakdown(r) && (
+                        <span className="muted" style={{ fontSize: "0.78rem" }}> ({diariaBreakdown(r)})</span>
+                      )}
+                    </td>
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                       {r.corridas}
                       {rideBreakdown(r) && (
@@ -842,9 +907,9 @@ function Motoristas() {
           <div className="panel">
             <h2>Configuração de pagamento</h2>
             <p className="muted" style={{ marginTop: 0, fontSize: "0.85rem" }}>
-              Uma regra por cliente: vencimento, valor da diária, taxas de entrega (uma ou várias — ex.:
-              Normal R$ 8 e Longa R$ 12) e a classificação do título. Tudo é gravado junto ao salvar, a regra
-              vira uma linha na tabela e o formulário volta em branco.
+              Uma regra por cliente: vencimento, diárias (uma ou várias — ex.: Manhã R$ 50, Noite R$ 70),
+              taxas de entrega (uma ou várias — ex.: Normal R$ 8 e Longa R$ 12) e a classificação do título.
+              Tudo é gravado junto ao salvar, a regra vira uma linha na tabela e o formulário volta em branco.
             </p>
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
               <Field label="Cliente">
@@ -893,14 +958,48 @@ function Motoristas() {
                   </select>
                 </Field>
               )}
-              <Field label="Diária (R$)">
-                <input
-                  value={rule.diariaValue}
-                  onChange={(e) => setRule({ ...rule, diariaValue: e.target.value })}
-                  placeholder="ex.: 70"
-                  style={{ ...fieldStyle, width: 90, textAlign: "right" }}
-                />
-              </Field>
+              {rule.diarias.map((dt, i) => (
+                <div key={dt.id} style={{ display: "flex", gap: "0.35rem", alignItems: "flex-end" }}>
+                  <Field label={`Diária ${rule.diarias.length > 1 ? i + 1 : ""}`.trim()}>
+                    <input
+                      value={dt.label}
+                      onChange={(e) =>
+                        setRule({ ...rule, diarias: rule.diarias.map((x) => (x.id === dt.id ? { ...x, label: e.target.value } : x)) })
+                      }
+                      placeholder={i === 0 ? "ex.: Manhã" : i === 1 ? "ex.: Tarde" : "ex.: Noite"}
+                      style={{ ...fieldStyle, width: 120 }}
+                    />
+                  </Field>
+                  <Field label="R$">
+                    <input
+                      value={dt.value}
+                      onChange={(e) =>
+                        setRule({ ...rule, diarias: rule.diarias.map((x) => (x.id === dt.id ? { ...x, value: e.target.value } : x)) })
+                      }
+                      placeholder="50"
+                      style={{ ...fieldStyle, width: 80, textAlign: "right" }}
+                    />
+                  </Field>
+                  {rule.diarias.length > 1 && (
+                    <button
+                      type="button"
+                      title="Remover este tipo de diária"
+                      onClick={() => setRule({ ...rule, diarias: rule.diarias.filter((x) => x.id !== dt.id) })}
+                      style={{ background: "var(--border)", padding: "0.35rem 0.55rem" }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                title="Mais um tipo de diária para este cliente (ex.: manhã, tarde, noite)"
+                style={{ background: "var(--border)", padding: "0.35rem 0.7rem" }}
+                onClick={() => setRule({ ...rule, diarias: [...rule.diarias, { id: rid(), label: "", value: "" }] })}
+              >
+                + diária
+              </button>
 
               {rule.rates.map((rt, i) => (
                 <div key={rt.id} style={{ display: "flex", gap: "0.35rem", alignItems: "flex-end" }}>
@@ -997,7 +1096,7 @@ function Motoristas() {
                     <tr>
                       <th>Cliente</th>
                       <th>Vencimento</th>
-                      <th style={{ textAlign: "right" }}>Diária</th>
+                      <th>Diárias</th>
                       <th>Taxas de entrega</th>
                       <th>Classificação</th>
                       <th></th>
@@ -1011,7 +1110,7 @@ function Motoristas() {
                           {!own && <span className="muted" style={{ fontSize: "0.78rem" }}> (padrão antigo)</span>}
                         </td>
                         <td>{describeRule(r!)}</td>
-                        <td style={{ textAlign: "right" }}>{brl(r!.diariaValue)}</td>
+                        <td>{diariasOf(r!).map((t) => `${t.label} ${brl(t.value)}`).join(" · ") || "—"}</td>
                         <td>{ratesOf(r!).map((t) => `${t.label} ${brl(t.value)}`).join(" · ") || "—"}</td>
                         <td className="muted" style={{ fontSize: "0.82rem" }}>
                           {[

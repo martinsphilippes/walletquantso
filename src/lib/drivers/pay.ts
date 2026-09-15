@@ -1,8 +1,8 @@
 // WalletQuantso — pagamento de motoristas (lógica pura).
 //
-// Cada empresa (cliente) tem a própria regra de pagamento ao motorista: valor
-// por diária, uma ou mais TAXAS de corrida (ex.: "Normal" R$ 8, "Longa"
-// R$ 12) e o vencimento (dia do mês ou próximo dia da semana). Soma as
+// Cada empresa (cliente) tem a própria regra de pagamento ao motorista: um
+// ou mais TIPOS de diária (ex.: "Manhã" R$ 50, "Noite" R$ 70), uma ou mais
+// TAXAS de corrida (ex.: "Normal" R$ 8, "Longa" R$ 12) e o vencimento (dia do mês ou próximo dia da semana). Soma as
 // corridas em aberto de um motorista naquela empresa e calcula o vencimento.
 
 import type { ClientPayRule, DriverSettings, RideEntry, RideRate } from "@/types";
@@ -78,6 +78,13 @@ export function describeDue(todayIso: string, dueIso: string): string {
   return `${WEEKDAY_NAMES[due.getUTCDay()]}, ${br}`;
 }
 
+/** Tipos de diária da regra (o valor único antigo vira um tipo "Diária"). */
+export function diariasOf(rule: ClientPayRule): RideRate[] {
+  if (rule.diarias && rule.diarias.length > 0) return rule.diarias;
+  if ((rule.diariaValue ?? 0) > 0) return [{ id: "default", label: "Diária", value: rule.diariaValue }];
+  return [];
+}
+
 /** Taxas de corrida da regra (o valor único antigo vira uma taxa "Corrida"). */
 export function ratesOf(rule: ClientPayRule): RideRate[] {
   if (rule.rates && rule.rates.length > 0) return rule.rates;
@@ -95,7 +102,7 @@ export function ruleForClient(
   clientId: string,
 ): ClientPayRule | null {
   if (!settings) return null;
-  const norm = (r: ClientPayRule): ClientPayRule => ({ ...r, rates: ratesOf(r) });
+  const norm = (r: ClientPayRule): ClientPayRule => ({ ...r, rates: ratesOf(r), diarias: diariasOf(r) });
   const own = settings.byClient?.[clientId];
   if (own) return norm(own);
   const shared = settings.rules?.find((r) => r.clientIds?.includes(clientId));
@@ -123,13 +130,40 @@ export interface DriverPayout {
   period: string | null;
   /** Corridas por taxa (só as que tiveram quantidade). */
   porTaxa: Array<{ id: string; label: string; value: number; qty: number; total: number }>;
+  /** Diárias por tipo (só os que tiveram quantidade). */
+  porDiaria: Array<{ id: string; label: string; value: number; qty: number; total: number }>;
   rideIds: string[];
+}
+
+interface Bucket {
+  id: string;
+  label: string;
+  value: number;
+  qty: number;
+}
+
+/** Acumulador de quantidades por tipo (taxa ou diária), com os tipos da regra. */
+function makeBuckets(kinds: RideRate[], removedLabel: string) {
+  const map = new Map<string, Bucket>();
+  for (const k of kinds) map.set(k.id, { ...k, qty: 0 });
+  const bump = (id: string, qty: number) => {
+    if (!qty) return;
+    let b = map.get(id);
+    if (!b) {
+      b = { id, label: removedLabel, value: 0, qty: 0 };
+      map.set(id, b);
+    }
+    b.qty += qty;
+  };
+  const rows = () =>
+    [...map.values()].filter((b) => b.qty > 0).map((b) => ({ ...b, total: round(b.qty * b.value) }));
+  return { bump, rows };
 }
 
 /**
  * Soma as corridas ainda sem título (billId nulo) de um motorista numa
- * empresa, pelos valores da regra daquela empresa (diária + cada taxa).
- * Lançamentos antigos sem taxa contam na primeira taxa da regra.
+ * empresa, pelos valores da regra daquela empresa (cada tipo de diária +
+ * cada taxa). Lançamentos antigos sem tipo contam no primeiro da regra.
  */
 export function computeDriverPayout(
   rides: RideEntry[],
@@ -139,27 +173,22 @@ export function computeDriverPayout(
 ): DriverPayout {
   const open = rides.filter((r) => r.driverId === driverId && r.clientId === clientId && !r.billId);
   const rates = ratesOf(rule);
-  const byRate = new Map<string, { id: string; label: string; value: number; qty: number }>();
-  for (const rt of rates) byRate.set(rt.id, { ...rt, qty: 0 });
-  const bump = (rateId: string, qty: number) => {
-    if (!qty) return;
-    let b = byRate.get(rateId);
-    if (!b) {
-      b = { id: rateId, label: "taxa removida", value: 0, qty: 0 };
-      byRate.set(rateId, b);
-    }
-    b.qty += qty;
-  };
+  const kinds = diariasOf(rule);
+  const taxas = makeBuckets(rates, "taxa removida");
+  const diariasB = makeBuckets(kinds, "tipo removido");
 
-  let diarias = 0;
   const dias = new Set<string>();
   for (const r of open) {
-    diarias += r.diarias || 0;
     if (r.date) dias.add(r.date);
+    if (r.diariasPorTipo && Object.keys(r.diariasPorTipo).length > 0) {
+      for (const [id, qty] of Object.entries(r.diariasPorTipo)) diariasB.bump(id, qty || 0);
+    } else if (r.diarias) {
+      diariasB.bump(kinds[0]?.id ?? "default", r.diarias);
+    }
     if (r.corridasPorTaxa && Object.keys(r.corridasPorTaxa).length > 0) {
-      for (const [rateId, qty] of Object.entries(r.corridasPorTaxa)) bump(rateId, qty || 0);
+      for (const [rateId, qty] of Object.entries(r.corridasPorTaxa)) taxas.bump(rateId, qty || 0);
     } else if (r.corridas) {
-      bump(rates[0]?.id ?? "default", r.corridas);
+      taxas.bump(rates[0]?.id ?? "default", r.corridas);
     }
   }
   const ordered = [...dias].sort();
@@ -171,12 +200,12 @@ export function computeDriverPayout(
         ? br(ordered[0])
         : `${br(ordered[0])} a ${br(ordered[ordered.length - 1])}`;
 
-  const porTaxa = [...byRate.values()]
-    .filter((b) => b.qty > 0)
-    .map((b) => ({ ...b, total: round(b.qty * b.value) }));
+  const porTaxa = taxas.rows();
+  const porDiaria = diariasB.rows();
   const corridas = porTaxa.reduce((s, b) => s + b.qty, 0);
   const corridasValor = round(porTaxa.reduce((s, b) => s + b.total, 0));
-  const diariasValor = round(diarias * (rule.diariaValue || 0));
+  const diarias = porDiaria.reduce((s, b) => s + b.qty, 0);
+  const diariasValor = round(porDiaria.reduce((s, b) => s + b.total, 0));
   return {
     diarias,
     corridas,
@@ -185,6 +214,7 @@ export function computeDriverPayout(
     total: round(diariasValor + corridasValor),
     period,
     porTaxa,
+    porDiaria,
     rideIds: open.map((r) => r.id!).filter(Boolean),
   };
 }
