@@ -42,7 +42,7 @@ const NAV: NavEntry[] = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, restricted } = useAuth();
+  const { user, loading, restricted } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -58,7 +58,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  const nav = restricted ? NAV.filter((n) => n.href === restrictedHome) : NAV;
+  // Antes do login ninguém vê os módulos; depois, só o que a conta pode usar.
+  const signedIn = !loading && !!user;
+  const nav = !signedIn ? [] : restricted ? NAV.filter((n) => n.href === restrictedHome) : NAV;
 
   const isActive = (href: string) =>
     pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
@@ -79,6 +81,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className="word">WalletQuantso</span>
         </div>
         <nav className="nav">
+          {!signedIn && (
+            <span className="label muted" style={{ padding: "0.5rem 1rem", fontSize: "0.8rem" }}>
+              {loading ? "Carregando…" : "Entre para ver os módulos."}
+            </span>
+          )}
           {nav.map((item) => (
             <Link
               key={item.href}
