@@ -23,6 +23,29 @@ service cloud.firestore {
       return isSignedIn() && resource.data.ownerId == request.auth.uid;
     }
 
+    // ── Acesso restrito (tela Motoristas/Corridas) ─────────────────────────
+    // O dono cadastra e-mails em members/{e-mail}. Quem loga com um desses
+    // e-mails trabalha nos dados do dono, mas só nas coleções liberadas abaixo.
+    function memberEmail() {
+      return request.auth.token.email.lower();
+    }
+    function hasEmail() {
+      return isSignedIn() && ("email" in request.auth.token);
+    }
+    function memberPath() {
+      return /databases/$(database)/documents/members/$(memberEmail());
+    }
+    // O e-mail logado é acesso restrito do dono `ownerId`?
+    function isMemberOf(ownerId) {
+      return hasEmail() && exists(memberPath()) && get(memberPath()).data.ownerId == ownerId;
+    }
+    function memberOwnsExisting() {
+      return isMemberOf(resource.data.ownerId);
+    }
+    function memberOwnsIncoming() {
+      return isMemberOf(request.resource.data.ownerId);
+    }
+
     // Standard owner-scoped collections: full CRUD for the owner only.
     match /accounts/{id} {
       allow read, delete: if ownsExisting();
@@ -50,7 +73,7 @@ service cloud.firestore {
 
     match /bills/{id} {
       allow read, delete: if ownsExisting();
-      allow create: if ownsIncoming();
+      allow create: if ownsIncoming() || memberOwnsIncoming();
       allow update: if ownsExisting() && ownsIncoming();
     }
 
@@ -67,8 +90,10 @@ service cloud.firestore {
     }
 
     // Clientes do negócio de entregas (regras de cobrança por cliente).
+    // Acesso restrito só lê (para escolher a empresa na tela Motoristas).
     match /clients/{id} {
-      allow read, delete: if ownsExisting();
+      allow read: if ownsExisting() || memberOwnsExisting();
+      allow delete: if ownsExisting();
       allow create: if ownsIncoming();
       allow update: if ownsExisting() && ownsIncoming();
     }
@@ -77,6 +102,38 @@ service cloud.firestore {
     match /clientBillings/{id} {
       allow read, delete: if ownsExisting();
       allow create: if ownsIncoming();
+      allow update: if ownsExisting() && ownsIncoming();
+    }
+
+    // ── Motoristas / Corridas: dono OU acesso restrito do dono ──────────────
+    match /drivers/{id} {
+      allow read, delete: if ownsExisting() || memberOwnsExisting();
+      allow create: if ownsIncoming() || memberOwnsIncoming();
+      allow update: if (ownsExisting() || memberOwnsExisting())
+        && request.resource.data.ownerId == resource.data.ownerId;
+    }
+
+    match /rides/{id} {
+      allow read, delete: if ownsExisting() || memberOwnsExisting();
+      allow create: if ownsIncoming() || memberOwnsIncoming();
+      allow update: if (ownsExisting() || memberOwnsExisting())
+        && request.resource.data.ownerId == resource.data.ownerId;
+    }
+
+    // Configuração de pagamento (doc id = uid do dono): só o dono escreve;
+    // acesso restrito lê para calcular o título.
+    match /driverSettings/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isMemberOf(uid));
+      allow create, update: if ownsIncoming() && uid == request.auth.uid;
+      allow delete: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Acessos restritos (doc id = e-mail em minúsculas): o dono gerencia; o
+    // próprio e-mail pode ler o seu doc ao entrar (para saber que é restrito).
+    match /members/{email} {
+      allow get: if hasEmail() && memberEmail() == email;
+      allow read, delete: if ownsExisting();
+      allow create: if ownsIncoming() && request.resource.data.email == email;
       allow update: if ownsExisting() && ownsIncoming();
     }
 

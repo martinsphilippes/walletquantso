@@ -317,3 +317,58 @@ export interface AuditEntry {
   details: Record<string, unknown>;
   at: number;
 }
+
+// ── Motoristas / Corridas ─────────────────────────────────────────────────
+
+/** Motorista/motoboy cadastrado na tela Motoristas/Corridas. */
+export interface Driver {
+  id?: string;
+  ownerId: string;
+  name: string;
+  active: boolean;
+  createdAt: number;
+  /** E-mail de quem cadastrou (dono ou acesso restrito). */
+  createdBy: string;
+}
+
+/** Lançamento de corridas de um motorista numa empresa (cliente) num dia. */
+export interface RideEntry {
+  id?: string;
+  ownerId: string;
+  driverId: string;
+  clientId: string;
+  /** ISO YYYY-MM-DD. */
+  date: string;
+  diarias: number;
+  corridas: number;
+  notes: string | null;
+  createdAt: number;
+  createdBy: string;
+  /** Título a pagar gerado com este lançamento (null = ainda em aberto). */
+  billId: string | null;
+}
+
+/** Configuração da tela Motoristas (um doc por dono, id = ownerId). */
+export interface DriverSettings {
+  ownerId: string;
+  /** Dia do mês em que os títulos dos motoristas vencem. */
+  payDay: number;
+  /** Quanto o negócio paga ao motorista por diária e por corrida. */
+  diariaValue: number;
+  corridaValue: number;
+  accountId: string | null;
+  categoryId: string | null;
+  costCenterId: string | null;
+  updatedAt: number;
+}
+
+/** Acesso restrito: e-mail que só pode usar a tela Motoristas/Corridas. */
+export interface Member {
+  /** = e-mail em minúsculas. */
+  id?: string;
+  ownerId: string;
+  email: string;
+  role: "driver";
+  label: string | null;
+  createdAt: number;
+}

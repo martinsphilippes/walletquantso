@@ -4,9 +4,9 @@
 // slide-in drawer (mobile) and a top header. Brand identity from the
 // Quantso logo (monochrome, dark).
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/services/auth-context";
 import { signOut } from "@/services/auth";
 
@@ -31,6 +31,7 @@ const NAV: NavEntry[] = [
   { label: "Centros de custo", href: "/centros-de-custo", icon: "◈" },
   { label: "Pessoas e contatos", href: "/contatos", icon: "☺" },
   { label: "Pedidos WhatsApp", href: "/pedidos-whatsapp", icon: "✉" },
+  { label: "Motoristas/Corridas", href: "/motoristas", icon: "⛟" },
   { label: "Relatórios", href: "/reports", icon: "▧" },
   { label: "Importação de dados", href: "/import", icon: "⤓" },
   { label: "Sincronizar Cora", href: "/cora", icon: "⟳" },
@@ -40,14 +41,24 @@ const NAV: NavEntry[] = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user, restricted } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Acesso restrito só enxerga Motoristas/Corridas: qualquer outra rota volta
+  // para lá (as regras do Firestore já bloqueiam os dados; isto é a cortesia).
+  const restrictedHome = "/motoristas";
+  useEffect(() => {
+    if (restricted && !pathname.startsWith(restrictedHome)) router.replace(restrictedHome);
+  }, [restricted, pathname, router]);
 
   // /rapido é a tela enxuta de celular: sem menu lateral nem topbar.
   if (pathname.startsWith("/rapido")) {
     return <>{children}</>;
   }
+
+  const nav = restricted ? NAV.filter((n) => n.href === restrictedHome) : NAV;
 
   const isActive = (href: string) =>
     pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
@@ -68,7 +79,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className="word">WalletQuantso</span>
         </div>
         <nav className="nav">
-          {NAV.map((item) => (
+          {nav.map((item) => (
             <Link
               key={item.href}
               href={item.href}

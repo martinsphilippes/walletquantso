@@ -37,6 +37,10 @@ export const COLLECTIONS = {
   auditLog: "auditLog",
   clients: "clients",
   clientBillings: "clientBillings",
+  drivers: "drivers",
+  rides: "rides",
+  driverSettings: "driverSettings",
+  members: "members",
 } as const;
 
 /** Sort transactions newest-first by ISO date, tie-broken by creation time. */
