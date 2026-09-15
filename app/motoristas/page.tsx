@@ -135,6 +135,8 @@ function Motoristas() {
 
   const driverName = useMemo(() => new Map(drivers.map((d) => [d.id!, d.name])), [drivers]);
   const clientName = useMemo(() => new Map(clients.map((c) => [c.id!, c.name])), [clients]);
+  const costCenterName = useMemo(() => new Map(costCenters.map((c) => [c.id!, c.name])), [costCenters]);
+  const categoryName = useMemo(() => new Map(categories.map((c) => [c.id!, c.name])), [categories]);
   const activeDrivers = drivers.filter((d) => d.active !== false);
   const today = todayBr();
 
@@ -324,9 +326,9 @@ function Motoristas() {
         competenceDate: payDue,
         documentNumber: null,
         contactId: null,
-        categoryId: settings.categoryId ?? null,
-        costCenterId: settings.costCenterId ?? null,
-        accountId: settings.accountId ?? null,
+        categoryId: payRule.categoryId ?? settings.categoryId ?? null,
+        costCenterId: payRule.costCenterId ?? settings.costCenterId ?? null,
+        accountId: payRule.accountId ?? settings.accountId ?? null,
         notes:
           `${empresa}: ${payout.diarias} diária(s) × ${brl(payRule.diariaValue)} = ${brl(payout.diariasValor)}; ` +
           `corridas: ${taxas || "—"}. Gerado na tela Motoristas por ${me}.`,
@@ -344,17 +346,11 @@ function Motoristas() {
     }
   }
 
-  // ── Configuração (só o dono): regra por cliente + classificação ──────────
-  const [cfg, setCfg] = useState({ accountId: "", categoryId: "", costCenterId: "" });
+  // ── Configuração (só o dono): uma regra por cliente ──────────────────────
+  // Cada regra traz vencimento, diária, taxas de corrida E a classificação do
+  // título (conta, centro de custo, categoria). Ao salvar, o formulário volta
+  // em branco para a próxima empresa.
   const [cfgMsg, setCfgMsg] = useState("");
-  useEffect(() => {
-    if (!settings) return;
-    setCfg({
-      accountId: settings.accountId ?? "",
-      categoryId: settings.categoryId ?? "",
-      costCenterId: settings.costCenterId ?? "",
-    });
-  }, [settings]);
 
   interface RateDraft {
     id: string;
@@ -367,7 +363,10 @@ function Motoristas() {
     payWeekday: "2",
     payDay: "5",
     diariaValue: "",
-    rates: [{ id: rid(), label: "Corrida", value: "" }] as RateDraft[],
+    rates: [{ id: rid(), label: "", value: "" }] as RateDraft[],
+    accountId: "",
+    costCenterId: "",
+    categoryId: "",
   });
   const [rule, setRule] = useState(emptyRule);
   const byClient = settings?.byClient ?? {};
@@ -382,6 +381,9 @@ function Motoristas() {
       payDay: String(r.payDay),
       diariaValue: r.diariaValue ? fmtMoney(r.diariaValue) : "",
       rates: ratesOf(r).map((x) => ({ id: x.id, label: x.label, value: fmtMoney(x.value) })),
+      accountId: r.accountId ?? settings?.accountId ?? "",
+      costCenterId: r.costCenterId ?? settings?.costCenterId ?? "",
+      categoryId: r.categoryId ?? settings?.categoryId ?? "",
     });
     setCfgMsg("");
   }
@@ -390,27 +392,13 @@ function Motoristas() {
     if (!ownerId) return;
     await saveDriverSettings({
       ownerId,
-      accountId: cfg.accountId || null,
-      categoryId: cfg.categoryId || null,
-      costCenterId: cfg.costCenterId || null,
+      accountId: settings?.accountId ?? null,
+      categoryId: settings?.categoryId ?? null,
+      costCenterId: settings?.costCenterId ?? null,
       byClient,
       updatedAt: Date.now(),
       ...patch,
     });
-  }
-
-  async function salvarClassificacao() {
-    setBusy(true);
-    setCfgMsg("");
-    try {
-      await persistSettings({});
-      setCfgMsg("✅ Classificação dos títulos salva.");
-      await load();
-    } catch (err) {
-      setCfgMsg(`❌ Falha ao salvar: ${(err as Error).message}`);
-    } finally {
-      setBusy(false);
-    }
   }
 
   async function salvarRegra() {
@@ -421,10 +409,17 @@ function Motoristas() {
     }
     const diariaValue = parseBrCurrency(rule.diariaValue) ?? 0;
     const rates: RideRate[] = rule.rates
-      .map((x) => ({ id: x.id, label: x.label.trim() || "Corrida", value: parseBrCurrency(x.value) ?? 0 }))
+      .map((x, i) => ({
+        id: x.id,
+        label: x.label.trim() || (rule.rates.length > 1 ? `Taxa ${i + 1}` : "Corrida"),
+        value: parseBrCurrency(x.value) ?? 0,
+      }))
       .filter((x) => x.value > 0);
     if (diariaValue <= 0 && rates.length === 0) {
-      return setCfgMsg("Informe o valor da diária e/ou pelo menos uma taxa de corrida.");
+      return setCfgMsg("Informe o valor da diária e/ou pelo menos uma taxa de entrega.");
+    }
+    if (!rule.costCenterId || !rule.categoryId) {
+      return setCfgMsg("Escolha o centro de custo e a categoria do título desta empresa.");
     }
     const saved: ClientPayRule = {
       payMode: rule.payMode,
@@ -432,6 +427,9 @@ function Motoristas() {
       payWeekday: Math.floor(Number(rule.payWeekday)) || 0,
       diariaValue,
       rates,
+      accountId: rule.accountId || null,
+      costCenterId: rule.costCenterId || null,
+      categoryId: rule.categoryId || null,
     };
     setBusy(true);
     setCfgMsg("");
@@ -836,11 +834,13 @@ function Motoristas() {
         <>
           <div className="panel">
             <h2>Configuração de pagamento</h2>
-            <h3 style={{ marginBottom: "0.25rem" }}>Regras de pagamento por cliente</h3>
             <p className="muted" style={{ marginTop: 0, fontSize: "0.85rem" }}>
-              Para cada cliente: quando vence, quanto você paga por diária e as taxas de corrida (uma ou
-              várias — ex.: Normal R$ 8 e Longa R$ 12). Gerado no próprio dia da semana, vence hoje.
+              Uma regra por cliente: quando vence, quanto você paga por diária, as taxas de entrega (uma ou
+              várias — ex.: Normal R$ 8 e Longa R$ 12) e como o título é classificado. Ao salvar, a regra vira
+              uma linha na tabela e o formulário volta em branco para a próxima empresa.
             </p>
+
+            <h3 style={{ marginBottom: "0.25rem" }}>1. Cliente e vencimento</h3>
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
               <Field label="Cliente">
                 <select
@@ -888,6 +888,10 @@ function Motoristas() {
                   </select>
                 </Field>
               )}
+            </div>
+
+            <h3 style={{ marginBottom: "0.25rem", marginTop: "1rem" }}>2. Valores pagos ao motorista</h3>
+            <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
               <Field label="Valor pago por diária (R$)">
                 <input
                   value={rule.diariaValue}
@@ -897,57 +901,109 @@ function Motoristas() {
                 />
               </Field>
             </div>
-
-            <div style={{ marginTop: "0.6rem" }}>
-              <span className="muted" style={{ fontSize: "0.8rem" }}>Taxas de corrida (valor pago por corrida de cada tipo)</span>
+            <div
+              style={{
+                marginTop: "0.6rem",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                padding: "0.6rem 0.75rem",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+                <strong style={{ fontSize: "0.9rem" }}>Taxas de entrega</strong>
+                <button
+                  type="button"
+                  style={{ background: "var(--border)", padding: "0.3rem 0.7rem" }}
+                  onClick={() => setRule({ ...rule, rates: [...rule.rates, { id: rid(), label: "", value: "" }] })}
+                >
+                  + Adicionar outra taxa
+                </button>
+              </div>
+              <p className="muted" style={{ fontSize: "0.8rem", margin: "0.25rem 0 0.4rem" }}>
+                Valor pago por entrega de cada tipo. Uma empresa pode ter várias (ex.: Normal R$ 8, Longa R$ 12).
+              </p>
               {rule.rates.map((rt, i) => (
-                <div key={rt.id} style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "0.35rem", flexWrap: "wrap" }}>
-                  <input
-                    value={rt.label}
-                    onChange={(e) =>
-                      setRule({ ...rule, rates: rule.rates.map((x) => (x.id === rt.id ? { ...x, label: e.target.value } : x)) })
-                    }
-                    placeholder={i === 0 ? "Normal" : i === 1 ? "Longa" : `Taxa ${i + 1}`}
-                    style={{ ...fieldStyle, width: 160 }}
-                  />
-                  <input
-                    value={rt.value}
-                    onChange={(e) =>
-                      setRule({ ...rule, rates: rule.rates.map((x) => (x.id === rt.id ? { ...x, value: e.target.value } : x)) })
-                    }
-                    placeholder="R$"
-                    style={{ ...fieldStyle, width: 100, textAlign: "right" }}
-                  />
+                <div key={rt.id} style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end", marginTop: "0.35rem", flexWrap: "wrap" }}>
+                  <Field label={`Taxa ${i + 1} — nome`}>
+                    <input
+                      value={rt.label}
+                      onChange={(e) =>
+                        setRule({ ...rule, rates: rule.rates.map((x) => (x.id === rt.id ? { ...x, label: e.target.value } : x)) })
+                      }
+                      placeholder={i === 0 ? "ex.: Normal" : i === 1 ? "ex.: Longa" : "ex.: Especial"}
+                      style={{ ...fieldStyle, width: 170 }}
+                    />
+                  </Field>
+                  <Field label="Valor (R$)">
+                    <input
+                      value={rt.value}
+                      onChange={(e) =>
+                        setRule({ ...rule, rates: rule.rates.map((x) => (x.id === rt.id ? { ...x, value: e.target.value } : x)) })
+                      }
+                      placeholder="ex.: 8"
+                      style={{ ...fieldStyle, width: 100, textAlign: "right" }}
+                    />
+                  </Field>
                   {rule.rates.length > 1 && (
                     <button
                       type="button"
                       title="Remover esta taxa"
                       onClick={() => setRule({ ...rule, rates: rule.rates.filter((x) => x.id !== rt.id) })}
-                      style={{ background: "var(--border)", padding: "0.3rem 0.6rem" }}
+                      style={{ background: "var(--border)", padding: "0.35rem 0.6rem" }}
                     >
                       ✕
                     </button>
                   )}
                 </div>
               ))}
-              <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", marginTop: "0.5rem", flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  style={{ background: "var(--border)" }}
-                  onClick={() => setRule({ ...rule, rates: [...rule.rates, { id: rid(), label: "", value: "" }] })}
-                >
-                  + Adicionar taxa
-                </button>
-                <button className="btn-primary" disabled={busy} onClick={() => void salvarRegra()}>
-                  {rule.clientId && byClient[rule.clientId] ? "Atualizar regra" : "Salvar regra"}
-                </button>
-                {rule.clientId && (
-                  <button style={{ background: "var(--border)" }} onClick={() => setRule(emptyRule())}>
-                    Limpar
-                  </button>
-                )}
-              </div>
             </div>
+
+            <h3 style={{ marginBottom: "0.25rem", marginTop: "1rem" }}>3. Classificação do título desta empresa</h3>
+            <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+              <Field label="Conta do título">
+                <select value={rule.accountId} onChange={(e) => setRule({ ...rule, accountId: e.target.value })}>
+                  <option value="">—</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Centro de custo">
+                <select
+                  value={rule.costCenterId}
+                  onChange={(e) => setRule({ ...rule, costCenterId: e.target.value, categoryId: "" })}
+                >
+                  <option value="">Escolha…</option>
+                  {costCenters.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Categoria (despesa)">
+                <select value={rule.categoryId} onChange={(e) => setRule({ ...rule, categoryId: e.target.value })}>
+                  <option value="">Escolha…</option>
+                  {categories
+                    .filter((c) => !rule.costCenterId || (c.costCenterId ?? "") === rule.costCenterId || !!c.parentId)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>{c.parentId ? `  ↳ ${c.name}` : c.name}</option>
+                    ))}
+                </select>
+              </Field>
+            </div>
+
+            <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", marginTop: "1rem", flexWrap: "wrap" }}>
+              <button className="btn-primary" disabled={busy} onClick={() => void salvarRegra()}>
+                {rule.clientId && byClient[rule.clientId] ? "Atualizar regra" : "Salvar regra"}
+              </button>
+              <button style={{ background: "var(--border)" }} onClick={() => setRule(emptyRule())}>
+                Limpar
+              </button>
+            </div>
+            {cfgMsg && (
+              <p style={{ marginBottom: 0 }}>
+                <span className={`badge ${cfgMsg.startsWith("✅") ? "ok" : "warn"}`}>{cfgMsg}</span>
+              </p>
+            )}
 
             {ruledClients.length > 0 && (
               <div style={{ overflowX: "auto", marginTop: "0.75rem" }}>
@@ -957,7 +1013,8 @@ function Motoristas() {
                       <th>Cliente</th>
                       <th>Vencimento</th>
                       <th style={{ textAlign: "right" }}>Diária</th>
-                      <th>Taxas de corrida</th>
+                      <th>Taxas de entrega</th>
+                      <th>Classificação</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -971,6 +1028,14 @@ function Motoristas() {
                         <td>{describeRule(r!)}</td>
                         <td style={{ textAlign: "right" }}>{brl(r!.diariaValue)}</td>
                         <td>{ratesOf(r!).map((t) => `${t.label} ${brl(t.value)}`).join(" · ") || "—"}</td>
+                        <td className="muted" style={{ fontSize: "0.82rem" }}>
+                          {[
+                            costCenterName.get(r!.costCenterId ?? settings?.costCenterId ?? ""),
+                            categoryName.get(r!.categoryId ?? settings?.categoryId ?? ""),
+                          ]
+                            .filter(Boolean)
+                            .join(" › ") || <span style={{ color: "var(--err)" }}>sem classificação</span>}
+                        </td>
                         <td style={{ whiteSpace: "nowrap" }}>
                           <button
                             style={{ background: "var(--border)", padding: "0.3rem 0.6rem" }}
@@ -994,42 +1059,6 @@ function Motoristas() {
                   </tbody>
                 </table>
               </div>
-            )}
-
-            <h3 style={{ marginBottom: "0.25rem", marginTop: "1rem" }}>Classificação dos títulos</h3>
-            <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
-              <Field label="Conta do título">
-                <select value={cfg.accountId} onChange={(e) => setCfg({ ...cfg, accountId: e.target.value })}>
-                  <option value="">—</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>{a.name}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Centro de custo">
-                <select value={cfg.costCenterId} onChange={(e) => setCfg({ ...cfg, costCenterId: e.target.value })}>
-                  <option value="">—</option>
-                  {costCenters.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Categoria (despesa)">
-                <select value={cfg.categoryId} onChange={(e) => setCfg({ ...cfg, categoryId: e.target.value })}>
-                  <option value="">—</option>
-                  {categories
-                    .filter((c) => !cfg.costCenterId || (c.costCenterId ?? "") === cfg.costCenterId || !!c.parentId)
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>{c.parentId ? `  ↳ ${c.name}` : c.name}</option>
-                    ))}
-                </select>
-              </Field>
-              <button disabled={busy} onClick={() => void salvarClassificacao()}>Salvar classificação</button>
-            </div>
-            {cfgMsg && (
-              <p style={{ marginBottom: 0 }}>
-                <span className={`badge ${cfgMsg.startsWith("✅") ? "ok" : "warn"}`}>{cfgMsg}</span>
-              </p>
             )}
           </div>
 

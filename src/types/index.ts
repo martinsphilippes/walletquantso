@@ -369,6 +369,10 @@ export interface ClientPayRule {
   diariaValue: number;
   /** Tipos de corrida da empresa, cada um com seu valor (pode ser só um). */
   rates: RideRate[];
+  /** Classificação do título gerado para esta empresa. */
+  accountId?: string | null;
+  categoryId?: string | null;
+  costCenterId?: string | null;
   /** Formato anterior: valor único de corrida (lido só por compatibilidade). */
   corridaValue?: number;
 }
@@ -384,7 +388,7 @@ export interface DriverSettings {
   ownerId: string;
   /** Regra de pagamento por empresa (clientId → regra). */
   byClient?: Record<string, ClientPayRule>;
-  /** Classificação dos títulos gerados (vale para todas as empresas). */
+  /** Classificação padrão (formato anterior; hoje cada regra tem a sua). */
   accountId: string | null;
   categoryId: string | null;
   costCenterId: string | null;
