@@ -325,6 +325,56 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     };
   }, [cf.filtered, sel.selectedIds]);
 
+  // Baixa em lote: quita todos os selecionados de uma vez, cada um pelo
+  // restante em aberto, na mesma data; a conta é a do próprio título ou a
+  // escolhida aqui (obrigatória para os títulos sem conta).
+  const [bulkPayOpen, setBulkPayOpen] = useState(false);
+  const [bulkDate, setBulkDate] = useState(today());
+  const [bulkAccount, setBulkAccount] = useState("");
+  const bulkTargets = useMemo(() => {
+    const ids = new Set(sel.selectedIds);
+    return cf.filtered.filter((b) => b.id && ids.has(b.id) && remaining(b) > 0);
+  }, [cf.filtered, sel.selectedIds]);
+  const bulkNeedsAccount = bulkTargets.some((b) => !b.accountId);
+
+  async function bulkPay() {
+    if (bulkTargets.length === 0) return;
+    if (bulkNeedsAccount && !bulkAccount) {
+      setError("Alguns títulos não têm conta: escolha a conta da baixa.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    let done = 0;
+    try {
+      for (const b of bulkTargets) {
+        await addPayment(
+          b.id!,
+          {
+            id: rid(),
+            date: bulkDate || today(),
+            amount: remaining(b),
+            accountId: bulkAccount || b.accountId || "",
+          },
+          { settle: true },
+        );
+        done += 1;
+      }
+      const doneIds = new Set(bulkTargets.map((b) => b.id!));
+      setBills((prev) => (prev ?? []).filter((x) => !doneIds.has(x.id!)));
+      sel.clear();
+      setBulkPayOpen(false);
+      await load();
+    } catch (err) {
+      setError(
+        `Falha ao dar baixa em lote (${done} de ${bulkTargets.length} concluídos): ${(err as Error).message}`,
+      );
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function bulkDelete() {
     if (sel.count === 0) return;
     setBusy(true);
@@ -1083,18 +1133,75 @@ export function BillsManager({ kind }: { kind: BillKind }) {
           busy={busy}
           noun="título"
           extra={
-            <span
-              className="badge"
-              style={{
-                background: "var(--border)",
-                color: "var(--text)",
-                fontWeight: 700,
-              }}
-            >
-              Soma: {brl(selSum.amount)} · Em aberto: {brl(selSum.open)}
-            </span>
+            <>
+              <button
+                className="btn-primary"
+                disabled={busy || bulkTargets.length === 0}
+                onClick={() => {
+                  setBulkDate(today());
+                  setBulkAccount("");
+                  setBulkPayOpen((v) => !v);
+                }}
+              >
+                {settleLabel} selecionados
+              </button>
+              <span
+                className="badge"
+                style={{
+                  background: "var(--border)",
+                  color: "var(--text)",
+                  fontWeight: 700,
+                }}
+              >
+                Soma: {brl(selSum.amount)} · Em aberto: {brl(selSum.open)}
+              </span>
+            </>
           }
         />
+        {bulkPayOpen && sel.count > 0 && (
+          <div
+            style={{
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              padding: "0.6rem 0.75rem",
+              marginBottom: "0.75rem",
+              display: "flex",
+              gap: "0.75rem",
+              alignItems: "flex-end",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <strong>
+                {settleLabel} {bulkTargets.length} título(s) · {brl(selSum.open)}
+              </strong>
+              <div className="muted" style={{ fontSize: "0.8rem" }}>
+                Cada título é quitado pelo valor em aberto, na data abaixo, e vai para Lançamentos.
+              </div>
+            </div>
+            <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+              <span className="muted" style={{ fontSize: "0.8rem" }}>Data da baixa</span>
+              <DateParts value={bulkDate} onChange={setBulkDate} />
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+              <span className="muted" style={{ fontSize: "0.8rem" }}>
+                Conta {bulkNeedsAccount ? "(obrigatória: há títulos sem conta)" : "(vazio = conta de cada título)"}
+              </span>
+              <select value={bulkAccount} onChange={(e) => setBulkAccount(e.target.value)}>
+                <option value="">{bulkNeedsAccount ? "Escolha…" : "Conta de cada título"}</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            </label>
+            <button className="btn-primary" disabled={busy} onClick={() => void bulkPay()}>
+              Confirmar {settleLabel.toLowerCase()} de {bulkTargets.length}
+            </button>
+            <button style={{ background: "var(--border)" }} onClick={() => setBulkPayOpen(false)}>
+              Cancelar
+            </button>
+          </div>
+        )}
         {visible.length === 0 ? (
           <p className="muted">
             {bills.length === 0
