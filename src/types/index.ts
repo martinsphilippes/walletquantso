@@ -349,6 +349,9 @@ export interface RideEntry {
   /** Valor avulso (não ligado a entregas), com a justificativa. */
   extraValue?: number;
   extraDescription?: string | null;
+  /** Cancelado (não entra em título nenhum); pode ser reativado. */
+  cancelledAt?: number | null;
+  cancelledBy?: string | null;
   notes: string | null;
   createdAt: number;
   createdBy: string;
