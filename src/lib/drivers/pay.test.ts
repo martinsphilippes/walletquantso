@@ -87,7 +87,6 @@ describe("computeDriverPayout", () => {
       ride({ id: "r3", diarias: 1, corridas: 5, corridasPorTaxa: { l: 5 }, date: "2026-09-10" }),
       ride({ id: "r4", diarias: 1, corridas: 9, corridasPorTaxa: { n: 9 }, driverId: "d2" }), // outro motorista
       ride({ id: "r5", diarias: 1, corridas: 3, corridasPorTaxa: { n: 3 }, billId: "b1" }), // já faturado
-      ride({ id: "r6", diarias: 1, corridas: 3, corridasPorTaxa: { n: 3 }, cancelledAt: 1 }), // cancelado
     ];
     const p = computeDriverPayout(rides, "d1", "c1", rule);
     expect(p.diarias).toBe(2);

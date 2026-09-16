@@ -176,9 +176,7 @@ export function computeDriverPayout(
   clientId: string,
   rule: ClientPayRule,
 ): DriverPayout {
-  const open = rides.filter(
-    (r) => r.driverId === driverId && r.clientId === clientId && !r.billId && !r.cancelledAt,
-  );
+  const open = rides.filter((r) => r.driverId === driverId && r.clientId === clientId && !r.billId);
   const rates = ratesOf(rule);
   const kinds = diariasOf(rule);
   const taxas = makeBuckets(rates, "taxa removida");
