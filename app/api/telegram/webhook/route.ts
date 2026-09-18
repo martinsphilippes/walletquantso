@@ -8,6 +8,7 @@
 //   /start <código>  — vincula este chat ao dono que gerou o código no app.
 //   /contas          — manda agora as contas a pagar por conta.
 //   /gastos          — manda agora os gastos do mês por categoria.
+//   /centros         — manda agora o resultado do mês por centro de custo.
 
 import { NextResponse } from "next/server";
 import { linkByCode, ownerByChat, sendMessage, sendReports } from "@/server/telegram";
@@ -48,7 +49,7 @@ export async function POST(req: Request) {
         if (owner) {
           await sendMessage(
             chatId,
-            "✅ Vinculado! Todo dia de manhã você recebe as contas a pagar por conta e os gastos do mês por categoria. Comandos: /contas e /gastos.",
+            "✅ Vinculado! Todo dia de manhã você recebe as contas a pagar por conta, os gastos do mês por categoria e o resultado por centro de custo. Comandos: /contas, /gastos e /centros.",
           );
           try {
             await sendReports(owner, "all");
@@ -62,17 +63,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    if (cmd.startsWith("/contas") || cmd.startsWith("/gastos")) {
+    const kinds: Record<string, "payables" | "expenses" | "costcenters"> = {
+      "/contas": "payables",
+      "/gastos": "expenses",
+      "/centros": "costcenters",
+    };
+    const kind = Object.keys(kinds).find((k) => cmd.startsWith(k));
+    if (kind) {
       const s = await ownerByChat(chatId);
       if (!s) {
         await sendMessage(chatId, "Este chat ainda não está vinculado. Use Configurações › Telegram no app.");
       } else {
-        await sendReports(s.ownerId, cmd.startsWith("/contas") ? "payables" : "expenses");
+        await sendReports(s.ownerId, kinds[kind]);
       }
       return NextResponse.json({ ok: true });
     }
 
-    await sendMessage(chatId, "Comandos: /contas — contas a pagar por conta · /gastos — gastos do mês por categoria.");
+    await sendMessage(
+      chatId,
+      "Comandos: /contas — contas a pagar por conta · /gastos — gastos do mês por categoria · /centros — resultado por centro de custo.",
+    );
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("telegram webhook:", (err as Error).message);

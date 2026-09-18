@@ -9,8 +9,9 @@ import crypto from "node:crypto";
 import { getAdminDb } from "./firebase-admin";
 import { buildPayablesMessages } from "@/lib/reports/payables-telegram";
 import { buildExpensesMessages } from "@/lib/reports/expenses-telegram";
+import { buildCostCentersMessages } from "@/lib/reports/costcenters-telegram";
 import { todayBr } from "@/lib/br/date";
-import type { Account, Bill, Category, Transaction } from "@/types";
+import type { Account, Bill, Category, CostCenter, Transaction } from "@/types";
 
 export interface TelegramSettings {
   ownerId: string;
@@ -141,7 +142,21 @@ export async function expensesReport(ownerId: string): Promise<string[]> {
   return buildExpensesMessages(txs, cats, todayBr());
 }
 
-export type ReportKind = "payables" | "expenses" | "all";
+/** Monta o relatório "resultado do mês por centro de custo" do dono. */
+export async function costCentersReport(ownerId: string): Promise<string[]> {
+  const db = getAdminDb();
+  const [txSnap, catSnap, ccSnap] = await Promise.all([
+    db.collection("transactions").where("ownerId", "==", ownerId).get(),
+    db.collection("categories").where("ownerId", "==", ownerId).get(),
+    db.collection("costCenters").where("ownerId", "==", ownerId).get(),
+  ]);
+  const txs = txSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as Transaction);
+  const cats = catSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as Category);
+  const ccs = ccSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as CostCenter);
+  return buildCostCentersMessages(txs, cats, ccs, todayBr());
+}
+
+export type ReportKind = "payables" | "expenses" | "costcenters" | "all";
 
 /** Envia o(s) relatório(s) ao chat vinculado do dono. Devolve quantas mensagens. */
 export async function sendReports(ownerId: string, kind: ReportKind = "all"): Promise<number> {
@@ -150,6 +165,7 @@ export async function sendReports(ownerId: string, kind: ReportKind = "all"): Pr
   const messages: string[] = [];
   if (kind === "payables" || kind === "all") messages.push(...(await payablesReport(ownerId)));
   if (kind === "expenses" || kind === "all") messages.push(...(await expensesReport(ownerId)));
+  if (kind === "costcenters" || kind === "all") messages.push(...(await costCentersReport(ownerId)));
   try {
     for (const m of messages) await sendMessage(s.chatId, m);
     await saveSettings(ownerId, { lastSentAt: Date.now(), lastError: null });
@@ -165,7 +181,7 @@ export function sendPayablesReport(ownerId: string): Promise<number> {
   return sendReports(ownerId, "payables");
 }
 
-/** Envio diário (contas a pagar + gastos por categoria) a todos os donos vinculados. */
+/** Envio diário (contas a pagar, gastos por categoria, centros de custo) a todos os donos vinculados. */
 export async function runDailyPayables(): Promise<{
   owners: number;
   details: Array<{ ownerId: string; messages?: number; error?: string }>;

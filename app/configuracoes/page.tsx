@@ -85,10 +85,12 @@ function TelegramPanel() {
     <div className="panel">
       <h2>Notificações no Telegram</h2>
       <p className="muted" style={{ marginTop: 0 }}>
-        Todo dia às <strong>7h</strong> o robô manda duas mensagens: as <strong>contas a pagar em aberto,
-        agrupadas por conta</strong> (atrasadas em vermelho, vencendo hoje em amarelo) e os{" "}
-        <strong>gastos do mês até hoje, por categoria</strong> (com subcategorias e percentual). No Telegram,
-        mande <code>/contas</code> ou <code>/gastos</code> para receber a qualquer hora.
+        Todo dia às <strong>7h</strong> o robô manda três mensagens: as <strong>contas a pagar em aberto,
+        agrupadas por conta</strong> (atrasadas em vermelho, vencendo hoje em amarelo), os{" "}
+        <strong>gastos do mês até hoje, por categoria</strong> (com subcategorias e percentual) e o{" "}
+        <strong>resultado do mês por centro de custo</strong> (receitas, despesas e saldo de cada um). No
+        Telegram, mande <code>/contas</code>, <code>/gastos</code> ou <code>/centros</code> para receber a
+        qualquer hora.
       </p>
 
       {!st ? (
