@@ -10,9 +10,10 @@
 //   /gastos          — manda agora os gastos do mês por categoria.
 //   /centros         — manda agora o resultado do mês por centro de custo.
 //   /tudo            — manda os três de uma vez.
+//   /centro <nome>   — detalha um centro de custo por categoria (ex.: /centro Ituiutaba).
 
 import { NextResponse } from "next/server";
-import { linkByCode, ownerByChat, sendMessage, sendReports } from "@/server/telegram";
+import { linkByCode, ownerByChat, sendCostCenterDetail, sendMessage, sendReports } from "@/server/telegram";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,7 +38,9 @@ export async function POST(req: Request) {
     if (!msg?.text) return NextResponse.json({ ok: true });
     const chatId = String(msg.chat.id);
     const chatName = msg.chat.title || msg.chat.first_name || msg.chat.username || null;
-    const [cmd, arg] = msg.text.trim().split(/\s+/, 2);
+    const text = msg.text.trim();
+    const cmd = text.split(/\s+/, 1)[0];
+    const arg = text.slice(cmd.length).trim();
 
     if (cmd.startsWith("/start")) {
       if (!arg) {
@@ -64,6 +67,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    // /centro <nome> antes de /centros (prefixo em comum).
+    if (/^\/centro(@\w+)?$/i.test(cmd)) {
+      const s = await ownerByChat(chatId);
+      if (!s) {
+        await sendMessage(chatId, "Este chat ainda não está vinculado. Use Configurações › Telegram no app.");
+      } else {
+        await sendCostCenterDetail(s.ownerId, arg);
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     const kinds: Record<string, "payables" | "expenses" | "costcenters" | "all"> = {
       "/contas": "payables",
       "/gastos": "expenses",
@@ -83,7 +97,7 @@ export async function POST(req: Request) {
 
     await sendMessage(
       chatId,
-      "Comandos: /tudo — os três relatórios · /contas — contas a pagar por conta · /gastos — gastos do mês por categoria · /centros — resultado por centro de custo.",
+      "Comandos: /tudo — os três relatórios · /contas — contas a pagar por conta · /gastos — gastos do mês por categoria · /centros — resultado por centro de custo · /centro nome — detalhe de um centro por categoria.",
     );
     return NextResponse.json({ ok: true });
   } catch (err) {

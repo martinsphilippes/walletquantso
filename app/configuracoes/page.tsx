@@ -90,7 +90,8 @@ function TelegramPanel() {
         <strong>gastos do mês até hoje, por categoria</strong> (com subcategorias e percentual) e o{" "}
         <strong>resultado do mês por centro de custo</strong> (receitas, despesas e saldo de cada um). No
         Telegram, mande <code>/tudo</code> para receber os três a qualquer hora, ou <code>/contas</code>,{" "}
-        <code>/gastos</code> e <code>/centros</code> para um só.
+        <code>/gastos</code> e <code>/centros</code> para um só. <code>/centro nome</code> (ex.:{" "}
+        <code>/centro Ituiutaba</code>) detalha as receitas e despesas de um centro por categoria.
       </p>
 
       {!st ? (

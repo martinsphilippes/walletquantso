@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildCostCentersMessages, resultByCostCenter } from "./costcenters-telegram";
+import { buildCostCenterDetailMessages, buildCostCentersMessages, resultByCostCenter } from "./costcenters-telegram";
 import type { Category, CostCenter, Transaction } from "@/types";
 
 const cc = (id: string, name: string): CostCenter => ({ id, ownerId: "u", name, createdAt: 0 });
@@ -64,11 +64,44 @@ describe("buildCostCentersMessages", () => {
       "2026-09-18",
     );
     expect(msgs).toHaveLength(1);
-    const m = msgs[0].replace(/ /g, " ");
+    const m = msgs[0].replace(/\u00a0/g, " ");
     expect(m).toContain("Resultado por centro de custo — setembro/2026</b> (até 18/09)");
     expect(m).toContain("Receitas <b>R$ 100,00</b> · Despesas <b>R$ 40,00</b>");
     expect(m).toContain("Resultado: 🟢 <b>R$ 60,00</b>");
     expect(m).toContain("🟢 <b>Gialla</b> — resultado <b>R$ 60,00</b>\n   ↑ receitas R$ 100,00\n   ↓ despesas R$ 40,00");
     expect(m).toContain("▫️ <b>Qpaozinho</b> — sem movimento");
+  });
+});
+
+describe("buildCostCenterDetailMessages", () => {
+  const txs = [
+    tx({ type: "income", amount: 1000, categoryId: "venda-g" }),
+    tx({ amount: 300, categoryId: "mot-d" }),
+    tx({ amount: 100, categoryId: "comb", costCenterId: "gialla" }),
+    tx({ amount: 50, categoryId: "comb", costCenterId: "qp" }), // outro centro
+    tx({ amount: 999, categoryId: "mot-d", date: "2026-08-01" }), // mês passado
+  ];
+
+  it("detalha receitas e despesas do centro por categoria e subcategoria", () => {
+    const msgs = buildCostCenterDetailMessages(txs, categories, centers, "2026-09-18", "gialla");
+    expect(msgs).toHaveLength(1);
+    const m = msgs[0].replace(/\u00a0/g, " ");
+    expect(m).toContain("<b>🏢 Gialla — setembro/2026</b> (até 18/09)");
+    expect(m).toContain("Receitas <b>R$ 1.000,00</b> · Despesas <b>R$ 400,00</b>");
+    expect(m).toContain("Resultado: 🟢 <b>R$ 600,00</b> · 3 lançamento(s)");
+    expect(m).toContain("↑ Receitas por categoria</b>\n🏷 Entregas Gialla — <b>R$ 1.000,00</b> (100%)");
+    expect(m).toContain("🏷 Motoristas — <b>R$ 300,00</b> (75%)\n      ↳ Diárias — R$ 300,00");
+    expect(m).toContain("🏷 Combustível — <b>R$ 100,00</b> (25%)");
+  });
+
+  it("busca sem acento e sem maiúsculas; sem resultado lista os centros; ambíguo pede mais", () => {
+    expect(buildCostCenterDetailMessages(txs, categories, centers, "2026-09-18", "GIALLA")[0]).toContain("🏢 Gialla");
+    const none = buildCostCenterDetailMessages(txs, categories, centers, "2026-09-18", "xyz")[0];
+    expect(none).toContain('Nenhum centro de custo chamado "<b>xyz</b>"');
+    expect(none).toContain("Administrativo · Gialla · Qpaozinho");
+    const many = buildCostCenterDetailMessages(txs, categories, [...centers, cc("g2", "Gialla Norte")], "2026-09-18", "gialla");
+    expect(many[0]).toContain("🏢 Gialla —"); // nome exato vence o parcial
+    const amb = buildCostCenterDetailMessages(txs, categories, [...centers, cc("g2", "Gialla Norte")], "2026-09-18", "gial");
+    expect(amb[0]).toContain("Vários centros combinam");
   });
 });

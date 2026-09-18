@@ -9,7 +9,7 @@ import crypto from "node:crypto";
 import { getAdminDb } from "./firebase-admin";
 import { buildPayablesMessages } from "@/lib/reports/payables-telegram";
 import { buildExpensesMessages } from "@/lib/reports/expenses-telegram";
-import { buildCostCentersMessages } from "@/lib/reports/costcenters-telegram";
+import { buildCostCenterDetailMessages, buildCostCentersMessages } from "@/lib/reports/costcenters-telegram";
 import { todayBr } from "@/lib/br/date";
 import type { Account, Bill, Category, CostCenter, Transaction } from "@/types";
 
@@ -154,6 +154,29 @@ export async function costCentersReport(ownerId: string): Promise<string[]> {
   const cats = catSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as Category);
   const ccs = ccSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as CostCenter);
   return buildCostCentersMessages(txs, cats, ccs, todayBr());
+}
+
+/** Detalhe de um centro de custo (receitas e despesas por categoria). */
+export async function costCenterDetailReport(ownerId: string, query: string): Promise<string[]> {
+  const db = getAdminDb();
+  const [txSnap, catSnap, ccSnap] = await Promise.all([
+    db.collection("transactions").where("ownerId", "==", ownerId).get(),
+    db.collection("categories").where("ownerId", "==", ownerId).get(),
+    db.collection("costCenters").where("ownerId", "==", ownerId).get(),
+  ]);
+  const txs = txSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as Transaction);
+  const cats = catSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as Category);
+  const ccs = ccSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as CostCenter);
+  return buildCostCenterDetailMessages(txs, cats, ccs, todayBr(), query);
+}
+
+/** Manda o detalhe de um centro ao chat vinculado do dono. */
+export async function sendCostCenterDetail(ownerId: string, query: string): Promise<number> {
+  const s = await getSettings(ownerId);
+  if (!s?.chatId) throw new Error("Telegram ainda não vinculado.");
+  const messages = await costCenterDetailReport(ownerId, query);
+  for (const m of messages) await sendMessage(s.chatId, m);
+  return messages.length;
 }
 
 export type ReportKind = "payables" | "expenses" | "costcenters" | "all";
