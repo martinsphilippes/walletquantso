@@ -8,8 +8,9 @@
 import crypto from "node:crypto";
 import { getAdminDb } from "./firebase-admin";
 import { buildPayablesMessages } from "@/lib/reports/payables-telegram";
+import { buildExpensesMessages } from "@/lib/reports/expenses-telegram";
 import { todayBr } from "@/lib/br/date";
-import type { Account, Bill } from "@/types";
+import type { Account, Bill, Category, Transaction } from "@/types";
 
 export interface TelegramSettings {
   ownerId: string;
@@ -128,11 +129,27 @@ export async function payablesReport(ownerId: string): Promise<string[]> {
   return buildPayablesMessages(bills, accounts, todayBr());
 }
 
-/** Envia o relatório ao chat vinculado do dono. Devolve quantas mensagens. */
-export async function sendPayablesReport(ownerId: string): Promise<number> {
+/** Monta o relatório "gastos do mês por categoria" do dono. */
+export async function expensesReport(ownerId: string): Promise<string[]> {
+  const db = getAdminDb();
+  const [txSnap, catSnap] = await Promise.all([
+    db.collection("transactions").where("ownerId", "==", ownerId).get(),
+    db.collection("categories").where("ownerId", "==", ownerId).get(),
+  ]);
+  const txs = txSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as Transaction);
+  const cats = catSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as Category);
+  return buildExpensesMessages(txs, cats, todayBr());
+}
+
+export type ReportKind = "payables" | "expenses" | "all";
+
+/** Envia o(s) relatório(s) ao chat vinculado do dono. Devolve quantas mensagens. */
+export async function sendReports(ownerId: string, kind: ReportKind = "all"): Promise<number> {
   const s = await getSettings(ownerId);
   if (!s?.chatId) throw new Error("Telegram ainda não vinculado.");
-  const messages = await payablesReport(ownerId);
+  const messages: string[] = [];
+  if (kind === "payables" || kind === "all") messages.push(...(await payablesReport(ownerId)));
+  if (kind === "expenses" || kind === "all") messages.push(...(await expensesReport(ownerId)));
   try {
     for (const m of messages) await sendMessage(s.chatId, m);
     await saveSettings(ownerId, { lastSentAt: Date.now(), lastError: null });
@@ -143,7 +160,12 @@ export async function sendPayablesReport(ownerId: string): Promise<number> {
   return messages.length;
 }
 
-/** Envio diário: todos os donos vinculados e com envio ligado. */
+/** Compatibilidade: só as contas a pagar. */
+export function sendPayablesReport(ownerId: string): Promise<number> {
+  return sendReports(ownerId, "payables");
+}
+
+/** Envio diário (contas a pagar + gastos por categoria) a todos os donos vinculados. */
 export async function runDailyPayables(): Promise<{
   owners: number;
   details: Array<{ ownerId: string; messages?: number; error?: string }>;
@@ -154,7 +176,7 @@ export async function runDailyPayables(): Promise<{
     const s = doc.data() as TelegramSettings;
     if (!s.chatId) continue;
     try {
-      details.push({ ownerId: doc.id, messages: await sendPayablesReport(doc.id) });
+      details.push({ ownerId: doc.id, messages: await sendReports(doc.id, "all") });
     } catch (err) {
       details.push({ ownerId: doc.id, error: (err as Error).message });
     }

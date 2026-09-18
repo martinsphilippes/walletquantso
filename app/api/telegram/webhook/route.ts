@@ -7,9 +7,10 @@
 // Comandos:
 //   /start <código>  — vincula este chat ao dono que gerou o código no app.
 //   /contas          — manda agora as contas a pagar por conta.
+//   /gastos          — manda agora os gastos do mês por categoria.
 
 import { NextResponse } from "next/server";
-import { linkByCode, ownerByChat, sendMessage, sendPayablesReport } from "@/server/telegram";
+import { linkByCode, ownerByChat, sendMessage, sendReports } from "@/server/telegram";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,9 +46,12 @@ export async function POST(req: Request) {
       } else {
         const owner = await linkByCode(arg, chatId, chatName);
         if (owner) {
-          await sendMessage(chatId, "✅ Vinculado! Você vai receber as contas a pagar por conta todo dia de manhã. Mande /contas para receber agora.");
+          await sendMessage(
+            chatId,
+            "✅ Vinculado! Todo dia de manhã você recebe as contas a pagar por conta e os gastos do mês por categoria. Comandos: /contas e /gastos.",
+          );
           try {
-            await sendPayablesReport(owner);
+            await sendReports(owner, "all");
           } catch {
             /* o dono vê o erro na tela de Configurações */
           }
@@ -58,17 +62,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    if (cmd.startsWith("/contas")) {
+    if (cmd.startsWith("/contas") || cmd.startsWith("/gastos")) {
       const s = await ownerByChat(chatId);
       if (!s) {
         await sendMessage(chatId, "Este chat ainda não está vinculado. Use Configurações › Telegram no app.");
       } else {
-        await sendPayablesReport(s.ownerId);
+        await sendReports(s.ownerId, cmd.startsWith("/contas") ? "payables" : "expenses");
       }
       return NextResponse.json({ ok: true });
     }
 
-    await sendMessage(chatId, "Comandos: /contas — contas a pagar por conta, agora.");
+    await sendMessage(chatId, "Comandos: /contas — contas a pagar por conta · /gastos — gastos do mês por categoria.");
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("telegram webhook:", (err as Error).message);

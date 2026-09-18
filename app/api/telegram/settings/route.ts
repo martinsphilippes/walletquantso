@@ -2,7 +2,7 @@
 //
 // GET  /api/telegram/settings           — estado da vinculação + link t.me.
 // POST /api/telegram/settings {action}  — "link" (novo código + registra o
-//      webhook), "send" (manda o relatório agora), "enable"/"disable"
+//      webhook), "send" (manda os relatórios agora), "enable"/"disable"
 //      (envio diário), "unlink" (desvincula).
 // Autenticado pelo ID token do Firebase (Authorization: Bearer <token>).
 
@@ -13,7 +13,7 @@ import {
   getSettings,
   newLinkCode,
   saveSettings,
-  sendPayablesReport,
+  sendReports,
   setWebhook,
 } from "@/server/telegram";
 
@@ -81,7 +81,7 @@ export async function POST(req: Request) {
       await setWebhook(base);
       await newLinkCode(uid);
     } else if (action === "send") {
-      const n = await sendPayablesReport(uid);
+      const n = await sendReports(uid, "all");
       return NextResponse.json({ ok: true, messages: n, ...(await state(uid)) });
     } else if (action === "enable" || action === "disable") {
       await saveSettings(uid, { enabled: action === "enable" });
