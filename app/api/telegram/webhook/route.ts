@@ -11,9 +11,10 @@
 //   /centros         — manda agora o resultado do mês por centro de custo.
 //   /tudo            — manda os três de uma vez.
 //   /centro <nome>   — detalha um centro de custo por categoria (ex.: /centro Ituiutaba).
+//   /ajuda           — lista de comandos (qualquer outro texto também).
 
 import { NextResponse } from "next/server";
-import { linkByCode, ownerByChat, sendCostCenterDetail, sendMessage, sendReports } from "@/server/telegram";
+import { helpText, linkByCode, ownerByChat, sendCostCenterDetail, sendMessage, sendReports } from "@/server/telegram";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -95,10 +96,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    await sendMessage(
-      chatId,
-      "Comandos: /tudo — os três relatórios · /contas — contas a pagar por conta · /gastos — gastos do mês por categoria · /centros — resultado por centro de custo · /centro nome — detalhe de um centro por categoria.",
-    );
+    await sendMessage(chatId, helpText());
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("telegram webhook:", (err as Error).message);

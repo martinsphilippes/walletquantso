@@ -64,7 +64,26 @@ export async function botUsername(): Promise<string> {
   return me.username;
 }
 
-/** Registra o webhook do robô apontando para este app. */
+/** Comandos do robô, como aparecem no menu "/" do Telegram. */
+export const BOT_COMMANDS: Array<{ command: string; description: string }> = [
+  { command: "tudo", description: "Os três relatórios de uma vez" },
+  { command: "contas", description: "Contas a pagar em aberto, por conta" },
+  { command: "gastos", description: "Gastos do mês por categoria" },
+  { command: "centros", description: "Resultado do mês por centro de custo" },
+  { command: "centro", description: "Detalhe de um centro: /centro nome" },
+  { command: "ajuda", description: "Lista de comandos" },
+];
+
+/** Texto de ajuda (HTML). */
+export function helpText(): string {
+  return (
+    "<b>Comandos do WalletQuantso</b>\n" +
+    BOT_COMMANDS.map((c) => `/${c.command} — ${c.description}`).join("\n") +
+    "\n\nTodo dia às 7h chegam /contas, /gastos e /centros automaticamente."
+  );
+}
+
+/** Registra o webhook do robô apontando para este app e o menu de comandos. */
 export async function setWebhook(baseUrl: string): Promise<void> {
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
   if (!secret) throw new Error("TELEGRAM_WEBHOOK_SECRET não configurado no servidor.");
@@ -74,6 +93,15 @@ export async function setWebhook(baseUrl: string): Promise<void> {
     allowed_updates: ["message"],
     drop_pending_updates: true,
   });
+  await ensureCommands(true);
+}
+
+let commandsRegistered = false;
+/** Garante o menu de comandos no Telegram (uma vez por instância do servidor). */
+export async function ensureCommands(force = false): Promise<void> {
+  if (commandsRegistered && !force) return;
+  await api("setMyCommands", { commands: BOT_COMMANDS });
+  commandsRegistered = true;
 }
 
 export async function getSettings(ownerId: string): Promise<TelegramSettings | null> {

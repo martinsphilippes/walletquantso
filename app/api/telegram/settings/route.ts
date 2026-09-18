@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { verifyIdToken } from "@/server/firebase-admin";
 import {
   botUsername,
+  ensureCommands,
   getSettings,
   newLinkCode,
   saveSettings,
@@ -40,6 +41,7 @@ async function state(ownerId: string) {
   let username: string | null = null;
   try {
     username = await botUsername();
+    await ensureCommands();
   } catch {
     username = null;
   }
