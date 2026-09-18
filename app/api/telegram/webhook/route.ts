@@ -9,6 +9,7 @@
 //   /contas          — manda agora as contas a pagar por conta.
 //   /gastos          — manda agora os gastos do mês por categoria.
 //   /centros         — manda agora o resultado do mês por centro de custo.
+//   /tudo            — manda os três de uma vez.
 
 import { NextResponse } from "next/server";
 import { linkByCode, ownerByChat, sendMessage, sendReports } from "@/server/telegram";
@@ -49,7 +50,7 @@ export async function POST(req: Request) {
         if (owner) {
           await sendMessage(
             chatId,
-            "✅ Vinculado! Todo dia de manhã você recebe as contas a pagar por conta, os gastos do mês por categoria e o resultado por centro de custo. Comandos: /contas, /gastos e /centros.",
+            "✅ Vinculado! Todo dia de manhã você recebe as contas a pagar por conta, os gastos do mês por categoria e o resultado por centro de custo. Comandos: /contas, /gastos, /centros ou /tudo (os três).",
           );
           try {
             await sendReports(owner, "all");
@@ -63,10 +64,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    const kinds: Record<string, "payables" | "expenses" | "costcenters"> = {
+    const kinds: Record<string, "payables" | "expenses" | "costcenters" | "all"> = {
       "/contas": "payables",
       "/gastos": "expenses",
       "/centros": "costcenters",
+      "/tudo": "all",
     };
     const kind = Object.keys(kinds).find((k) => cmd.startsWith(k));
     if (kind) {
@@ -81,7 +83,7 @@ export async function POST(req: Request) {
 
     await sendMessage(
       chatId,
-      "Comandos: /contas — contas a pagar por conta · /gastos — gastos do mês por categoria · /centros — resultado por centro de custo.",
+      "Comandos: /tudo — os três relatórios · /contas — contas a pagar por conta · /gastos — gastos do mês por categoria · /centros — resultado por centro de custo.",
     );
     return NextResponse.json({ ok: true });
   } catch (err) {

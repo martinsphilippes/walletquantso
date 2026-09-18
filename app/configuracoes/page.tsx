@@ -89,8 +89,8 @@ function TelegramPanel() {
         agrupadas por conta</strong> (atrasadas em vermelho, vencendo hoje em amarelo), os{" "}
         <strong>gastos do mês até hoje, por categoria</strong> (com subcategorias e percentual) e o{" "}
         <strong>resultado do mês por centro de custo</strong> (receitas, despesas e saldo de cada um). No
-        Telegram, mande <code>/contas</code>, <code>/gastos</code> ou <code>/centros</code> para receber a
-        qualquer hora.
+        Telegram, mande <code>/tudo</code> para receber os três a qualquer hora, ou <code>/contas</code>,{" "}
+        <code>/gastos</code> e <code>/centros</code> para um só.
       </p>
 
       {!st ? (
