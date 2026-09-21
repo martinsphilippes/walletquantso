@@ -10,8 +10,9 @@ import { getAdminDb } from "./firebase-admin";
 import { buildPayablesMessages } from "@/lib/reports/payables-telegram";
 import { buildExpensesMessages } from "@/lib/reports/expenses-telegram";
 import { buildCostCenterDetailMessages, buildCostCentersMessages } from "@/lib/reports/costcenters-telegram";
+import { buildDayBillsMessages, HELP_DATES, parseDateArg } from "@/lib/reports/day-telegram";
 import { todayBr } from "@/lib/br/date";
-import type { Account, Bill, Category, CostCenter, Transaction } from "@/types";
+import type { Account, Bill, Category, Contact, CostCenter, Transaction } from "@/types";
 
 export interface TelegramSettings {
   ownerId: string;
@@ -71,6 +72,8 @@ export const BOT_COMMANDS: Array<{ command: string; description: string }> = [
   { command: "gastos", description: "Gastos do mês por categoria" },
   { command: "centros", description: "Resultado do mês por centro de custo" },
   { command: "centro", description: "Detalhe de um centro: /centro nome" },
+  { command: "pagar", description: "A pagar de um dia: /pagar 25/09" },
+  { command: "receber", description: "A receber de um dia: /receber sexta" },
   { command: "ajuda", description: "Lista de comandos" },
 ];
 
@@ -203,6 +206,34 @@ export async function sendCostCenterDetail(ownerId: string, query: string): Prom
   const s = await getSettings(ownerId);
   if (!s?.chatId) throw new Error("Telegram ainda não vinculado.");
   const messages = await costCenterDetailReport(ownerId, query);
+  for (const m of messages) await sendMessage(s.chatId, m);
+  return messages.length;
+}
+
+/** Títulos de um dia/intervalo (a pagar ou a receber) para o chat do dono. */
+export async function sendDayBills(
+  ownerId: string,
+  kind: "payable" | "receivable",
+  dateText: string,
+): Promise<number> {
+  const s = await getSettings(ownerId);
+  if (!s?.chatId) throw new Error("Telegram ainda não vinculado.");
+  const today = todayBr();
+  const range = parseDateArg(dateText, today);
+  if (!range) {
+    await sendMessage(s.chatId, `Não entendi a data "<b>${dateText.replace(/[<>&]/g, "")}</b>".\n${HELP_DATES}`);
+    return 1;
+  }
+  const db = getAdminDb();
+  const [billsSnap, accountsSnap, contactsSnap] = await Promise.all([
+    db.collection("bills").where("ownerId", "==", ownerId).get(),
+    db.collection("accounts").where("ownerId", "==", ownerId).get(),
+    db.collection("contacts").where("ownerId", "==", ownerId).get(),
+  ]);
+  const bills = billsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as Bill);
+  const accounts = accountsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as Account);
+  const contacts = contactsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as Contact);
+  const messages = buildDayBillsMessages(kind, bills, accounts, contacts, range, today);
   for (const m of messages) await sendMessage(s.chatId, m);
   return messages.length;
 }

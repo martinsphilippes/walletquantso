@@ -11,10 +11,20 @@
 //   /centros         — manda agora o resultado do mês por centro de custo.
 //   /tudo            — manda os três de uma vez.
 //   /centro <nome>   — detalha um centro de custo por categoria (ex.: /centro Ituiutaba).
+//   /pagar <data>    — contas a pagar que vencem no dia/intervalo (ex.: /pagar 25/09).
+//   /receber <data>  — contas a receber que vencem no dia/intervalo (ex.: /receber sexta).
 //   /ajuda           — lista de comandos (qualquer outro texto também).
 
 import { NextResponse } from "next/server";
-import { helpText, linkByCode, ownerByChat, sendCostCenterDetail, sendMessage, sendReports } from "@/server/telegram";
+import {
+  helpText,
+  linkByCode,
+  ownerByChat,
+  sendCostCenterDetail,
+  sendDayBills,
+  sendMessage,
+  sendReports,
+} from "@/server/telegram";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,6 +74,17 @@ export async function POST(req: Request) {
         } else {
           await sendMessage(chatId, "Código inválido ou já usado. Gere um novo em Configurações › Telegram.");
         }
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    const dayKind = /^\/pagar(@\w+)?$/i.test(cmd) ? "payable" : /^\/receber(@\w+)?$/i.test(cmd) ? "receivable" : null;
+    if (dayKind) {
+      const s = await ownerByChat(chatId);
+      if (!s) {
+        await sendMessage(chatId, "Este chat ainda não está vinculado. Use Configurações › Telegram no app.");
+      } else {
+        await sendDayBills(s.ownerId, dayKind, arg);
       }
       return NextResponse.json({ ok: true });
     }

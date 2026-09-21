@@ -91,7 +91,10 @@ function TelegramPanel() {
         <strong>resultado do mês por centro de custo</strong> (receitas, despesas e saldo de cada um). No
         Telegram, mande <code>/tudo</code> para receber os três a qualquer hora, ou <code>/contas</code>,{" "}
         <code>/gastos</code> e <code>/centros</code> para um só. <code>/centro nome</code> (ex.:{" "}
-        <code>/centro Ituiutaba</code>) detalha as receitas e despesas de um centro por categoria.
+        <code>/centro Ituiutaba</code>) detalha as receitas e despesas de um centro por categoria.{" "}
+        <code>/pagar data</code> e <code>/receber data</code> (ex.: <code>/pagar 25/09</code>,{" "}
+        <code>/receber sexta</code>, <code>/pagar 21/09 a 25/09</code>) listam os títulos que vencem naquele
+        dia ou período.
       </p>
 
       {!st ? (
