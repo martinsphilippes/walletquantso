@@ -3,10 +3,10 @@
 //
 // Interpreta a data pedida em português (hoje, amanhã, 25, 25/09, sexta,
 // 21/09 a 25/09…) e lista os títulos em aberto que vencem naquele dia (ou
-// intervalo): a pagar agrupados por conta financeira, a receber agrupados
-// por contato/cliente. No fim, o total e os atrasados até a data.
+// intervalo), organizados por centro de custo com subtotal, total geral e
+// os atrasados anteriores à data.
 
-import type { Account, Bill, Contact } from "@/types";
+import type { Account, Bill, Category, Contact, CostCenter } from "@/types";
 import { remaining } from "@/lib/bills/status";
 import { escapeHtml } from "./payables-telegram";
 
@@ -96,20 +96,35 @@ export const HELP_DATES =
   "Datas aceitas: <code>hoje</code>, <code>amanhã</code>, <code>25</code>, <code>25/09</code>, <code>25/09/2026</code>, " +
   "<code>sexta</code>, ou um intervalo como <code>21/09 a 25/09</code>.";
 
+/** Centro de custo de um título: o dele, ou o herdado da categoria (ou da mãe). */
+function costCenterOfBill(b: Bill, byCat: Map<string, Category>): string | null {
+  if (b.costCenterId) return b.costCenterId;
+  const cat = b.categoryId ? byCat.get(b.categoryId) : undefined;
+  if (!cat) return null;
+  if (cat.costCenterId) return cat.costCenterId;
+  const parent = cat.parentId ? byCat.get(cat.parentId) : undefined;
+  return parent?.costCenterId ?? null;
+}
+
 /**
  * Títulos em aberto de um tipo (a pagar / a receber) vencendo no intervalo,
- * agrupados por conta (a pagar) ou por contato (a receber).
+ * organizados por centro de custo: total geral no topo e, em cada centro,
+ * o subtotal e os títulos (descrição, contato, conta e valor).
  */
 export function buildDayBillsMessages(
   kind: "payable" | "receivable",
   bills: Bill[],
   accounts: Account[],
   contacts: Contact[],
+  categories: Category[],
+  costCenters: CostCenter[],
   range: DateRange,
   todayIso: string,
 ): string[] {
   const accName = new Map(accounts.map((a) => [a.id!, a.name]));
   const contactName = new Map(contacts.map((c) => [c.id!, c.name]));
+  const ccName = new Map(costCenters.map((c) => [c.id!, c.name]));
+  const byCat = new Map(categories.map((c) => [c.id!, c]));
   const isPay = kind === "payable";
   const title = isPay ? "Contas a pagar" : "Contas a receber";
   const icon = isPay ? "📤" : "📥";
@@ -118,31 +133,28 @@ export function buildDayBillsMessages(
   const inRange = open
     .filter((b) => b.dueDate >= range.start && b.dueDate <= range.end)
     .sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : a.description.localeCompare(b.description, "pt-BR")));
-  const overdue = round(
-    open.filter((b) => b.dueDate < range.start).reduce((s, b) => s + remaining(b), 0),
-  );
+  const overdue = round(open.filter((b) => b.dueDate < range.start).reduce((s, b) => s + remaining(b), 0));
   const total = round(inRange.reduce((s, b) => s + remaining(b), 0));
 
-  // Agrupa: a pagar por conta financeira; a receber por contato/cliente.
   const groups = new Map<string, { name: string; total: number; bills: Bill[] }>();
   for (const b of inRange) {
-    const key = isPay ? (b.accountId ?? "") : (b.contactId ?? "");
-    const name = isPay
-      ? b.accountId ? (accName.get(b.accountId) ?? "Conta removida") : "Sem conta definida"
-      : b.contactId ? (contactName.get(b.contactId) ?? "Contato removido") : "Sem cliente definido";
+    const ccId = costCenterOfBill(b, byCat);
+    const key = ccId ?? "";
+    const name = ccId ? (ccName.get(ccId) ?? "Centro removido") : "Sem centro de custo";
     const g = groups.get(key) ?? { name, total: 0, bills: [] };
     g.total = round(g.total + remaining(b));
     g.bills.push(b);
     groups.set(key, g);
   }
+  // Maior subtotal primeiro; "Sem centro de custo" por último.
   const ordered = [...groups.entries()]
-    .sort(([ka, a], [kb, b]) => (ka === "" ? 1 : kb === "" ? -1 : a.name.localeCompare(b.name, "pt-BR")))
+    .sort(([ka, a], [kb, b]) => (ka === "" ? 1 : kb === "" ? -1 : b.total - a.total || a.name.localeCompare(b.name, "pt-BR")))
     .map(([, g]) => g);
 
   const multi = range.start !== range.end;
   const header =
     `<b>${icon} ${title} — ${describeRange(range, todayIso)}</b>\n` +
-    `${inRange.length} título(s) · total <b>${brl(total)}</b>` +
+    `Total: <b>${brl(total)}</b> · ${inRange.length} título(s) · ${ordered.length} centro(s)` +
     (overdue > 0 ? `\n🔴 Atrasados antes desta data: ${brl(overdue)}` : "");
 
   const messages: string[] = [];
@@ -159,15 +171,17 @@ export function buildDayBillsMessages(
     push(`Nenhum título ${isPay ? "a pagar" : "a receber"} ${multi ? "neste período" : "neste dia"}. 🎉`);
   }
   for (const g of ordered) {
-    let block = `<b>${isPay ? "🏦" : "👤"} ${escapeHtml(g.name)}</b> — ${g.bills.length} título(s) · <b>${brl(g.total)}</b>`;
+    const pct = total > 0 ? Math.round((g.total / total) * 100) : 0;
+    let block = `<b>🏢 ${escapeHtml(g.name)} — ${brl(g.total)}</b> (${pct}%)`;
     for (const b of g.bills) {
-      const who = isPay && b.contactId ? ` · ${escapeHtml(contactName.get(b.contactId) ?? "")}` : "";
-      const acc = !isPay && b.accountId ? ` · ${escapeHtml(accName.get(b.accountId) ?? "")}` : "";
+      const who = b.contactId ? contactName.get(b.contactId) : "";
+      const acc = b.accountId ? accName.get(b.accountId) : "";
+      const extras = [who, acc].filter(Boolean).map((x) => escapeHtml(x!)).join(" · ");
       const day = multi ? `${brDate(b.dueDate).slice(0, 5)} · ` : "";
-      const line = `• ${day}${escapeHtml(b.description)}${who}${acc} · ${brl(remaining(b))}`;
+      const line = `• ${day}${escapeHtml(b.description)} — <b>${brl(remaining(b))}</b>${extras ? ` <i>(${extras})</i>` : ""}`;
       if (block.length + line.length + 1 > MAX_MESSAGE) {
         push(block);
-        block = `<b>${escapeHtml(g.name)}</b> (continuação)`;
+        block = `<b>🏢 ${escapeHtml(g.name)}</b> (continuação)`;
       }
       block += `\n${line}`;
     }
