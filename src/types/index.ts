@@ -349,6 +349,8 @@ export interface RideEntry {
   /** Valor avulso (não ligado a entregas), com a justificativa. */
   extraValue?: number;
   extraDescription?: string | null;
+  /** Título do motorista quitado no Contas a pagar: some da lista da tela. */
+  paidAt?: number | null;
   notes: string | null;
   createdAt: number;
   createdBy: string;

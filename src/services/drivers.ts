@@ -12,8 +12,11 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
+  query,
   setDoc,
   updateDoc,
+  where,
   type DocumentData,
 } from "firebase/firestore";
 import { db } from "./firebase";
@@ -42,6 +45,26 @@ export function removeDriver(id: string): Promise<void> {
 }
 
 // ── Corridas ──────────────────────────────────────────────────────────────
+
+/**
+ * Lançamentos ligados a um título. Chamado pelo Contas a pagar quando o
+ * título é quitado (marca `paidAt`), reaberto (limpa) ou excluído (volta
+ * para "em aberto", sem billId). Só o dono chega aqui.
+ */
+export async function setRidesBillState(
+  ownerId: string,
+  billId: string,
+  state: "paid" | "unpaid" | "detached",
+): Promise<number> {
+  // O filtro por ownerId é obrigatório para as regras aceitarem a consulta.
+  const snap = await getDocs(
+    query(collection(db, COLLECTIONS.rides), where("ownerId", "==", ownerId), where("billId", "==", billId)),
+  );
+  const patch: Partial<RideEntry> =
+    state === "paid" ? { paidAt: Date.now() } : state === "unpaid" ? { paidAt: null } : { billId: null, paidAt: null };
+  for (const d of snap.docs) await updateDoc(d.ref, patch as DocumentData);
+  return snap.size;
+}
 
 export async function listRides(ownerId: string): Promise<RideEntry[]> {
   const all = await liveList<RideEntry>(COLLECTIONS.rides, ownerId);

@@ -18,7 +18,8 @@ import { useAuth } from "@/services/auth-context";
 import { hasPendingSync, onListsChange } from "@/services/live-store";
 import { listAccounts, listCategories, listCostCenters } from "@/services/firestore";
 import { listClients } from "@/services/clients";
-import { createBill } from "@/services/bills";
+import { createBill, listBills } from "@/services/bills";
+import { remaining } from "@/lib/bills/status";
 import {
   addMember,
   createDriver,
@@ -32,6 +33,7 @@ import {
   removeMember,
   removeRide,
   saveDriverSettings,
+  setRidesBillState,
   updateRide,
 } from "@/services/drivers";
 import {
@@ -112,6 +114,29 @@ function Motoristas() {
       setSettings(s);
       setSyncing(hasPendingSync());
       if (!restricted) {
+        // Títulos quitados (ou excluídos) antes desta versão: acerta os
+        // lançamentos que ainda aparecem como "Em título".
+        const pending = r.filter((x) => x.billId && !x.paidAt);
+        if (pending.length > 0) {
+          const bills = await listBills(ownerId, "payable");
+          const byId = new Map(bills.map((b) => [b.id!, b]));
+          const done = new Set<string>();
+          let changed = false;
+          for (const x of pending) {
+            const bid = x.billId!;
+            if (done.has(bid)) continue;
+            done.add(bid);
+            const b = byId.get(bid);
+            if (!b) {
+              await setRidesBillState(ownerId, bid, "detached");
+              changed = true;
+            } else if (remaining(b) <= 0) {
+              await setRidesBillState(ownerId, bid, "paid");
+              changed = true;
+            }
+          }
+          if (changed) setRides(await listRides(ownerId));
+        }
         const [m, a, cat, cc] = await Promise.all([
           listMembers(ownerId),
           listAccounts(ownerId),
@@ -159,6 +184,8 @@ function Motoristas() {
   const [rExtra, setRExtra] = useState("");
   const [rExtraDesc, setRExtraDesc] = useState("");
   const [rideMsg, setRideMsg] = useState("");
+  // Lançamentos cujo título já foi pago somem da lista (dá para rever).
+  const [showPaid, setShowPaid] = useState(false);
   const rRule = rClient ? ruleForClient(settings, rClient) : null;
   const rRates: RideRate[] = rRule ? ratesOf(rRule) : [];
   const rDiarias: RideRate[] = rRule ? diariasOf(rRule) : [];
@@ -565,6 +592,8 @@ function Motoristas() {
   if (!loaded) return <p className="muted">Carregando…</p>;
 
   const openRides = rides.filter((r) => !r.billId);
+  const paidRides = rides.filter((r) => !!r.paidAt);
+  const visibleRides = showPaid ? rides : rides.filter((r) => !r.paidAt);
   const semRegra = [...new Set(openRides.map((r) => r.clientId))].filter((cid) => !ruleForClient(settings, cid));
 
   return (
@@ -880,7 +909,17 @@ function Motoristas() {
       <div className="panel">
         <h2>Corridas lançadas</h2>
         <p className="muted" style={{ marginTop: 0 }}>
-          {openRides.length} em aberto (ainda sem título) de {rides.length} no total.
+          {openRides.length} em aberto (ainda sem título) · {rides.length - openRides.length - paidRides.length} em
+          título aguardando pagamento · {paidRides.length} pago(s){" "}
+          {paidRides.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowPaid((v) => !v)}
+              style={{ background: "transparent", border: "none", color: "var(--accent-ink)", cursor: "pointer", padding: 0, font: "inherit", textDecoration: "underline" }}
+            >
+              {showPaid ? "ocultar pagos" : "mostrar pagos"}
+            </button>
+          )}
         </p>
         {rides.length === 0 ? (
           <p className="muted">Nenhuma corrida lançada ainda.</p>
@@ -901,7 +940,7 @@ function Motoristas() {
                 </tr>
               </thead>
               <tbody>
-                {rides.slice(0, 60).map((r) => (
+                {visibleRides.slice(0, 60).map((r) => (
                   <tr key={r.id}>
                     <td style={{ whiteSpace: "nowrap" }}>{brDate(r.date)}</td>
                     <td>{driverName.get(r.driverId) ?? "—"}</td>
@@ -930,7 +969,9 @@ function Motoristas() {
                     </td>
                     <td className="muted">{r.notes ?? ""}</td>
                     <td>
-                      {r.billId ? (
+                      {r.paidAt ? (
+                        <span className="muted">✔ Pago {brDate(new Date(r.paidAt).toISOString().slice(0, 10))}</span>
+                      ) : r.billId ? (
                         <span style={{ color: "var(--ok)", fontWeight: 600 }}>Em título</span>
                       ) : (
                         <span className="muted">Em aberto</span>
@@ -951,7 +992,7 @@ function Motoristas() {
                 ))}
               </tbody>
             </table>
-            {rides.length > 60 && (
+            {visibleRides.length > 60 && (
               <p className="muted" style={{ fontSize: "0.8rem" }}>Mostrando os 60 mais recentes.</p>
             )}
           </div>

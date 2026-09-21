@@ -18,7 +18,17 @@ import { db } from "./firebase";
 import { COLLECTIONS } from "./firestore";
 import { liveList } from "./live-store";
 import { buildBillPaymentTransaction } from "./transactions";
+import { setRidesBillState } from "./drivers";
 import type { Bill, BillKind, BillPayment } from "@/types";
+
+/** Título de motorista quitado/reaberto/excluído → reflete nos lançamentos de corrida. */
+async function syncRides(ownerId: string, billId: string, state: "paid" | "unpaid" | "detached"): Promise<void> {
+  try {
+    await setRidesBillState(ownerId, billId, state);
+  } catch {
+    /* sem corridas ligadas (ou sem permissão): nada a fazer */
+  }
+}
 
 /** List a user's bills of a given kind. */
 export async function listBills(ownerId: string, kind: BillKind): Promise<Bill[]> {
@@ -41,7 +51,10 @@ export async function updateBill(id: string, patch: Partial<Bill>): Promise<void
 
 /** Delete a bill. */
 export async function removeBill(id: string): Promise<void> {
+  const snap = await getDoc(doc(db, COLLECTIONS.bills, id));
+  const ownerId = snap.exists() ? (snap.data() as Bill).ownerId : null;
   await deleteDoc(doc(db, COLLECTIONS.bills, id));
+  if (ownerId) await syncRides(ownerId, id, "detached");
 }
 
 /**
@@ -57,6 +70,7 @@ export async function settleBillAtPaid(id: string): Promise<void> {
   const paid = (bill.payments ?? []).reduce((s, p) => s + (p.amount || 0), 0);
   if (paid <= 0) throw new Error("O título ainda não tem baixa para quitar.");
   await updateDoc(doc(db, COLLECTIONS.bills, id), { amount: Math.round(paid * 100) / 100 });
+  await syncRides(bill.ownerId, id, "paid");
 }
 
 /**
@@ -93,6 +107,10 @@ export async function addPayment(
       patch.amount = Math.round(totalPaid * 100) / 100;
     }
     await updateDoc(doc(db, COLLECTIONS.bills, id), patch as DocumentData);
+    const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+    if (opts?.settle || totalPaid + 0.005 >= (patch.amount ?? bill.amount)) {
+      await syncRides(bill.ownerId, id, "paid");
+    }
   } catch (err) {
     await deleteDoc(doc(db, COLLECTIONS.transactions, txRef.id)).catch(() => {});
     throw err;
@@ -114,6 +132,8 @@ export async function removePayment(id: string, paymentId: string): Promise<void
   }
   const payments = (bill.payments ?? []).filter((p) => p.id !== paymentId);
   await updateDoc(doc(db, COLLECTIONS.bills, id), { payments });
+  const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  if (totalPaid + 0.005 < bill.amount) await syncRides(bill.ownerId, id, "unpaid");
 }
 
 /**
