@@ -41,6 +41,16 @@ describe("filterTransactions", () => {
     expect(filterTransactions(data, { accountId: "acc2" }).length).toBe(2);
   });
 
+  it("filters by several accounts (any of them, transfers included)", () => {
+    const more = [...data, tx({ description: "Pix C6", amount: 7, accountId: "acc3" })];
+    expect(filterTransactions(more, { accountIds: ["acc2", "acc3"] }).map((t) => t.description).sort()).toEqual([
+      "Café",
+      "Pix C6",
+      "Transferência",
+    ]);
+    expect(filterTransactions(more, { accountIds: [] }).length).toBe(more.length);
+  });
+
   it("filters by type", () => {
     expect(filterTransactions(data, { type: "income" }).length).toBe(1);
     expect(filterTransactions(data, { type: "transfer" }).length).toBe(1);

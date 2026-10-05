@@ -10,6 +10,8 @@ export interface DashboardFilters {
   text?: string;
   /** Restrict to a single account (matches source or transfer destination). */
   accountId?: string;
+  /** Várias contas: o lançamento passa se tocar QUALQUER uma delas. */
+  accountIds?: string[];
   /** Restrict to a single transaction type. */
   type?: TransactionType | "";
   /** Restrict to a single category. */
@@ -43,6 +45,13 @@ export function filterTransactions(
   return txs.filter((t) => {
     if (text && !fold(t.description ?? "").includes(text)) return false;
     if (f.accountId && t.accountId !== f.accountId && t.transferAccountId !== f.accountId)
+      return false;
+    if (
+      f.accountIds &&
+      f.accountIds.length > 0 &&
+      !f.accountIds.includes(t.accountId) &&
+      !f.accountIds.includes(t.transferAccountId ?? "")
+    )
       return false;
     if (f.type && t.type !== f.type) return false;
     if (f.categoryId && t.categoryId !== f.categoryId) return false;

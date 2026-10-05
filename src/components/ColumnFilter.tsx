@@ -4,35 +4,71 @@
 //
 // Each table declares one `ColFilterDef` per column (in the same order as its
 // `<th>` cells). Free-text columns get a search input; categorical columns get
-// a dropdown auto-populated with every distinct value present in the rows.
+// a multi-choice list (marque um ou vários) auto-populated with every distinct
+// value present in the rows.
 // `useColumnFilters` returns the filtered rows plus the state wiring, and
 // `<FilterRow>` renders the header row of filter controls.
 
 import { useMemo, useState } from "react";
+import { MultiSelect } from "./MultiSelect";
 
 export type ColFilterType = "text" | "select" | "none";
 
 export interface ColFilterDef<T> {
   /** Unique key for this column's filter. */
   key: string;
-  /** "text" (default) = contains-search; "select" = dropdown; "none" = no filter cell. */
+  /** "text" (default) = contains-search; "select" = multi-choice list; "none" = no filter cell. */
   type?: ColFilterType;
   /** Extracts the string used for matching and for building select options. */
   value?: (row: T) => string;
   align?: "left" | "right" | "center";
 }
 
+/** Texto (busca) ou, nas colunas "select", a lista de valores marcados. */
+export type ColFilterValue = string | string[];
+
 export interface ColumnFilters<T> {
-  filters: Record<string, string>;
+  filters: Record<string, ColFilterValue>;
+  /** Busca de uma coluna de texto. */
   set: (key: string, val: string) => void;
+  /** Valores marcados de uma coluna de seleção (vários = qualquer um deles). */
+  setMany: (key: string, vals: string[]) => void;
   clear: () => void;
   active: number;
   options: Record<string, string[]>;
   filtered: T[];
 }
 
+const isOn = (f: ColFilterValue | undefined) => (Array.isArray(f) ? f.length > 0 : !!f);
+
+/** Um valor de linha passa no filtro da coluna? Seleção = qualquer um dos marcados. */
+function passes(type: ColFilterType | undefined, f: ColFilterValue, v: string): boolean {
+  if (type === "select") {
+    const list = Array.isArray(f) ? f : [f];
+    return list.includes(v);
+  }
+  const q = Array.isArray(f) ? f.join(" ") : f;
+  return v.toLowerCase().includes(q.toLowerCase());
+}
+
+/** Linhas que passam em todos os filtros de coluna ativos (lógica pura). */
+export function applyColumnFilters<T>(
+  rows: T[],
+  defs: ColFilterDef<T>[],
+  filters: Record<string, ColFilterValue>,
+): T[] {
+  return rows.filter((r) => {
+    for (const d of defs) {
+      const f = filters[d.key];
+      if (!isOn(f) || !d.value) continue;
+      if (!passes(d.type, f, d.value(r))) return false;
+    }
+    return true;
+  });
+}
+
 export function useColumnFilters<T>(rows: T[], defs: ColFilterDef<T>[]): ColumnFilters<T> {
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [filters, setFilters] = useState<Record<string, ColFilterValue>>({});
 
   // Faceted options: each dropdown only offers values present in the rows that
   // match every OTHER active filter (e.g. with Tipo = Receita, the Categoria
@@ -42,13 +78,8 @@ export function useColumnFilters<T>(rows: T[], defs: ColFilterDef<T>[]): ColumnF
       for (const d of defs) {
         if (d.key === skipKey) continue;
         const f = filters[d.key];
-        if (!f || !d.value) continue;
-        const v = d.value(r);
-        if (d.type === "select") {
-          if (v !== f) return false;
-        } else if (!v.toLowerCase().includes(f.toLowerCase())) {
-          return false;
-        }
+        if (!isOn(f) || !d.value) continue;
+        if (!passes(d.type, f, d.value(r))) return false;
       }
       return true;
     };
@@ -63,37 +94,21 @@ export function useColumnFilters<T>(rows: T[], defs: ColFilterDef<T>[]): ColumnF
         }
         // Keep the current selection visible even if no row matches anymore.
         const current = filters[d.key];
-        if (current) set.add(current);
+        for (const c of Array.isArray(current) ? current : current ? [current] : []) set.add(c);
         o[d.key] = Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
       }
     }
     return o;
   }, [rows, defs, filters]);
 
-  const filtered = useMemo(
-    () =>
-      rows.filter((r) => {
-        for (const d of defs) {
-          const f = filters[d.key];
-          if (!f || !d.value) continue;
-          const v = d.value(r);
-          if (d.type === "select") {
-            if (v !== f) return false;
-          } else if (!v.toLowerCase().includes(f.toLowerCase())) {
-            return false;
-          }
-        }
-        return true;
-      }),
-    [rows, defs, filters],
-  );
+  const filtered = useMemo(() => applyColumnFilters(rows, defs, filters), [rows, defs, filters]);
 
-  const active = Object.values(filters).filter(Boolean).length;
+  const active = Object.values(filters).filter(isOn).length;
   const clear = () => setFilters({});
-  const set = (key: string, val: string) =>
-    setFilters((p) => ({ ...p, [key]: val }));
+  const set = (key: string, val: string) => setFilters((p) => ({ ...p, [key]: val }));
+  const setMany = (key: string, vals: string[]) => setFilters((p) => ({ ...p, [key]: vals }));
 
-  return { filters, set, clear, active, options, filtered };
+  return { filters, set, setMany, clear, active, options, filtered };
 }
 
 const control: React.CSSProperties = {
@@ -123,21 +138,20 @@ export function FilterRow<T>({
       {defs.map((d) => (
         <th key={d.key} style={{ padding: "0.25rem 0.4rem", verticalAlign: "top" }}>
           {d.type === "none" || !d.value ? null : d.type === "select" ? (
-            <select
-              value={cf.filters[d.key] ?? ""}
-              onChange={(e) => cf.set(d.key, e.target.value)}
-              style={control}
-            >
-              <option value="">Todos</option>
-              {(cf.options[d.key] ?? []).map((o) => (
-                <option key={o} value={o}>
-                  {o}
-                </option>
-              ))}
-            </select>
+            <MultiSelect
+              options={(cf.options[d.key] ?? []).map((o) => ({ value: o, label: o }))}
+              selected={(() => {
+                const f = cf.filters[d.key];
+                return Array.isArray(f) ? f : f ? [f] : [];
+              })()}
+              onChange={(vals) => cf.setMany(d.key, vals)}
+            />
           ) : (
             <input
-              value={cf.filters[d.key] ?? ""}
+              value={(() => {
+                const f = cf.filters[d.key];
+                return Array.isArray(f) ? f.join(" ") : (f ?? "");
+              })()}
               onChange={(e) => cf.set(d.key, e.target.value)}
               placeholder={placeholder}
               style={{ ...control, textAlign: d.align === "right" ? "right" : "left" }}

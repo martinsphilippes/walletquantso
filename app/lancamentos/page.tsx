@@ -21,6 +21,7 @@ import {
 } from "@/services/transactions";
 import { TransactionForm } from "@/components/TransactionForm";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
+import { MultiSelect } from "@/components/MultiSelect";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import { FilterField } from "@/components/FilterField";
 import { todayBr, daysAgoBr, monthRangeBr } from "@/lib/br/date";
@@ -564,18 +565,14 @@ function Lancamentos() {
               <option value="transfer">Transferência</option>
             </select>
           </FilterField>
-          <FilterField label="Conta">
-            <select
-              value={filters.accountId ?? ""}
-              onChange={(e) => set({ accountId: e.target.value || undefined })}
-            >
-              <option value="">Todas as contas</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
+          <FilterField label="Contas">
+            <MultiSelect
+              options={accounts.map((a) => ({ value: a.id!, label: a.name }))}
+              selected={filters.accountIds ?? (filters.accountId ? [filters.accountId] : [])}
+              onChange={(ids) => set({ accountId: undefined, accountIds: ids.length ? ids : undefined })}
+              allLabel="Todas as contas"
+              style={{ fontSize: "inherit", padding: "0.5rem 0.6rem", borderRadius: 8, minWidth: 180 }}
+            />
           </FilterField>
           {costCenters.length > 0 && (
             <FilterField label="Centro de custo">
