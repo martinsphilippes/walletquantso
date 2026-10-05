@@ -16,6 +16,24 @@ export type AccountType =
   | "investment" // investimento
   | "other";
 
+/**
+ * Taxa que a conta consome de cada operação (ex.: Depix): percentual e/ou
+ * valor fixo, por tipo de operação. Vira um lançamento de despesa à parte.
+ */
+export interface AccountFee {
+  /** Percentual sobre o valor lançado (ex.: 2.35 = 2,35%). */
+  percent: number;
+  /** Valor fixo por operação, em reais. */
+  fixed: number;
+  onIncome: boolean;
+  onExpense: boolean;
+  onTransfer: boolean;
+  /** Classificação do lançamento da taxa. */
+  categoryId: string | null;
+  costCenterId: string | null;
+  updatedAt?: number;
+}
+
 /** A bank account, wallet, or credit card. */
 export interface Account {
   id?: string;
@@ -26,6 +44,8 @@ export interface Account {
   initialBalance: number;
   currency: string; // e.g. "BRL"
   archived: boolean;
+  /** Taxa consumida pela conta em cada operação (ex.: Depix). */
+  fee?: AccountFee | null;
   createdAt: number;
 }
 
@@ -228,6 +248,13 @@ export interface Transaction {
   billId?: string | null;
   /** The specific BillPayment this entry settles (links back to the bill). */
   billPaymentId?: string | null;
+  /** Lançamento da taxa da conta gerado junto com este (ex.: Taxa Depix). */
+  feeTransactionId?: string | null;
+  /** Valor da taxa e valor lançado (bruto) quando houve taxa. */
+  feeAmount?: number | null;
+  feeGross?: number | null;
+  /** Neste lançamento de taxa: id do lançamento que a originou. */
+  feeOfId?: string | null;
   tags?: string[];
   /** Id of the import batch that created this record (for undo/audit). */
   importBatchId?: string | null;

@@ -17,7 +17,11 @@ import {
 import { db } from "./firebase";
 import { COLLECTIONS } from "./firestore";
 import { liveList } from "./live-store";
-import { buildBillPaymentTransaction } from "./transactions";
+import {
+  applyAccountFeeToTransaction,
+  buildBillPaymentTransaction,
+  deleteTransactionWithFee,
+} from "./transactions";
 import { setRidesBillState } from "./drivers";
 import type { Bill, BillKind, BillPayment } from "@/types";
 
@@ -93,6 +97,12 @@ export async function addPayment(
     reconciled: opts?.reconciled,
   });
   const txRef = await addDoc(collection(db, COLLECTIONS.transactions), txRecord);
+  // Conta com taxa (ex.: Depix): a taxa vira um lançamento à parte, ligado.
+  try {
+    await applyAccountFeeToTransaction(txRef.id, txRecord);
+  } catch {
+    /* sem taxa configurada ou falha ao ler a conta: a baixa segue sem taxa */
+  }
 
   // Record the settlement on the bill. If this fails, roll back the transaction
   // so we never end up with a lançamento that didn't actually settle the title.
@@ -112,7 +122,7 @@ export async function addPayment(
       await syncRides(bill.ownerId, id, "paid");
     }
   } catch (err) {
-    await deleteDoc(doc(db, COLLECTIONS.transactions, txRef.id)).catch(() => {});
+    await deleteTransactionWithFee(txRef.id).catch(() => {});
     throw err;
   }
 }
@@ -125,7 +135,7 @@ export async function removePayment(id: string, paymentId: string): Promise<void
   const gone = (bill.payments ?? []).find((p) => p.id === paymentId);
   if (gone?.transactionId) {
     try {
-      await deleteDoc(doc(db, COLLECTIONS.transactions, gone.transactionId));
+      await deleteTransactionWithFee(gone.transactionId);
     } catch {
       /* transaction may have been removed already — ignore */
     }

@@ -22,6 +22,7 @@ import {
 import { TransactionForm } from "@/components/TransactionForm";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import { MultiSelect } from "@/components/MultiSelect";
+import { computeFee, feeAccountFor } from "@/lib/fees/fee";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import { FilterField } from "@/components/FilterField";
 import { todayBr, daysAgoBr, monthRangeBr } from "@/lib/br/date";
@@ -355,9 +356,13 @@ function Lancamentos() {
     }
   }
 
-  const txToInput = (t: Transaction): Partial<TransactionInput> => ({
+  // Edição: a taxa existente vem junto (ou nenhuma); clone recalcula pela conta.
+  const txToInput = (t: Transaction, mode: "edit" | "clone" = "clone"): Partial<TransactionInput> => ({
+    ...(mode === "edit"
+      ? { fee: t.feeTransactionId ? { accountId: "", amount: t.feeAmount ?? 0 } : null }
+      : {}),
     date: t.date,
-    amount: t.amount,
+    amount: t.feeGross ?? t.amount,
     type: t.type,
     description: t.description,
     accountId: t.accountId,
@@ -384,13 +389,15 @@ function Lancamentos() {
   }
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
 
-  function draftFromTx(t: Transaction): EditDraft {
+  function draftFromTx(t: Transaction, clone = false): EditDraft {
     const cat = t.categoryId ? catById.get(t.categoryId) : undefined;
+    // Clonar parte do valor lançado (bruto); a taxa é recalculada pela conta.
+    const base = clone ? (t.feeGross ?? t.amount) : t.amount;
     return {
       date: t.date,
       description: t.description,
       type: t.type,
-      amount: t.amount.toLocaleString("pt-BR", {
+      amount: base.toLocaleString("pt-BR", {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       }),
@@ -423,7 +430,21 @@ function Lancamentos() {
       return;
     }
     const isTransfer = editDraft.type === "transfer";
+    // Clone = lançamento novo: aplica a taxa da conta (ex.: Depix) pela
+    // configuração. Edição mantém a taxa que o lançamento já tinha.
+    let fee: TransactionInput["fee"] = undefined;
+    if (form.mode === "clone") {
+      const target = feeAccountFor(
+        editDraft.type,
+        editDraft.accountId,
+        isTransfer ? editDraft.transferAccountId : null,
+        accounts,
+      );
+      const amountFee = target?.account.fee ? computeFee(value, target.account.fee) : 0;
+      fee = target && amountFee > 0 ? { accountId: target.account.id!, amount: amountFee } : null;
+    }
     await handleSubmit({
+      fee,
       date: editDraft.date,
       amount: value,
       type: editDraft.type,
@@ -896,6 +917,11 @@ function Lancamentos() {
                     >
                       {t.type === "expense" ? "-" : t.type === "income" ? "+" : ""}
                       {brl(t.amount)}
+                      {(t.feeAmount ?? 0) > 0 && (
+                        <div className="muted" style={{ fontSize: "0.72rem", fontWeight: 400 }}>
+                          + taxa {brl(t.feeAmount!)}
+                        </div>
+                      )}
                     </td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       <button
@@ -911,7 +937,7 @@ function Lancamentos() {
                         style={{ background: "var(--border)", padding: "0.3rem 0.6rem" }}
                         onClick={() => {
                           setForm({ mode: "clone", tx: t });
-                          setEditDraft(draftFromTx(t));
+                          setEditDraft(draftFromTx(t, true));
                         }}
                       >
                         Clonar
@@ -1074,6 +1100,29 @@ function Lancamentos() {
                               style={{ ...fieldStyle, minWidth: 140 }}
                             />
                           </InlineField>
+                          {(() => {
+                            if (form.mode === "edit" && (form.tx.feeAmount ?? 0) > 0) {
+                              return (
+                                <span className="muted" style={{ fontSize: "0.78rem", alignSelf: "center" }}>
+                                  Taxa vinculada: {brl(form.tx.feeAmount!)} (lançamento à parte — edite-o na lista)
+                                </span>
+                              );
+                            }
+                            if (form.mode !== "clone") return null;
+                            const v = parseBrCurrency(editDraft.amount) ?? 0;
+                            const tg = feeAccountFor(
+                              editDraft.type,
+                              editDraft.accountId,
+                              editDraft.type === "transfer" ? editDraft.transferAccountId : null,
+                              accounts,
+                            );
+                            const fv = tg?.account.fee ? computeFee(v, tg.account.fee) : 0;
+                            return tg && fv > 0 ? (
+                              <span className="muted" style={{ fontSize: "0.78rem", alignSelf: "center" }}>
+                                + Taxa {tg.account.name}: {brl(fv)} (lançada à parte)
+                              </span>
+                            ) : null;
+                          })()}
                           <div>
                             <button disabled={saving} onClick={() => void saveInline()}>
                               {form.mode === "edit" ? "Salvar" : "Duplicar"}

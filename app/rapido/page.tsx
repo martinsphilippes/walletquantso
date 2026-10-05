@@ -27,6 +27,14 @@ import {
 import { computeCashBalances, monthResult } from "@/lib/dashboard/cash";
 import { effectiveCostCenterId } from "@/lib/categories/tree";
 import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
+import {
+  computeFee,
+  describeFee,
+  feeAccountFor,
+  feeFromRealized,
+  learnedPercent,
+  realizedFromFee,
+} from "@/lib/fees/fee";
 import { todayBr, currentMonthBr } from "@/lib/br/date";
 import { onListsChange } from "@/services/live-store";
 import { DateParts } from "@/components/DateParts";
@@ -115,6 +123,26 @@ function Rapido() {
 
   // Edição/clonagem dos últimos lançamentos direto nesta tela.
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
+
+  // Taxa da conta (ex.: Depix): calculada pela conta, editável; corrigir a
+  // taxa ou o realizado ensina o novo percentual à conta.
+  const [feeOverride, setFeeOverride] = useState<number | null>(null);
+  const [feeTyped, setFeeTyped] = useState(false);
+  const [feeFocus, setFeeFocus] = useState<"fee" | "realized" | null>(null);
+  const [feeText, setFeeText] = useState("");
+  const fmt2 = (n: number) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const grossValue = parseBrCurrency(amount) ?? 0;
+  const feeTarget = editingTxId ? null : feeAccountFor(type, accountId, null, accounts);
+  const feeCfg = feeTarget?.account.fee ?? null;
+  const autoFee = feeCfg ? computeFee(grossValue, feeCfg) : 0;
+  const feeValue = feeTarget ? Math.max(0, feeOverride ?? autoFee) : 0;
+  const realizedValue = realizedFromFee(type, grossValue, feeValue);
+  const feeLearn = feeTyped && !!feeCfg && grossValue > 0 && Math.abs(feeValue - autoFee) > 0.005;
+  const newPct = feeLearn && feeCfg ? learnedPercent(grossValue, feeValue, feeCfg.fixed ?? 0) : null;
+  const resetFee = () => {
+    setFeeOverride(null);
+    setFeeTyped(false);
+  };
   const [confirmDelTx, setConfirmDelTx] = useState<string | null>(null);
 
   const accountName = useMemo(
@@ -167,11 +195,16 @@ function Rapido() {
   }
 
   /** Preenche o formulário com os dados de um lançamento (edição/clone). */
-  function fillFrom(t: Transaction) {
+  function fillFrom(t: Transaction, clone = false) {
     if (t.type === "transfer") return;
     setType(t.type);
+    resetFee();
+    // Clone parte do valor lançado (bruto); a taxa é recalculada pela conta.
     setAmount(
-      t.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      (clone ? (t.feeGross ?? t.amount) : t.amount).toLocaleString("pt-BR", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
     );
     setDescription(t.description ?? "");
     setAccountId(t.accountId ?? "");
@@ -190,7 +223,7 @@ function Rapido() {
   }
 
   function startCloneTx(t: Transaction) {
-    fillFrom(t);
+    fillFrom(t, true);
     setDate(todayBr());
     setEditingTxId(null);
   }
@@ -246,6 +279,12 @@ function Rapido() {
         categoryId: (subcategoryId || categoryId) || null,
         costCenterId: costCenterId || null,
         contactId: null,
+        // Edição mantém a taxa já vinculada; lançamento novo aplica a da conta.
+        fee: editingTxId
+          ? undefined
+          : feeTarget && feeValue > 0
+            ? { accountId: feeTarget.account.id!, amount: feeValue, learn: feeLearn }
+            : null,
       };
       if (editingTxId) {
         await updateTransaction(user.uid, editingTxId, input);
@@ -253,7 +292,11 @@ function Rapido() {
         setMsg(`✅ Lançamento atualizado (${brl(value)}).`);
       } else {
         await createTransaction(user.uid, input);
-        setMsg(`✅ ${type === "expense" ? "Despesa" : "Receita"} de ${brl(value)} lançada.`);
+        setMsg(
+          `✅ ${type === "expense" ? "Despesa" : "Receita"} de ${brl(value)} lançada` +
+            (input.fee ? ` + taxa ${brl(input.fee.amount)}.` : "."),
+        );
+        resetFee();
         // Mantém tudo preenchido (duplicação rápida); valor volta focado.
         amountRef.current?.focus();
         amountRef.current?.select();
@@ -383,6 +426,77 @@ function Rapido() {
             ))}
           </div>
         </div>
+
+        {feeTarget && feeCfg && (
+          <div
+            style={{
+              display: "flex",
+              gap: "0.5rem",
+              flexWrap: "wrap",
+              alignItems: "flex-end",
+              marginTop: "0.6rem",
+              padding: "0.5rem",
+              border: "1px dashed var(--border)",
+              borderRadius: 8,
+            }}
+          >
+            <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem", flex: "1 1 120px" }}>
+              <span className="muted" style={{ fontSize: "0.8rem" }}>
+                Taxa {feeTarget.account.name} ({describeFee(feeCfg)})
+              </span>
+              <input
+                value={feeFocus === "fee" ? feeText : fmt2(feeValue)}
+                onFocus={() => {
+                  setFeeFocus("fee");
+                  setFeeText(fmt2(feeValue));
+                }}
+                onBlur={() => setFeeFocus(null)}
+                onChange={(e) => {
+                  const m = maskBrAmount(e.target.value);
+                  setFeeText(m);
+                  setFeeTyped(true);
+                  setFeeOverride(parseBrCurrency(m) ?? 0);
+                }}
+                inputMode="numeric"
+                style={{ ...field, textAlign: "right" }}
+              />
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem", flex: "1 1 120px" }}>
+              <span className="muted" style={{ fontSize: "0.8rem" }}>
+                {type === "expense" ? "Sai da conta" : "Entra na conta"}
+              </span>
+              <input
+                value={feeFocus === "realized" ? feeText : fmt2(realizedValue)}
+                onFocus={() => {
+                  setFeeFocus("realized");
+                  setFeeText(fmt2(realizedValue));
+                }}
+                onBlur={() => setFeeFocus(null)}
+                onChange={(e) => {
+                  const m = maskBrAmount(e.target.value);
+                  setFeeText(m);
+                  setFeeTyped(true);
+                  setFeeOverride(Math.max(0, feeFromRealized(type, grossValue, parseBrCurrency(m) ?? 0)));
+                }}
+                inputMode="numeric"
+                style={{ ...field, textAlign: "right", fontWeight: 700 }}
+              />
+            </label>
+            {newPct != null && (
+              <div className="muted" style={{ fontSize: "0.78rem", flex: "1 1 100%" }}>
+                Nova taxa: <strong style={{ color: "var(--warn)" }}>{newPct.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}%</strong>{" "}
+                — passa a valer nos próximos lançamentos.{" "}
+                <button
+                  type="button"
+                  onClick={resetFee}
+                  style={{ background: "transparent", border: "none", color: "var(--focus)", padding: 0, cursor: "pointer", font: "inherit" }}
+                >
+                  usar a taxa da conta
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.6rem" }}>
           {costCenters.length > 0 && (

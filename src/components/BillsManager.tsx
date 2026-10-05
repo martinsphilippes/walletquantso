@@ -27,6 +27,7 @@ import {
 import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
 import { effectiveCostCenterId } from "@/lib/categories/tree";
 import { DateParts } from "@/components/DateParts";
+import { computeFee, feeAccountFor, realizedFromFee } from "@/lib/fees/fee";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import { expandRepeat, withDayIso, type RepeatMode, type RepeatUnit } from "@/lib/bills/repeat";
@@ -308,6 +309,16 @@ export function BillsManager({ kind }: { kind: BillKind }) {
       return acc;
     });
   }, [cf.filtered]);
+
+  /** Aviso da taxa da conta (ex.: Depix) aplicada na baixa, lançada à parte. */
+  function feeHint(accId: string, value: number): string {
+    const tg = feeAccountFor(isPayable ? "expense" : "income", accId, null, accounts);
+    if (!tg?.account.fee || value <= 0) return "";
+    const fee = computeFee(value, tg.account.fee);
+    if (fee <= 0) return "";
+    const real = realizedFromFee(isPayable ? "expense" : "income", value, fee);
+    return ` + Taxa ${tg.account.name} ${brl(fee)} lançada à parte (${isPayable ? "sai" : "entra"} ${brl(real)} da conta).`;
+  }
 
   // Soma dos títulos selecionados, exibida na barra de seleção.
   const selSum = useMemo(() => {
@@ -1177,6 +1188,9 @@ export function BillsManager({ kind }: { kind: BillKind }) {
               </strong>
               <div className="muted" style={{ fontSize: "0.8rem" }}>
                 Cada título é quitado pelo valor em aberto, na data abaixo, e vai para Lançamentos.
+                {bulkAccount && feeAccountFor(isPayable ? "expense" : "income", bulkAccount, null, accounts)
+                  ? " A taxa da conta escolhida é lançada à parte em cada baixa."
+                  : ""}
               </div>
             </div>
             <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
@@ -1486,6 +1500,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                 {payMode === "settle"
                                   ? "Quitar: fecha o título pelo valor informado (o título sai da lista)."
                                   : "Parcial: registra só uma parte; o título continua com o saldo em aberto."}
+                                {feeHint(payAccount || b.accountId || "", parseBrCurrency(payAmount) ?? 0)}
                               </span>
                             </div>
                           </td>

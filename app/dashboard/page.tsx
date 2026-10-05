@@ -357,9 +357,13 @@ function Dashboard() {
     }
   }
 
-  const txToInput = (t: Transaction): Partial<TransactionInput> => ({
+  // Edição: a taxa existente vem junto (ou nenhuma); clone recalcula pela conta.
+  const txToInput = (t: Transaction, mode: "edit" | "clone" = "clone"): Partial<TransactionInput> => ({
+    ...(mode === "edit"
+      ? { fee: t.feeTransactionId ? { accountId: "", amount: t.feeAmount ?? 0 } : null }
+      : {}),
     date: t.date,
-    amount: t.amount,
+    amount: t.feeGross ?? t.amount,
     type: t.type,
     description: t.description,
     accountId: t.accountId,
@@ -695,7 +699,7 @@ function Dashboard() {
           categories={categories}
           costCenters={costCenters}
           contacts={contacts}
-          initial={form.mode === "new" ? undefined : txToInput(form.tx)}
+          initial={form.mode === "new" ? undefined : txToInput(form.tx, form.mode === "edit" ? "edit" : "clone")}
           submitLabel={
             form.mode === "edit"
               ? "Salvar alterações"
