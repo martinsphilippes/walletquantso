@@ -28,7 +28,13 @@ import {
 } from "@/services/clients";
 import type { ClientBillingRecord } from "@/types";
 import { createBill } from "@/services/bills";
-import { computeCharge, chargeDescription, type ChargeInput } from "@/lib/clients/billing";
+import {
+  CHARGE_PERIOD_LABEL,
+  computeCharge,
+  chargeDescription,
+  type ChargeInput,
+  type ChargePeriod,
+} from "@/lib/clients/billing";
 import { zonesFromMatrix } from "@/lib/clients/zones";
 import Papa from "papaparse";
 import { parseBrCurrency } from "@/lib/br/parse";
@@ -183,6 +189,8 @@ function Clientes() {
   const [deliveries, setDeliveries] = useState<Record<string, string>>({});
   const [revenue, setRevenue] = useState("");
   const [dueDate, setDueDate] = useState(todayBr());
+  // Tipo do título (vai na descrição): semanal ou mensal.
+  const [chargePeriod, setChargePeriod] = useState<ChargePeriod | null>(null);
   const [chargeMsg, setChargeMsg] = useState("");
 
   const load = useCallback(async () => {
@@ -312,6 +320,7 @@ function Clientes() {
     setDeliveries({});
     setRevenue("");
     setDueDate(todayBr());
+    setChargePeriod(null);
     setChargeMsg("");
   }
 
@@ -365,6 +374,10 @@ function Clientes() {
       setChargeMsg("Informe as quantidades (ou o faturamento) para gerar o título.");
       return;
     }
+    if (!chargePeriod) {
+      setChargeMsg("Escolha se o título é Semanal ou Mensal.");
+      return;
+    }
     setBusy(true);
     setChargeMsg("");
     setError("");
@@ -372,7 +385,7 @@ function Clientes() {
       const billId = await createBill({
         ownerId: user.uid,
         kind: "receivable",
-        description: chargeDescription(c, charge),
+        description: chargeDescription(c, charge, chargePeriod),
         amount: charge.total,
         dueDate,
         competenceDate: dueDate,
@@ -414,7 +427,7 @@ function Clientes() {
         revenueBase,
         revenueValor: revenueBase != null ? Math.round(((revenueBase * pct) / 100) * 100) / 100 : null,
         total: charge.total,
-        details: charge.lines.join(" · "),
+        details: [CHARGE_PERIOD_LABEL[chargePeriod], ...charge.lines].join(" · "),
         billId,
       });
       setChargeMsg(
@@ -822,6 +835,30 @@ function Clientes() {
                     <Field label="Vencimento">
                       <DateParts value={dueDate} onChange={setDueDate} />
                     </Field>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                      <span className="muted" style={{ fontSize: "0.8rem" }}>Tipo do título</span>
+                      <div style={{ display: "flex", gap: "0.4rem" }}>
+                        {(["semanal", "mensal"] as const).map((p) => (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => setChargePeriod(p)}
+                            style={{
+                              padding: "0.45rem 0.9rem",
+                              borderRadius: 8,
+                              border: chargePeriod === p ? "2px solid var(--accent)" : "1px solid var(--border)",
+                              background: chargePeriod === p ? "var(--accent)" : "transparent",
+                              color: chargePeriod === p ? "var(--accent-ink)" : "var(--text)",
+                              font: "inherit",
+                              fontWeight: chargePeriod === p ? 700 : 400,
+                              cursor: "pointer",
+                            }}
+                          >
+                            {CHARGE_PERIOD_LABEL[p]}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
                   {(c.zones?.length ?? 0) > 0 && (
@@ -878,7 +915,7 @@ function Clientes() {
                     </strong>
                     {charge && charge.lines.length > 0 && (
                       <span className="muted" style={{ fontSize: "0.85rem" }}>
-                        {charge.lines.join(" · ")}
+                        {chargeDescription(c, charge, chargePeriod)}
                       </span>
                     )}
                     <span style={{ flex: 1 }} />

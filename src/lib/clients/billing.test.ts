@@ -60,5 +60,7 @@ describe("computeCharge", () => {
     const c = client({ name: "Pizzaria Gialla", dailyRate: 90 });
     const charge = computeCharge(c, { afternoonShifts: 1 });
     expect(chargeDescription(c, charge)).toBe("Pizzaria Gialla — 1 diária(s) tarde");
+    expect(chargeDescription(c, charge, "semanal")).toBe("Pizzaria Gialla — Semanal — 1 diária(s) tarde");
+    expect(chargeDescription(c, charge, "mensal")).toBe("Pizzaria Gialla — Mensal — 1 diária(s) tarde");
   });
 });

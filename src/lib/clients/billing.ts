@@ -63,8 +63,15 @@ export function computeCharge(client: Client, input: ChargeInput): Charge {
 }
 
 /** Descrição pronta do título ("Nome — linha1, linha2"). */
-export function chargeDescription(client: Client, charge: Charge): string {
-  return charge.lines.length > 0
-    ? `${client.name} — ${charge.lines.join(", ")}`
-    : client.name;
+/** Periodicidade do título gerado para o cliente. */
+export type ChargePeriod = "semanal" | "mensal";
+export const CHARGE_PERIOD_LABEL: Record<ChargePeriod, string> = {
+  semanal: "Semanal",
+  mensal: "Mensal",
+};
+
+/** "Gialla — Semanal — 3 diária(s) manhã, …" (o tipo entra quando informado). */
+export function chargeDescription(client: Client, charge: Charge, period?: ChargePeriod | null): string {
+  const head = period ? `${client.name} — ${CHARGE_PERIOD_LABEL[period]}` : client.name;
+  return charge.lines.length > 0 ? `${head} — ${charge.lines.join(", ")}` : head;
 }
