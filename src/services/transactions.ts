@@ -323,17 +323,23 @@ export async function removeTransaction(ownerId: string, id: string): Promise<vo
 }
 
 /**
- * Taxa automática da conta num lançamento já criado fora do formulário (baixa
- * de título): se a conta cobra taxa neste tipo de operação, cria o lançamento
- * da taxa pelo percentual/fixo configurado e liga os dois. Devolve a taxa (0
- * quando não se aplica).
+ * Taxa da conta num lançamento já criado fora do formulário (baixa de
+ * título): se a conta cobra taxa neste tipo de operação, cria o lançamento
+ * da taxa e liga os dois. Sem `override`, usa o percentual/fixo da conta;
+ * com `override`, usa o valor que o usuário decidiu na tela e, se `learn`,
+ * grava o novo percentual na conta. Devolve a taxa (0 quando não se aplica).
  */
-export async function applyAccountFeeToTransaction(mainId: string, main: Transaction): Promise<number> {
+export async function applyAccountFeeToTransaction(
+  mainId: string,
+  main: Transaction,
+  override?: { amount: number; learn?: boolean },
+): Promise<number> {
   if (!main.accountId) return 0;
   const account = await loadAccount(main.accountId);
   if (!account?.fee || !feeApplies(account.fee, main.type)) return 0;
-  const fee = computeFee(main.amount, account.fee);
+  const fee = override ? round2(Math.max(0, override.amount)) : computeFee(main.amount, account.fee);
   if (fee <= 0) return 0;
+  if (override?.learn) await learnFee(account, main.amount, fee);
   const feeRef = await addDoc(
     collection(db, COLLECTIONS.transactions),
     buildFeeRecord(main.ownerId, account, fee, main.date, main.description, mainId),

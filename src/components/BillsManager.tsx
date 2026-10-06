@@ -27,7 +27,8 @@ import {
 import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
 import { effectiveCostCenterId } from "@/lib/categories/tree";
 import { DateParts } from "@/components/DateParts";
-import { computeFee, feeAccountFor, realizedFromFee } from "@/lib/fees/fee";
+import { feeAccountFor } from "@/lib/fees/fee";
+import { FEE_AUTO, FeeFields, resolveFee, type FeeState } from "@/components/FeeFields";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import { expandRepeat, withDayIso, type RepeatMode, type RepeatUnit } from "@/lib/bills/repeat";
@@ -156,6 +157,10 @@ export function BillsManager({ kind }: { kind: BillKind }) {
   const [payAccount, setPayAccount] = useState("");
   // "settle" quita o título (fecha, mesmo com valor diferente); "partial" mantém o saldo.
   const [payMode, setPayMode] = useState<"settle" | "partial">("settle");
+  // Taxa da conta na baixa (ex.: Depix): calculada, editável, aprende.
+  const [payFee, setPayFee] = useState<FeeState>(FEE_AUTO);
+  const [partialFee, setPartialFee] = useState<FeeState>(FEE_AUTO);
+  const txType = isPayable ? "expense" : "income";
 
   // List filters (so you can see e.g. only the titles of a given account).
   const [fAccount, setFAccount] = useState("");
@@ -309,16 +314,6 @@ export function BillsManager({ kind }: { kind: BillKind }) {
       return acc;
     });
   }, [cf.filtered]);
-
-  /** Aviso da taxa da conta (ex.: Depix) aplicada na baixa, lançada à parte. */
-  function feeHint(accId: string, value: number): string {
-    const tg = feeAccountFor(isPayable ? "expense" : "income", accId, null, accounts);
-    if (!tg?.account.fee || value <= 0) return "";
-    const fee = computeFee(value, tg.account.fee);
-    if (fee <= 0) return "";
-    const real = realizedFromFee(isPayable ? "expense" : "income", value, fee);
-    return ` + Taxa ${tg.account.name} ${brl(fee)} lançada à parte (${isPayable ? "sai" : "entra"} ${brl(real)} da conta).`;
-  }
 
   // Soma dos títulos selecionados, exibida na barra de seleção.
   const selSum = useMemo(() => {
@@ -691,6 +686,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     setPartialAmount("");
     setPartialDate(today());
     setPartialAccount(b.accountId ?? "");
+    setPartialFee(FEE_AUTO);
   }
 
   async function confirmPartial(b: Bill) {
@@ -731,10 +727,12 @@ export function BillsManager({ kind }: { kind: BillKind }) {
       });
       // 2. Quita o título original pelo valor informado (gera o lançamento).
       try {
+        const pAcc = partialAccount || b.accountId || "";
+        const pFee = pAcc ? resolveFee(txType, pAcc, null, v, accounts, partialFee) : null;
         await addPayment(
           b.id,
           { id: rid(), date: partialDate, amount: v, accountId: partialAccount || b.accountId || null },
-          { settle: true },
+          { settle: true, fee: pFee ? { amount: pFee.amount, learn: pFee.learn } : undefined },
         );
       } catch (err) {
         await removeBill(residualId).catch(() => {});
@@ -760,6 +758,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     setPayDate(today());
     setPayAccount(b.accountId ?? "");
     setPayMode("settle");
+    setPayFee(FEE_AUTO);
   }
 
   async function confirmPay(b: Bill) {
@@ -779,6 +778,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     setError("");
     try {
       const settle = payMode === "settle";
+      const decision = resolveFee(txType, account, null, amount, accounts, payFee);
       await addPayment(
         b.id!,
         {
@@ -787,7 +787,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
           amount,
           accountId: account,
         },
-        { settle },
+        { settle, fee: decision ? { amount: decision.amount, learn: decision.learn } : undefined },
       );
       setPayingId(null);
       // "Quitar" fecha o título; parcial fecha só se o valor cobrir o restante.
@@ -1473,7 +1473,10 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                               <DateParts value={partialDate} onChange={setPartialDate} />
                               <select
                                 value={partialAccount}
-                                onChange={(e) => setPartialAccount(e.target.value)}
+                                onChange={(e) => {
+                                  setPartialAccount(e.target.value);
+                                  setPartialFee(FEE_AUTO);
+                                }}
                               >
                                 <option value="">Conta…</option>
                                 {accounts.map((a) => (
@@ -1503,6 +1506,15 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                     : `Informe um valor menor que o em aberto (${brl(rem)}). O restante vira um título "— Resíduo".`;
                                 })()}
                               </span>
+                              <FeeFields
+                                compact
+                                type={txType}
+                                accountId={partialAccount || b.accountId || ""}
+                                gross={parseBrCurrency(partialAmount) ?? 0}
+                                accounts={accounts}
+                                state={partialFee}
+                                onChange={setPartialFee}
+                              />
                             </div>
                           </td>
                         </tr>
@@ -1527,7 +1539,13 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                 style={{ ...fieldStyle, width: 110, textAlign: "right" }}
                               />
                               <DateParts value={payDate} onChange={setPayDate} />
-                              <select value={payAccount} onChange={(e) => setPayAccount(e.target.value)}>
+                              <select
+                                value={payAccount}
+                                onChange={(e) => {
+                                  setPayAccount(e.target.value);
+                                  setPayFee(FEE_AUTO);
+                                }}
+                              >
                                 <option value="">Conta…</option>
                                 {accounts.map((a) => (
                                   <option key={a.id} value={a.id}>
@@ -1548,8 +1566,16 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                 {payMode === "settle"
                                   ? "Quitar: fecha o título pelo valor informado (o título sai da lista)."
                                   : "Parcial: registra só uma parte; o título continua com o saldo em aberto."}
-                                {feeHint(payAccount || b.accountId || "", parseBrCurrency(payAmount) ?? 0)}
                               </span>
+                              <FeeFields
+                                compact
+                                type={txType}
+                                accountId={payAccount || b.accountId || ""}
+                                gross={parseBrCurrency(payAmount) ?? 0}
+                                accounts={accounts}
+                                state={payFee}
+                                onChange={setPayFee}
+                              />
                             </div>
                           </td>
                         </tr>

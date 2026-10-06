@@ -85,7 +85,16 @@ export async function settleBillAtPaid(id: string): Promise<void> {
 export async function addPayment(
   id: string,
   payment: BillPayment,
-  opts?: { settle?: boolean; externalId?: string | null; reconciled?: boolean },
+  opts?: {
+    settle?: boolean;
+    externalId?: string | null;
+    reconciled?: boolean;
+    /**
+     * Taxa da conta (ex.: Depix) decidida na tela: valor e se o percentual
+     * deve ser aprendido. `undefined` = calcula pela conta; `null` = sem taxa.
+     */
+    fee?: { amount: number; learn?: boolean } | null;
+  },
 ): Promise<void> {
   const snap = await getDoc(doc(db, COLLECTIONS.bills, id));
   if (!snap.exists()) throw new Error("Título não encontrado.");
@@ -98,10 +107,12 @@ export async function addPayment(
   });
   const txRef = await addDoc(collection(db, COLLECTIONS.transactions), txRecord);
   // Conta com taxa (ex.: Depix): a taxa vira um lançamento à parte, ligado.
-  try {
-    await applyAccountFeeToTransaction(txRef.id, txRecord);
-  } catch {
-    /* sem taxa configurada ou falha ao ler a conta: a baixa segue sem taxa */
+  if (opts?.fee !== null) {
+    try {
+      await applyAccountFeeToTransaction(txRef.id, txRecord, opts?.fee ?? undefined);
+    } catch {
+      /* sem taxa configurada ou falha ao ler a conta: a baixa segue sem taxa */
+    }
   }
 
   // Record the settlement on the bill. If this fails, roll back the transaction
