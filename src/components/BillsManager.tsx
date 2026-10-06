@@ -340,6 +340,11 @@ export function BillsManager({ kind }: { kind: BillKind }) {
   // restante em aberto, na mesma data; a conta é a do próprio título ou a
   // escolhida aqui (obrigatória para os títulos sem conta).
   const [bulkPayOpen, setBulkPayOpen] = useState(false);
+  // Excluir os selecionados + os títulos iguais futuros de cada um (sem baixa).
+  const [confirmBulkFuture, setConfirmBulkFuture] = useState(false);
+  useEffect(() => {
+    setConfirmBulkFuture(false);
+  }, [sel.selectedIds.length]);
   const [bulkDate, setBulkDate] = useState(today());
   const [bulkAccount, setBulkAccount] = useState("");
   const bulkTargets = useMemo(() => {
@@ -634,6 +639,15 @@ export function BillsManager({ kind }: { kind: BillKind }) {
   /** Descrição sem o sufixo de parcela: "Aluguel (2/12)" → "Aluguel". */
   const descBase = (s: string) => s.replace(/\s*\(\d+\/\d+\)\s*$/, "").trim();
   const baseDesc = (s: string) => descBase(s).toLowerCase();
+
+  /** Selecionados + futuros iguais de cada um (sem repetir). */
+  function selectionWithFuture(): { all: Bill[]; extra: number } {
+    const ids = new Set(sel.selectedIds);
+    const picked = (bills ?? []).filter((b) => b.id && ids.has(b.id));
+    const out = new Map(picked.map((b) => [b.id!, b]));
+    for (const b of picked) for (const f of futureSiblings(b)) if (f.id) out.set(f.id, f);
+    return { all: [...out.values()], extra: out.size - picked.length };
+  }
 
   function futureSiblings(b: Bill): Bill[] {
     return (bills ?? []).filter(
@@ -1156,6 +1170,40 @@ export function BillsManager({ kind }: { kind: BillKind }) {
               >
                 {settleLabel} selecionados
               </button>
+              {(() => {
+                const { all, extra } = selectionWithFuture();
+                if (extra <= 0) return null;
+                return confirmBulkFuture ? (
+                  <>
+                    <span style={{ fontWeight: 600 }}>
+                      Excluir {all.length} título(s) ({sel.count} selecionado(s) + {extra} futuro(s))?
+                    </span>
+                    <button
+                      style={{ background: "var(--err)" }}
+                      disabled={busy}
+                      onClick={async () => {
+                        await deleteBills(all);
+                        sel.clear();
+                        setConfirmBulkFuture(false);
+                      }}
+                    >
+                      Confirmar
+                    </button>
+                    <button style={{ background: "var(--border)" }} onClick={() => setConfirmBulkFuture(false)}>
+                      Cancelar
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    style={{ background: "var(--err)" }}
+                    disabled={busy}
+                    title="Exclui os selecionados e os títulos iguais que vencem depois (ainda sem baixa)"
+                    onClick={() => setConfirmBulkFuture(true)}
+                  >
+                    Excluir + {extra} futuro(s)
+                  </button>
+                );
+              })()}
               <span
                 className="badge"
                 style={{
