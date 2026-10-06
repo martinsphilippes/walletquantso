@@ -62,11 +62,11 @@ function Accounts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<Draft>({ name: "", type: "other", initialBalance: "0" });
+  const [draft, setDraft] = useState<Draft>({ name: "", type: "other", initialBalance: "" });
   const [creating, setCreating] = useState<Draft>({
     name: "",
     type: "checking",
-    initialBalance: "0",
+    initialBalance: "",
   });
   const [busy, setBusy] = useState(false);
 
@@ -197,7 +197,7 @@ function Accounts() {
     setDraft({
       name: a.name,
       type: a.type,
-      initialBalance: String(a.initialBalance ?? 0),
+      initialBalance: (a.initialBalance ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
     });
   }
 
@@ -208,7 +208,7 @@ function Accounts() {
       await updateAccount(id, {
         name: draft.name.trim(),
         type: draft.type,
-        initialBalance: parseFloat(draft.initialBalance.replace(",", ".")) || 0,
+        initialBalance: parseBrCurrency(draft.initialBalance) ?? 0,
       });
       setEditingId(null);
       await load();
@@ -343,12 +343,12 @@ function Accounts() {
         ownerId: user.uid,
         name: creating.name.trim(),
         type: creating.type,
-        initialBalance: parseFloat(creating.initialBalance.replace(",", ".")) || 0,
+        initialBalance: parseBrCurrency(creating.initialBalance) ?? 0,
         currency: "BRL",
         archived: false,
         createdAt: Date.now(),
       });
-      setCreating({ name: "", type: "checking", initialBalance: "0" });
+      setCreating({ name: "", type: "checking", initialBalance: "" });
       await load();
     } catch (err) {
       setError(`Falha ao criar: ${(err as Error).message}`);
@@ -444,8 +444,10 @@ function Accounts() {
                         <td style={{ textAlign: "right" }}>
                           <input
                             value={draft.initialBalance}
+                            inputMode="numeric"
+                            placeholder="0,00"
                             onChange={(e) =>
-                              setDraft({ ...draft, initialBalance: e.target.value })
+                              setDraft({ ...draft, initialBalance: maskBrAmount(e.target.value) })
                             }
                             style={{ ...fieldStyle, width: 110, textAlign: "right" }}
                           />
@@ -671,9 +673,10 @@ function Accounts() {
             ))}
           </select>
           <input
-            placeholder="Saldo inicial"
+            placeholder="Saldo inicial 0,00"
+            inputMode="numeric"
             value={creating.initialBalance}
-            onChange={(e) => setCreating({ ...creating, initialBalance: e.target.value })}
+            onChange={(e) => setCreating({ ...creating, initialBalance: maskBrAmount(e.target.value) })}
             style={{ ...fieldStyle, width: 130, textAlign: "right" }}
           />
           <button type="submit" disabled={busy}>
