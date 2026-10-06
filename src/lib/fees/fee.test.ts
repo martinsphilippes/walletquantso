@@ -6,6 +6,7 @@ import {
   feeApplies,
   feeFromRealized,
   learnedPercent,
+  linkedChargesFor,
   mainAmount,
   realizedFromFee,
 } from "./fee";
@@ -76,5 +77,35 @@ describe("taxa de conta", () => {
   it("descreve a taxa", () => {
     expect(describeFee(fee).replace(/ /g, " ")).toBe("2% + R$ 1,00");
     expect(describeFee({ ...fee, fixed: 0, percent: 2.35 })).toBe("2,35%");
+  });
+});
+
+describe("regras vinculadas (gasto em outra conta)", () => {
+  const depix: Account = {
+    ...acc("depix", fee),
+    linkedFees: [
+      { id: "r1", accountId: "lbtc", percent: 1, fixed: 0.5, onIncome: true, onExpense: true, onTransfer: false, categoryId: "c", costCenterId: null },
+      { id: "r2", accountId: "depix", percent: 5, fixed: 0, onIncome: true, onExpense: true, onTransfer: true, categoryId: null, costCenterId: null }, // própria conta: ignorada
+      { id: "r3", accountId: "c6", percent: 0, fixed: 0, onIncome: true, onExpense: true, onTransfer: true, categoryId: null, costCenterId: null }, // zero: ignorada
+    ],
+  };
+  const all = [depix, acc("lbtc"), acc("c6")];
+
+  it("despesa na Depix gera gasto na L-BTC (percentual + fixo)", () => {
+    const ch = linkedChargesFor("expense", "depix", null, 200, all);
+    expect(ch).toHaveLength(1);
+    expect(ch[0].targetAccount?.id).toBe("lbtc");
+    expect(ch[0].amount).toBe(2.5);
+  });
+
+  it("respeita o tipo de operação e, na transferência, olha origem e destino", () => {
+    expect(linkedChargesFor("transfer", "depix", "c6", 200, all)).toHaveLength(0);
+    expect(linkedChargesFor("transfer", "c6", "depix", 200, all)).toHaveLength(0);
+    const withTransfer = [{ ...depix, linkedFees: [{ ...depix.linkedFees![0], onTransfer: true }] }, acc("lbtc"), acc("c6")];
+    expect(linkedChargesFor("transfer", "c6", "depix", 100, withTransfer)[0].amount).toBe(1.5);
+  });
+
+  it("conta sem regra não gera nada", () => {
+    expect(linkedChargesFor("expense", "c6", null, 200, all)).toHaveLength(0);
   });
 });

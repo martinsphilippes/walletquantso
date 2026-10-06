@@ -34,6 +34,24 @@ export interface AccountFee {
   updatedAt?: number;
 }
 
+/**
+ * Regra vinculada: usar esta conta numa operação gera automaticamente uma
+ * despesa em OUTRA conta (ex.: usar a Depix consome uma fração na L-BTC).
+ * Percentual sobre o valor lançado e/ou valor fixo, por tipo de operação.
+ */
+export interface LinkedFee {
+  id: string;
+  /** Conta que gasta (destino do lançamento gerado). */
+  accountId: string;
+  percent: number;
+  fixed: number;
+  onIncome: boolean;
+  onExpense: boolean;
+  onTransfer: boolean;
+  categoryId: string | null;
+  costCenterId: string | null;
+}
+
 /** A bank account, wallet, or credit card. */
 export interface Account {
   id?: string;
@@ -46,6 +64,8 @@ export interface Account {
   archived: boolean;
   /** Taxa consumida pela conta em cada operação (ex.: Depix). */
   fee?: AccountFee | null;
+  /** Gastos gerados em outras contas quando esta é usada. */
+  linkedFees?: LinkedFee[];
   createdAt: number;
 }
 
@@ -255,6 +275,8 @@ export interface Transaction {
   feeGross?: number | null;
   /** Neste lançamento de taxa: id do lançamento que a originou. */
   feeOfId?: string | null;
+  /** Lançamentos gerados em outras contas por regras vinculadas. */
+  linkedFeeTransactionIds?: string[];
   tags?: string[];
   /** Id of the import batch that created this record (for undo/audit). */
   importBatchId?: string | null;

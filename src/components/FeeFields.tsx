@@ -17,6 +17,7 @@ import {
   feeAccountFor,
   feeFromRealized,
   learnedPercent,
+  linkedChargesFor,
   realizedFromFee,
 } from "@/lib/fees/fee";
 import type { Account, TransactionType } from "@/types";
@@ -56,6 +57,50 @@ export function resolveFee(
 
 const fmt2 = (n: number) =>
   n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const brl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+/**
+ * Aviso dos gastos em OUTRAS contas que esta operação vai gerar (regras
+ * vinculadas, ex.: Depix → L-BTC). Nada a editar: é pela configuração.
+ */
+export function LinkedFeeNote({
+  type,
+  accountId,
+  transferAccountId = null,
+  gross,
+  accounts,
+}: {
+  type: TransactionType;
+  accountId: string;
+  transferAccountId?: string | null;
+  gross: number;
+  accounts: Account[];
+}) {
+  const charges = linkedChargesFor(type, accountId, transferAccountId, gross, accounts);
+  if (charges.length === 0) return null;
+  return (
+    <div
+      className="muted"
+      style={{
+        flexBasis: "100%",
+        fontSize: "0.8rem",
+        padding: "0.4rem 0.6rem",
+        border: "1px dashed var(--border)",
+        borderRadius: 8,
+      }}
+    >
+      Gasto automático em outra conta:{" "}
+      {charges.map((c, i) => (
+        <span key={c.rule.id}>
+          {i > 0 ? " · " : ""}
+          <strong>{c.targetAccount?.name ?? "?"}</strong> {brl(c.amount)}{" "}
+          <span style={{ opacity: 0.8 }}>(regra da {c.sourceAccount.name})</span>
+        </span>
+      ))}
+      . Lançado à parte e removido junto se este lançamento for excluído.
+    </div>
+  );
+}
 
 export function FeeFields({
   type,

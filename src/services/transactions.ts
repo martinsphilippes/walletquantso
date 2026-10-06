@@ -4,11 +4,11 @@
 // Every create/update/delete appends an append-only audit entry so manual
 // changes are traceable alongside imports.
 
-import { addDoc, collection, deleteDoc, doc, getDoc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, query, updateDoc, where } from "firebase/firestore";
 import { db } from "./firebase";
 import { COLLECTIONS, appendAudit } from "./firestore";
 import { dedupHash } from "@/lib/import/engine";
-import { computeFee, feeApplies, learnedPercent, mainAmount } from "@/lib/fees/fee";
+import { computeFee, feeApplies, learnedPercent, linkedChargesFor, mainAmount } from "@/lib/fees/fee";
 import type { Account, Bill, BillPayment, Transaction, TransactionType } from "@/types";
 
 export interface TransactionInput {
@@ -79,6 +79,63 @@ async function learnFee(account: Account, gross: number, fee: number): Promise<v
   await updateDoc(doc(db, COLLECTIONS.accounts, account.id!), {
     fee: { ...account.fee, percent, updatedAt: Date.now() },
   });
+}
+
+/** Contas do dono (para as regras vinculadas). */
+async function loadAccounts(ownerId: string): Promise<Account[]> {
+  const snap = await getDocs(query(collection(db, COLLECTIONS.accounts), where("ownerId", "==", ownerId)));
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as Account);
+}
+
+/**
+ * Regras vinculadas: usar uma conta gera despesas em OUTRAS contas (ex.:
+ * Depix → L-BTC). Cria um lançamento por regra, ligado ao principal, e
+ * devolve os ids. `gross` = valor lançado (bruto) da operação.
+ */
+async function createLinkedFees(
+  ownerId: string,
+  mainId: string,
+  type: TransactionType,
+  accountId: string,
+  transferAccountId: string | null | undefined,
+  gross: number,
+  date: string,
+  description: string,
+): Promise<string[]> {
+  const accounts = await loadAccounts(ownerId);
+  const charges = linkedChargesFor(type, accountId, transferAccountId, gross, accounts);
+  const ids: string[] = [];
+  for (const ch of charges) {
+    if (!ch.targetAccount) continue;
+    const desc = `Taxa ${ch.targetAccount.name} (${ch.sourceAccount.name})${description ? ` — ${description}` : ""}`;
+    const rec: Transaction = {
+      ownerId,
+      date,
+      amount: round2(ch.amount),
+      type: "expense",
+      description: desc,
+      accountId: ch.targetAccount.id!,
+      categoryId: ch.rule.categoryId ?? null,
+      transferAccountId: null,
+      costCenterId: ch.rule.costCenterId ?? null,
+      contactId: null,
+      installment: null,
+      installmentGroupId: null,
+      importBatchId: null,
+      billId: null,
+      billPaymentId: null,
+      feeOfId: mainId,
+      notes: `Regra da conta ${ch.sourceAccount.name}: gasto em ${ch.targetAccount.name}`,
+      dedupHash: dedupHash({ date, amount: ch.amount, description: desc, account: ch.targetAccount.id! }),
+      createdAt: Date.now(),
+    };
+    ids.push((await addDoc(collection(db, COLLECTIONS.transactions), rec)).id);
+  }
+  return ids;
+}
+
+async function deleteLinkedFees(ids: string[] | null | undefined): Promise<void> {
+  for (const id of ids ?? []) await deleteDoc(doc(db, COLLECTIONS.transactions, id)).catch(() => {});
 }
 
 /**
@@ -204,6 +261,15 @@ export async function createTransaction(
       throw err;
     }
   }
+  // Regras vinculadas (gasto em outra conta): sempre pela configuração.
+  try {
+    const linked = await createLinkedFees(
+      ownerId, ref.id, input.type, input.accountId, input.transferAccountId, Math.abs(input.amount), input.date, input.description,
+    );
+    if (linked.length > 0) await updateDoc(ref, { linkedFeeTransactionIds: linked });
+  } catch {
+    /* sem regras ou falha ao ler contas: o lançamento fica sem vinculados */
+  }
   await appendAudit({
     ownerId,
     action: "manual_create",
@@ -260,11 +326,35 @@ export async function updateTransaction(
     }).catch(() => {});
   }
 
+  // Regras vinculadas: recria quando valor, conta, tipo ou data mudam.
+  const linkedPatch: Partial<Transaction> = {};
+  if (old && !old.feeOfId) {
+    const oldGross = old.feeGross ?? old.amount;
+    const changed =
+      Math.abs(oldGross - Math.abs(input.amount)) > 0.005 ||
+      old.accountId !== input.accountId ||
+      (old.transferAccountId ?? null) !== (input.transferAccountId ?? null) ||
+      old.type !== input.type ||
+      old.date !== input.date ||
+      old.description !== input.description;
+    if (changed || (old.linkedFeeTransactionIds?.length ?? 0) === 0) {
+      await deleteLinkedFees(old.linkedFeeTransactionIds);
+      try {
+        linkedPatch.linkedFeeTransactionIds = await createLinkedFees(
+          ownerId, id, input.type, input.accountId, input.transferAccountId, Math.abs(input.amount), input.date, input.description,
+        );
+      } catch {
+        linkedPatch.linkedFeeTransactionIds = [];
+      }
+    }
+  }
+
   await updateDoc(ref, {
     ...patch,
     ...(old?.feeOfId ? { feeOfId: old.feeOfId } : {}),
     notes: input.notes?.trim() ?? null,
     ...feePatch,
+    ...linkedPatch,
   });
   await appendAudit({
     ownerId,
@@ -310,6 +400,7 @@ export async function removeTransaction(ownerId: string, id: string): Promise<vo
   if (t?.feeTransactionId) {
     await deleteDoc(doc(db, COLLECTIONS.transactions, t.feeTransactionId)).catch(() => {});
   }
+  await deleteLinkedFees(t?.linkedFeeTransactionIds);
   // Excluindo só a taxa: o principal deixa de apontar para ela.
   if (t?.feeOfId) {
     await updateDoc(doc(db, COLLECTIONS.transactions, t.feeOfId), {
@@ -335,6 +426,15 @@ export async function applyAccountFeeToTransaction(
   override?: { amount: number; learn?: boolean },
 ): Promise<number> {
   if (!main.accountId) return 0;
+  // Regras vinculadas (gasto em outra conta) valem mesmo sem taxa própria.
+  try {
+    const linked = await createLinkedFees(
+      main.ownerId, mainId, main.type, main.accountId, main.transferAccountId, main.amount, main.date, main.description,
+    );
+    if (linked.length > 0) await updateDoc(doc(db, COLLECTIONS.transactions, mainId), { linkedFeeTransactionIds: linked });
+  } catch {
+    /* sem regras: segue */
+  }
   const account = await loadAccount(main.accountId);
   if (!account?.fee || !feeApplies(account.fee, main.type)) return 0;
   const fee = override ? round2(Math.max(0, override.amount)) : computeFee(main.amount, account.fee);
@@ -356,7 +456,8 @@ export async function applyAccountFeeToTransaction(
 export async function deleteTransactionWithFee(id: string): Promise<void> {
   const ref = doc(db, COLLECTIONS.transactions, id);
   const snap = await getDoc(ref).catch(() => null);
-  const feeId = snap?.exists() ? (snap.data() as Transaction).feeTransactionId : null;
-  if (feeId) await deleteDoc(doc(db, COLLECTIONS.transactions, feeId)).catch(() => {});
+  const t = snap?.exists() ? (snap.data() as Transaction) : null;
+  if (t?.feeTransactionId) await deleteDoc(doc(db, COLLECTIONS.transactions, t.feeTransactionId)).catch(() => {});
+  await deleteLinkedFees(t?.linkedFeeTransactionIds);
   await deleteDoc(ref);
 }

@@ -14,6 +14,7 @@ import {
 import type { Account, Category, Contact, CostCenter, TransactionType } from "@/types";
 import type { TransactionInput } from "@/services/transactions";
 import { todayBr } from "@/lib/br/date";
+import { LinkedFeeNote } from "@/components/FeeFields";
 
 interface Props {
   accounts: Account[];
@@ -354,6 +355,18 @@ export function TransactionForm({
               <>A taxa vira um lançamento à parte. Edite a taxa ou o realizado se o valor real for outro.</>
             )}
           </div>
+        </div>
+      )}
+
+      {accountId && gross > 0 && (
+        <div style={{ marginTop: "0.5rem" }}>
+          <LinkedFeeNote
+            type={type}
+            accountId={accountId}
+            transferAccountId={type === "transfer" ? transferAccountId : null}
+            gross={gross}
+            accounts={accounts}
+          />
         </div>
       )}
 

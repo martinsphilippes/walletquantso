@@ -14,13 +14,13 @@ import {
   updateAccount,
 } from "@/services/firestore";
 import { createCategory } from "@/services/categories";
-import { describeFee } from "@/lib/fees/fee";
+import { describeFee, describeLinkedFee } from "@/lib/fees/fee";
 import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
 import { listBills } from "@/services/bills";
 import { computeBalances } from "@/lib/dashboard/balances";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
-import type { Account, AccountFee, AccountType, Bill, Category, CostCenter, Transaction } from "@/types";
+import type { Account, AccountFee, AccountType, Bill, Category, CostCenter, LinkedFee, Transaction } from "@/types";
 
 const TYPE_LABELS: Record<AccountType, string> = {
   checking: "Conta corrente",
@@ -230,6 +230,30 @@ function Accounts() {
   }
   const [feeId, setFeeId] = useState<string | null>(null);
   const [feeDraft, setFeeDraft] = useState<FeeDraft | null>(null);
+  // Regras vinculadas: usar esta conta gera um gasto em OUTRA conta.
+  interface LinkedDraft {
+    id: string;
+    accountId: string;
+    percent: string;
+    fixed: string;
+    onIncome: boolean;
+    onExpense: boolean;
+    onTransfer: boolean;
+    costCenterId: string;
+    categoryId: string;
+  }
+  const [linkedDraft, setLinkedDraft] = useState<LinkedDraft[]>([]);
+  const newLinked = (): LinkedDraft => ({
+    id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    accountId: "",
+    percent: "",
+    fixed: "",
+    onIncome: true,
+    onExpense: true,
+    onTransfer: true,
+    costCenterId: costCenters.find((c) => /n[aã]o\s*operaciona/i.test(c.name))?.id ?? "",
+    categoryId: "",
+  });
   const [feeMsg, setFeeMsg] = useState("");
   const fmt2 = (n: number) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const expenseMains = categories.filter((c) => !c.parentId && c.kind === "expense");
@@ -250,6 +274,52 @@ function Accounts() {
       costCenterId: f?.costCenterId ?? (catCenter || suggested),
       categoryId: f?.categoryId ?? "",
     });
+    setLinkedDraft(
+      (a.linkedFees ?? []).map((r) => ({
+        id: r.id,
+        accountId: r.accountId,
+        percent: String(r.percent ?? 0).replace(".", ","),
+        fixed: r.fixed ? fmt2(r.fixed) : "",
+        onIncome: r.onIncome,
+        onExpense: r.onExpense,
+        onTransfer: r.onTransfer,
+        costCenterId: r.costCenterId ?? "",
+        categoryId: r.categoryId ?? "",
+      })),
+    );
+  }
+
+  /** Cria (ou reaproveita) a categoria "Taxa <conta destino>" de uma regra vinculada. */
+  async function createLinkedCategory(row: LinkedDraft) {
+    if (!user) return;
+    const target = accounts.find((x) => x.id === row.accountId);
+    if (!target) return setFeeMsg("Escolha a conta que gasta antes de criar a categoria.");
+    if (!row.costCenterId) return setFeeMsg("Escolha o centro de custo da regra antes de criar a categoria.");
+    const name = `Taxa ${target.name}`;
+    const existing = expenseMains.find(
+      (c) => c.name.toLowerCase() === name.toLowerCase() && (c.costCenterId ?? "") === row.costCenterId,
+    );
+    const setCat = (id: string) =>
+      setLinkedDraft((rows) => rows.map((r) => (r.id === row.id ? { ...r, categoryId: id } : r)));
+    if (existing) return setCat(existing.id!);
+    setBusy(true);
+    try {
+      const id = await createCategory({
+        ownerId: user.uid,
+        name,
+        kind: "expense",
+        parentId: null,
+        costCenterId: row.costCenterId,
+        createdAt: Date.now(),
+      });
+      setCategories([...categories, { id, ownerId: user.uid, name, kind: "expense", parentId: null, costCenterId: row.costCenterId, createdAt: Date.now() }]);
+      setCat(id);
+      setFeeMsg(`✅ Categoria "${name}" criada.`);
+    } catch (err) {
+      setFeeMsg(`❌ Falha ao criar a categoria: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function createFeeCategory(a: Account) {
@@ -288,8 +358,33 @@ function Accounts() {
 
   async function saveFee(a: Account, remove = false) {
     if (!feeDraft) return;
+    // Regras vinculadas (gasto em outra conta).
+    const linkedFees: LinkedFee[] = [];
+    for (const row of linkedDraft) {
+      const pct = Number((row.percent || "0").replace(",", "."));
+      const fx = parseBrCurrency(row.fixed || "0") ?? 0;
+      const target = accounts.find((x) => x.id === row.accountId);
+      if (!target) return setFeeMsg("Em cada regra vinculada, escolha a conta que gasta.");
+      if (target.id === a.id) return setFeeMsg("A regra vinculada precisa apontar para OUTRA conta (para esta, use a taxa própria acima).");
+      if (!Number.isFinite(pct) || pct < 0 || pct >= 100) return setFeeMsg(`Regra para ${target.name}: percentual entre 0 e 100.`);
+      if (pct <= 0 && fx <= 0) return setFeeMsg(`Regra para ${target.name}: informe o percentual e/ou o valor fixo.`);
+      if (!row.onIncome && !row.onExpense && !row.onTransfer) return setFeeMsg(`Regra para ${target.name}: marque em quais operações vale.`);
+      if (!row.categoryId) return setFeeMsg(`Regra para ${target.name}: escolha a categoria (ou crie "Taxa ${target.name}").`);
+      linkedFees.push({
+        id: row.id,
+        accountId: row.accountId,
+        percent: Math.round(pct * 10000) / 10000,
+        fixed: fx,
+        onIncome: row.onIncome,
+        onExpense: row.onExpense,
+        onTransfer: row.onTransfer,
+        categoryId: row.categoryId,
+        costCenterId: row.costCenterId || null,
+      });
+    }
+    const ownEmpty = !feeDraft.percent.trim() && !feeDraft.fixed.trim();
     let fee: AccountFee | null = null;
-    if (!remove) {
+    if (!remove && !ownEmpty) {
       const percent = Number((feeDraft.percent || "0").replace(",", "."));
       const fixed = parseBrCurrency(feeDraft.fixed || "0") ?? 0;
       if (!Number.isFinite(percent) || percent < 0 || percent >= 100) {
@@ -319,11 +414,16 @@ function Accounts() {
         updatedAt: Date.now(),
       };
     }
+    if (!remove && !fee && linkedFees.length === 0) {
+      setFeeMsg("Informe a taxa própria e/ou pelo menos uma regra de gasto em outra conta.");
+      return;
+    }
     setBusy(true);
     try {
-      await updateAccount(a.id!, { fee });
+      await updateAccount(a.id!, { fee, linkedFees: remove ? [] : linkedFees });
       setFeeId(null);
       setFeeDraft(null);
+      setLinkedDraft([]);
       await load();
     } catch (err) {
       setFeeMsg(`❌ Falha ao salvar: ${(err as Error).message}`);
@@ -481,6 +581,15 @@ function Accounts() {
                               taxa {describeFee(a.fee)}
                             </span>
                           )}
+                          {(a.linkedFees ?? []).map((r) => (
+                            <span
+                              key={r.id}
+                              className="chip"
+                              style={{ fontSize: "0.72rem", marginTop: "0.2rem", marginLeft: "0.25rem", display: "inline-block" }}
+                            >
+                              → {accounts.find((x) => x.id === r.accountId)?.name ?? "?"} {describeLinkedFee(r)}
+                            </span>
+                          ))}
                         </td>
                         <td>{TYPE_LABELS[a.type]}</td>
                         <td style={{ textAlign: "right" }}>{brl(a.initialBalance ?? 0)}</td>
@@ -509,7 +618,7 @@ function Accounts() {
                               onClick={() => (feeId === a.id ? setFeeId(null) : openFee(a))}
                               title="Taxa que esta conta consome em cada operação"
                             >
-                              {a.fee ? "Taxa ✓" : "Taxa"}
+                              {a.fee || (a.linkedFees?.length ?? 0) > 0 ? "Taxa ✓" : "Taxa"}
                             </button>
                             <button
                               style={{ ...smallBtn, background: "var(--err-dim)", color: "var(--err)", border: "1px solid var(--err)" }}
@@ -610,6 +719,107 @@ function Accounts() {
                               + Criar “Taxa {a.name}”
                             </button>
                           </div>
+                          <div style={{ marginTop: "0.9rem", borderTop: "1px solid var(--border)", paddingTop: "0.7rem" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+                              <strong>Gasto em outra conta</strong>
+                              <button
+                                type="button"
+                                style={{ background: "var(--border)", padding: "0.3rem 0.7rem" }}
+                                onClick={() => setLinkedDraft([...linkedDraft, newLinked()])}
+                              >
+                                + Adicionar regra
+                              </button>
+                            </div>
+                            <p className="muted" style={{ margin: "0.25rem 0 0.5rem", fontSize: "0.82rem" }}>
+                              Ao usar a conta {a.name} numa operação marcada, o app lança sozinho uma despesa na conta
+                              escolhida: percentual sobre o valor lançado e/ou valor fixo (ex.: Depix → L-BTC).
+                            </p>
+                            {linkedDraft.length === 0 && (
+                              <p className="muted" style={{ fontSize: "0.82rem", margin: 0 }}>Nenhuma regra.</p>
+                            )}
+                            {linkedDraft.map((row) => {
+                              const upd = (patch: Partial<LinkedDraft>) =>
+                                setLinkedDraft((rows) => rows.map((r) => (r.id === row.id ? { ...r, ...patch } : r)));
+                              return (
+                                <div
+                                  key={row.id}
+                                  style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "flex-end", padding: "0.5rem 0", borderBottom: "1px dashed var(--border)" }}
+                                >
+                                  <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                                    <span className="muted" style={{ fontSize: "0.8rem" }}>Conta que gasta</span>
+                                    <select value={row.accountId} onChange={(e) => upd({ accountId: e.target.value, categoryId: "" })}>
+                                      <option value="">Escolha…</option>
+                                      {accounts.filter((x) => x.id !== a.id).map((x) => (
+                                        <option key={x.id} value={x.id}>{x.name}</option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                                    <span className="muted" style={{ fontSize: "0.8rem" }}>Percentual (%)</span>
+                                    <input
+                                      inputMode="decimal"
+                                      value={row.percent}
+                                      onChange={(e) => upd({ percent: e.target.value.replace(/[^\d,.]/g, "") })}
+                                      placeholder="ex.: 1"
+                                      style={{ ...fieldStyle, width: 80, textAlign: "right" }}
+                                    />
+                                  </label>
+                                  <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                                    <span className="muted" style={{ fontSize: "0.8rem" }}>Valor fixo (R$)</span>
+                                    <input
+                                      inputMode="numeric"
+                                      value={row.fixed}
+                                      onChange={(e) => upd({ fixed: maskBrAmount(e.target.value) })}
+                                      placeholder="0,00"
+                                      style={{ ...fieldStyle, width: 95, textAlign: "right" }}
+                                    />
+                                  </label>
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                                    <span className="muted" style={{ fontSize: "0.8rem" }}>Vale em</span>
+                                    <div style={{ display: "flex", gap: "0.6rem", padding: "0.35rem 0" }}>
+                                      {([["onExpense", "Despesa"], ["onIncome", "Receita"], ["onTransfer", "Transf."]] as const).map(([k, label]) => (
+                                        <label key={k} style={{ display: "flex", gap: "0.3rem", alignItems: "center" }}>
+                                          <input type="checkbox" checked={row[k]} onChange={(e) => upd({ [k]: e.target.checked })} />
+                                          {label}
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                                    <span className="muted" style={{ fontSize: "0.8rem" }}>Centro de custo</span>
+                                    <select value={row.costCenterId} onChange={(e) => upd({ costCenterId: e.target.value, categoryId: "" })}>
+                                      <option value="">Escolha…</option>
+                                      {costCenters.map((c) => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                                    <span className="muted" style={{ fontSize: "0.8rem" }}>Categoria</span>
+                                    <select value={row.categoryId} onChange={(e) => upd({ categoryId: e.target.value })}>
+                                      <option value="">Escolha…</option>
+                                      {expenseMains
+                                        .filter((c) => !row.costCenterId || (c.costCenterId ?? "") === row.costCenterId)
+                                        .map((c) => (
+                                          <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                  </label>
+                                  <button type="button" style={{ background: "var(--border)", padding: "0.35rem 0.7rem" }} disabled={busy} onClick={() => void createLinkedCategory(row)}>
+                                    + Criar categoria
+                                  </button>
+                                  <button
+                                    type="button"
+                                    title="Remover esta regra"
+                                    style={{ background: "var(--border)", padding: "0.35rem 0.6rem" }}
+                                    onClick={() => setLinkedDraft((rows) => rows.filter((r) => r.id !== row.id))}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
                           <div style={{ display: "flex", gap: "0.6rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
                             <button className="btn-primary" disabled={busy} onClick={() => void saveFee(a)}>
                               Salvar taxa
@@ -617,12 +827,12 @@ function Accounts() {
                             <button style={{ background: "var(--border)" }} onClick={() => setFeeId(null)}>
                               Cancelar
                             </button>
-                            {a.fee && (
+                            {(a.fee || (a.linkedFees?.length ?? 0) > 0) && (
                               <button
                                 style={{ background: "var(--err)" }}
                                 disabled={busy}
                                 onClick={() => {
-                                  if (confirm(`Remover a taxa da conta ${a.name}? Os lançamentos já feitos continuam como estão.`)) {
+                                  if (confirm(`Remover a taxa e as regras da conta ${a.name}? Os lançamentos já feitos continuam como estão.`)) {
                                     void saveFee(a, true);
                                   }
                                 }}

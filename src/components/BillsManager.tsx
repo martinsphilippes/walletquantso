@@ -28,7 +28,7 @@ import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
 import { effectiveCostCenterId } from "@/lib/categories/tree";
 import { DateParts } from "@/components/DateParts";
 import { feeAccountFor } from "@/lib/fees/fee";
-import { FEE_AUTO, FeeFields, resolveFee, type FeeState } from "@/components/FeeFields";
+import { FEE_AUTO, FeeFields, LinkedFeeNote, resolveFee, type FeeState } from "@/components/FeeFields";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import { expandRepeat, withDayIso, type RepeatMode, type RepeatUnit } from "@/lib/bills/repeat";
@@ -1515,6 +1515,12 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                 state={partialFee}
                                 onChange={setPartialFee}
                               />
+                              <LinkedFeeNote
+                                type={txType}
+                                accountId={partialAccount || b.accountId || ""}
+                                gross={parseBrCurrency(partialAmount) ?? 0}
+                                accounts={accounts}
+                              />
                             </div>
                           </td>
                         </tr>
@@ -1575,6 +1581,12 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                 accounts={accounts}
                                 state={payFee}
                                 onChange={setPayFee}
+                              />
+                              <LinkedFeeNote
+                                type={txType}
+                                accountId={payAccount || b.accountId || ""}
+                                gross={parseBrCurrency(payAmount) ?? 0}
+                                accounts={accounts}
                               />
                             </div>
                           </td>

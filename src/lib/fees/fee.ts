@@ -12,7 +12,7 @@
 // (o que chega no destino) e a taxa sai da origem: a origem perde o valor
 // cheio e o destino recebe o líquido.
 
-import type { Account, AccountFee, TransactionType } from "@/types";
+import type { Account, AccountFee, LinkedFee, TransactionType } from "@/types";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -84,4 +84,51 @@ export function describeFee(fee: AccountFee): string {
     parts.push(fee.fixed.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
   }
   return parts.join(" + ") || "sem taxa";
+}
+
+// ── Regras vinculadas (gasto em outra conta) ───────────────────────────────
+
+
+export interface LinkedCharge {
+  rule: LinkedFee;
+  /** Conta que gerou a regra (a usada na operação). */
+  sourceAccount: Account;
+  /** Conta que gasta. */
+  targetAccount: Account | undefined;
+  amount: number;
+}
+
+/**
+ * Gastos em outras contas disparados por esta operação: regras da conta da
+ * operação (e, numa transferência, também da conta de destino) marcadas
+ * para este tipo, com valor > 0. Uma regra apontando para a própria conta é
+ * ignorada (para isso existe a taxa própria).
+ */
+export function linkedChargesFor(
+  type: TransactionType,
+  accountId: string,
+  transferAccountId: string | null | undefined,
+  gross: number,
+  accounts: Account[],
+): LinkedCharge[] {
+  const byId = (id: string | null | undefined) => (id ? accounts.find((a) => a.id === id) : undefined);
+  const sources = [byId(accountId)];
+  if (type === "transfer") sources.push(byId(transferAccountId));
+  const out: LinkedCharge[] = [];
+  for (const src of sources) {
+    for (const rule of src?.linkedFees ?? []) {
+      if (rule.accountId === src!.id) continue;
+      const on = type === "income" ? rule.onIncome : type === "expense" ? rule.onExpense : rule.onTransfer;
+      if (!on) continue;
+      const amount = round2(gross * ((rule.percent ?? 0) / 100) + (rule.fixed ?? 0));
+      if (amount <= 0) continue;
+      out.push({ rule, sourceAccount: src!, targetAccount: byId(rule.accountId), amount });
+    }
+  }
+  return out;
+}
+
+/** "2% + R$ 1,00" para uma regra vinculada. */
+export function describeLinkedFee(rule: LinkedFee): string {
+  return describeFee({ ...rule, categoryId: null, costCenterId: null });
 }

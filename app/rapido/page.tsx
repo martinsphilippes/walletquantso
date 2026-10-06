@@ -38,6 +38,7 @@ import {
 import { todayBr, currentMonthBr } from "@/lib/br/date";
 import { onListsChange } from "@/services/live-store";
 import { DateParts } from "@/components/DateParts";
+import { LinkedFeeNote } from "@/components/FeeFields";
 import type { Account, Bill, Category, CostCenter, Transaction } from "@/types";
 
 const brl = (n: number) =>
@@ -495,6 +496,12 @@ function Rapido() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {accountId && grossValue > 0 && !editingTxId && (
+          <div style={{ marginTop: "0.6rem" }}>
+            <LinkedFeeNote type={type} accountId={accountId} gross={grossValue} accounts={accounts} />
           </div>
         )}
 
