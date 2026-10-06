@@ -249,4 +249,5 @@ label { font-size: 0.9rem; }
 
 /* Placeholder / coming-soon */
 .soon { text-align: center; padding: 3rem 1rem; color: var(--muted); }
-.soon .chip { display: inline-block; margin-top: 0.75rem; padding: 0.25rem 0.75rem; border: 1px solid var(--border); border-radius: 999px; font-size: 0.8rem; }
+.chip { display: inline-block; padding: 0.15rem 0.6rem; border: 1px solid var(--border); border-radius: 999px; font-size: 0.8rem; color: var(--text-dim); background: var(--surface); }
+.soon .chip { margin-top: 0.75rem; padding: 0.25rem 0.75rem; }

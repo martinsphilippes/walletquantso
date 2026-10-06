@@ -130,7 +130,6 @@ function Accounts() {
     { key: "initial", value: (a) => brl(a.initialBalance ?? 0), align: "right" },
     { key: "movements", value: (a) => (balanceById.get(a.id!) ? brl(balanceById.get(a.id!)!.movements) : ""), align: "right" },
     { key: "current", value: (a) => (balanceById.get(a.id!) ? brl(balanceById.get(a.id!)!.current) : ""), align: "right" },
-    { key: "fee", type: "select", value: (a) => (a.fee ? describeFee(a.fee) : "") },
     { key: "actions", type: "none" },
   ];
   const cf = useColumnFilters(accounts, filterDefs);
@@ -396,6 +395,7 @@ function Accounts() {
         {accounts.length === 0 ? (
           <p className="muted">Nenhuma conta ainda. Crie a primeira abaixo.</p>
         ) : (
+          <div className="table-wrap">
           <table>
             <thead>
               <tr>
@@ -405,8 +405,7 @@ function Accounts() {
                 <th style={{ textAlign: "right" }}>Saldo inicial</th>
                 <th style={{ textAlign: "right" }}>Movimentações</th>
                 <th style={{ textAlign: "right" }}>Saldo atual</th>
-                <th>Taxa</th>
-                <th></th>
+                <th style={{ width: 1, whiteSpace: "nowrap" }}>Ações</th>
               </tr>
               <FilterRow defs={filterDefs} cf={cf} />
             </thead>
@@ -458,22 +457,31 @@ function Accounts() {
                         <td style={{ textAlign: "right" }} className="muted">
                           —
                         </td>
-                        <td className="muted">{a.fee ? describeFee(a.fee) : "—"}</td>
                         <td style={{ whiteSpace: "nowrap" }}>
-                          <button disabled={busy} onClick={() => saveEdit(a.id!)}>
-                            Salvar
-                          </button>{" "}
-                          <button
-                            style={{ background: "var(--border)" }}
-                            onClick={() => setEditingId(null)}
-                          >
-                            Cancelar
-                          </button>
+                          <div style={actionsStyle}>
+                            <button className="btn-primary" style={smallBtn} disabled={busy} onClick={() => saveEdit(a.id!)}>
+                              Salvar
+                            </button>
+                            <button style={{ ...smallBtn, background: "var(--border)" }} onClick={() => setEditingId(null)}>
+                              Cancelar
+                            </button>
+                          </div>
                         </td>
                       </>
                     ) : (
                       <>
-                        <td>{a.name}</td>
+                        <td>
+                          <div style={{ fontWeight: 600 }}>{a.name}</div>
+                          {a.fee && (
+                            <span
+                              className="chip"
+                              title={`Taxa em: ${[a.fee.onExpense && "despesa", a.fee.onIncome && "receita", a.fee.onTransfer && "transferência"].filter(Boolean).join(", ")}`}
+                              style={{ fontSize: "0.72rem", marginTop: "0.2rem", display: "inline-block" }}
+                            >
+                              taxa {describeFee(a.fee)}
+                            </span>
+                          )}
+                        </td>
                         <td>{TYPE_LABELS[a.type]}</td>
                         <td style={{ textAlign: "right" }}>{brl(a.initialBalance ?? 0)}</td>
                         <td style={{ textAlign: "right" }}>{bal ? brl(bal.movements) : "—"}</td>
@@ -488,46 +496,34 @@ function Accounts() {
                           {bal ? brl(bal.current) : "—"}
                         </td>
                         <td style={{ whiteSpace: "nowrap" }}>
-                          {a.fee ? (
-                            <span>
-                              {describeFee(a.fee)}
-                              <span className="muted" style={{ fontSize: "0.75rem" }}>
-                                {" "}
-                                ({[a.fee.onExpense && "despesa", a.fee.onIncome && "receita", a.fee.onTransfer && "transf."]
-                                  .filter(Boolean)
-                                  .join(", ")})
-                              </span>
-                            </span>
-                          ) : (
-                            <span className="muted">—</span>
-                          )}
-                        </td>
-                        <td style={{ whiteSpace: "nowrap" }}>
-                          <button
-                            style={{ background: "var(--border)" }}
-                            onClick={() => startEdit(a)}
-                          >
-                            Editar
-                          </button>{" "}
-                          <button
-                            style={{ background: "var(--border)" }}
-                            onClick={() => (feeId === a.id ? setFeeId(null) : openFee(a))}
-                            title="Taxa que esta conta consome em cada operação"
-                          >
-                            Taxa
-                          </button>{" "}
-                          <button
-                            style={{ background: "var(--err)" }}
-                            disabled={busy}
-                            title={
-                              (usageById.get(a.id!) ?? 0) > 0
-                                ? "Conta em uso — reatribua os lançamentos/títulos antes de excluir"
-                                : "Excluir conta"
-                            }
-                            onClick={() => handleDelete(a)}
-                          >
-                            Excluir
-                          </button>
+                          <div style={actionsStyle}>
+                            <button style={{ ...smallBtn, background: "var(--border)" }} onClick={() => startEdit(a)}>
+                              Editar
+                            </button>
+                            <button
+                              style={{
+                                ...smallBtn,
+                                background: feeId === a.id ? "var(--accent)" : "var(--border)",
+                                color: feeId === a.id ? "var(--accent-ink)" : "var(--text)",
+                              }}
+                              onClick={() => (feeId === a.id ? setFeeId(null) : openFee(a))}
+                              title="Taxa que esta conta consome em cada operação"
+                            >
+                              {a.fee ? "Taxa ✓" : "Taxa"}
+                            </button>
+                            <button
+                              style={{ ...smallBtn, background: "var(--err-dim)", color: "var(--err)", border: "1px solid var(--err)" }}
+                              disabled={busy}
+                              title={
+                                (usageById.get(a.id!) ?? 0) > 0
+                                  ? "Conta em uso — reatribua os lançamentos/títulos antes de excluir"
+                                  : "Excluir conta"
+                              }
+                              onClick={() => handleDelete(a)}
+                            >
+                              Excluir
+                            </button>
+                          </div>
                         </td>
                       </>
                     )}
@@ -535,8 +531,8 @@ function Accounts() {
                   {feeId === a.id && feeDraft && (
                     <tr>
                       <td></td>
-                      <td colSpan={7}>
-                        <div style={{ border: "1px solid var(--border)", borderRadius: 8, padding: "0.75rem", margin: "0.25rem 0 0.5rem" }}>
+                      <td colSpan={6}>
+                        <div style={{ border: "1px solid var(--border)", borderRadius: 8, padding: "0.75rem", margin: "0.25rem 0 0.5rem", background: "var(--bg)" }}>
                           <strong>Taxa da conta {a.name}</strong>
                           <p className="muted" style={{ margin: "0.25rem 0 0.6rem", fontSize: "0.82rem" }}>
                             Em cada operação marcada, a conta consome o percentual + a taxa fixa. Despesa: sai o valor
@@ -649,37 +645,47 @@ function Accounts() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
       <div className="panel">
         <h2>Nova conta</h2>
-        <form onSubmit={createNew} style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-          <input
-            placeholder="Nome da conta"
-            value={creating.name}
-            onChange={(e) => setCreating({ ...creating, name: e.target.value })}
-            required
-            style={fieldStyle}
-          />
-          <select
-            value={creating.type}
-            onChange={(e) => setCreating({ ...creating, type: e.target.value as AccountType })}
-          >
-            {TYPES.map((t) => (
-              <option key={t} value={t}>
-                {TYPE_LABELS[t]}
-              </option>
-            ))}
-          </select>
-          <input
-            placeholder="Saldo inicial 0,00"
-            inputMode="numeric"
-            value={creating.initialBalance}
-            onChange={(e) => setCreating({ ...creating, initialBalance: maskBrAmount(e.target.value) })}
-            style={{ ...fieldStyle, width: 130, textAlign: "right" }}
-          />
-          <button type="submit" disabled={busy}>
+        <form onSubmit={createNew} style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem", flex: "2 1 220px" }}>
+            <span className="muted" style={{ fontSize: "0.8rem" }}>Nome da conta</span>
+            <input
+              placeholder="ex.: Nubank"
+              value={creating.name}
+              onChange={(e) => setCreating({ ...creating, name: e.target.value })}
+              required
+              style={fieldStyle}
+            />
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem", flex: "1 1 160px" }}>
+            <span className="muted" style={{ fontSize: "0.8rem" }}>Tipo</span>
+            <select
+              value={creating.type}
+              onChange={(e) => setCreating({ ...creating, type: e.target.value as AccountType })}
+            >
+              {TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {TYPE_LABELS[t]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem", flex: "0 1 150px" }}>
+            <span className="muted" style={{ fontSize: "0.8rem" }}>Saldo inicial (R$)</span>
+            <input
+              placeholder="0,00"
+              inputMode="numeric"
+              value={creating.initialBalance}
+              onChange={(e) => setCreating({ ...creating, initialBalance: maskBrAmount(e.target.value) })}
+              style={{ ...fieldStyle, textAlign: "right" }}
+            />
+          </label>
+          <button type="submit" className="btn-primary" disabled={busy}>
             Adicionar
           </button>
         </form>
@@ -692,6 +698,18 @@ function Accounts() {
     </>
   );
 }
+
+const actionsStyle: React.CSSProperties = {
+  display: "flex",
+  gap: "0.35rem",
+  justifyContent: "flex-end",
+  flexWrap: "nowrap",
+};
+const smallBtn: React.CSSProperties = {
+  padding: "0.35rem 0.7rem",
+  fontSize: "0.85rem",
+  borderRadius: 8,
+};
 
 const fieldStyle: React.CSSProperties = {
   padding: "0.35rem 0.5rem",
