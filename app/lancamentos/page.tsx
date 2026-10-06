@@ -698,6 +698,22 @@ function Lancamentos() {
             </button>
           )}
         </div>
+        {filters.to && filters.to < todayBr() && (
+          <p className="badge warn" style={{ display: "inline-block", marginTop: "0.6rem", marginBottom: 0 }}>
+            ⚠ A data final está em {filters.to.split("-").reverse().join("/")}: lançamentos de hoje ficam fora da lista.{" "}
+            <button
+              type="button"
+              onClick={() => {
+                const to = todayBr();
+                set({ to });
+                saveCustomPeriod("wq.lanc.period", filters.from ?? "", to);
+              }}
+              style={{ background: "transparent", border: "none", color: "inherit", textDecoration: "underline", padding: 0, cursor: "pointer", font: "inherit", fontWeight: 700 }}
+            >
+              Mostrar até hoje
+            </button>
+          </p>
+        )}
       </div>
 
       <div className="panel">
