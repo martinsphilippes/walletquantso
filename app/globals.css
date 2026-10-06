@@ -98,6 +98,28 @@ h3 { font-size: 1rem; margin: 1rem 0 0.5rem; }
   font-weight: 600;
 }
 .nav-item .ic { width: 20px; text-align: center; flex: 0 0 20px; font-size: 1rem; }
+.nav-group { margin-bottom: 0.35rem; }
+.nav-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.45rem 0.7rem 0.3rem;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.nav-group-head:hover { color: var(--text); background: var(--surface-2); }
+.nav-group-head.has-active { color: var(--text-dim); }
+.nav-group-head .chev { font-size: 0.8rem; opacity: 0.7; }
+.nav-group-items { display: flex; flex-direction: column; gap: 1px; }
 .sidebar.collapsed .nav-item .label,
 .sidebar.collapsed .sidebar-brand .word { display: none; }
 
