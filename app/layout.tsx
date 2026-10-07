@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/services/auth-context";
 import { AppShell } from "@/components/AppShell";
@@ -17,6 +17,15 @@ export const metadata: Metadata = {
     title: "Wallet",
     statusBarStyle: "black-translucent",
   },
+};
+
+// No app da tela de início do iPhone/iPad a página vai até o topo real da
+// tela (por baixo da barra de status); as barras do app cobrem essa área.
+export const viewport: Viewport = {
+  viewportFit: "cover",
+  themeColor: "#0a0b0d",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -60,6 +60,8 @@ h3 { font-size: 1rem; margin: 1rem 0 0.5rem; }
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
+  padding-top: env(safe-area-inset-top, 0px);
   transition: width 0.18s ease, flex-basis 0.18s ease;
   overflow: hidden;
 }
@@ -126,7 +128,9 @@ h3 { font-size: 1rem; margin: 1rem 0 0.5rem; }
 .main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 .topbar {
-  height: var(--header-h);
+  /* Cobre a área da barra de status do iPhone/iPad (safe area). */
+  padding-top: env(safe-area-inset-top, 0px);
+  height: calc(var(--header-h) + env(safe-area-inset-top, 0px));
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -151,7 +155,7 @@ h3 { font-size: 1rem; margin: 1rem 0 0.5rem; }
 }
 .icon-btn:hover { background: var(--surface-2); color: var(--text); }
 
-.content { padding: 1.25rem 1.25rem 4rem; width: 100%; max-width: 1600px; margin: 0 auto; }
+.content { padding: 1.25rem 1.25rem calc(4rem + env(safe-area-inset-bottom, 0px)); width: 100%; max-width: 1600px; margin: 0 auto; }
 /* keep the old container name working inside the shell */
 .container { padding: 1.25rem 1.25rem 4rem; width: 100%; max-width: 1600px; margin: 0 auto; }
 
