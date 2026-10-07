@@ -81,7 +81,9 @@ export function describeFee(fee: AccountFee): string {
   const parts: string[] = [];
   if ((fee.percent ?? 0) > 0) parts.push(`${fee.percent.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}%`);
   if ((fee.fixed ?? 0) > 0) {
-    parts.push(fee.fixed.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
+    parts.push(
+      `R$ ${fee.fixed.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`,
+    );
   }
   return parts.join(" + ") || "sem taxa";
 }

@@ -256,6 +256,11 @@ function Accounts() {
   });
   const [feeMsg, setFeeMsg] = useState("");
   const fmt2 = (n: number) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Taxa fixa aceita frações de centavo (ex.: 0,425): até 4 casas, sem máscara.
+  const fmtFixed = (n: number) =>
+    n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4, useGrouping: false });
+  const onlyDecimal = (v: string) => v.replace(/[^\d,.]/g, "");
+  const parseFixed = (v: string) => Math.round((parseBrCurrency(v || "0") ?? 0) * 10000) / 10000;
   const expenseMains = categories.filter((c) => !c.parentId && c.kind === "expense");
 
   function openFee(a: Account) {
@@ -267,7 +272,7 @@ function Accounts() {
     setFeeMsg("");
     setFeeDraft({
       percent: f ? String(f.percent ?? 0).replace(".", ",") : "",
-      fixed: f && f.fixed ? fmt2(f.fixed) : "",
+      fixed: f && f.fixed ? fmtFixed(f.fixed) : "",
       onIncome: f ? f.onIncome : true,
       onExpense: f ? f.onExpense : true,
       onTransfer: f ? f.onTransfer : true,
@@ -279,7 +284,7 @@ function Accounts() {
         id: r.id,
         accountId: r.accountId,
         percent: String(r.percent ?? 0).replace(".", ","),
-        fixed: r.fixed ? fmt2(r.fixed) : "",
+        fixed: r.fixed ? fmtFixed(r.fixed) : "",
         onIncome: r.onIncome,
         onExpense: r.onExpense,
         onTransfer: r.onTransfer,
@@ -362,7 +367,7 @@ function Accounts() {
     const linkedFees: LinkedFee[] = [];
     for (const row of linkedDraft) {
       const pct = Number((row.percent || "0").replace(",", "."));
-      const fx = parseBrCurrency(row.fixed || "0") ?? 0;
+      const fx = parseFixed(row.fixed);
       const target = accounts.find((x) => x.id === row.accountId);
       if (!target) return setFeeMsg("Em cada regra vinculada, escolha a conta que gasta.");
       if (target.id === a.id) return setFeeMsg("A regra vinculada precisa apontar para OUTRA conta (para esta, use a taxa própria acima).");
@@ -386,7 +391,7 @@ function Accounts() {
     let fee: AccountFee | null = null;
     if (!remove && !ownEmpty) {
       const percent = Number((feeDraft.percent || "0").replace(",", "."));
-      const fixed = parseBrCurrency(feeDraft.fixed || "0") ?? 0;
+      const fixed = parseFixed(feeDraft.fixed);
       if (!Number.isFinite(percent) || percent < 0 || percent >= 100) {
         setFeeMsg("Percentual entre 0 e 100.");
         return;
@@ -663,9 +668,9 @@ function Accounts() {
                             <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
                               <span className="muted" style={{ fontSize: "0.8rem" }}>Taxa fixa (R$)</span>
                               <input
-                                inputMode="numeric"
                                 value={feeDraft.fixed}
-                                onChange={(e) => setFeeDraft({ ...feeDraft, fixed: maskBrAmount(e.target.value) })}
+                                inputMode="decimal"
+                                onChange={(e) => setFeeDraft({ ...feeDraft, fixed: onlyDecimal(e.target.value) })}
                                 placeholder="0,00"
                                 style={{ ...fieldStyle, width: 100, textAlign: "right" }}
                               />
@@ -767,10 +772,10 @@ function Accounts() {
                                   <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
                                     <span className="muted" style={{ fontSize: "0.8rem" }}>Valor fixo (R$)</span>
                                     <input
-                                      inputMode="numeric"
+                                      inputMode="decimal"
                                       value={row.fixed}
-                                      onChange={(e) => upd({ fixed: maskBrAmount(e.target.value) })}
-                                      placeholder="0,00"
+                                      onChange={(e) => upd({ fixed: onlyDecimal(e.target.value) })}
+                                      placeholder="ex.: 0,425"
                                       style={{ ...fieldStyle, width: 95, textAlign: "right" }}
                                     />
                                   </label>
