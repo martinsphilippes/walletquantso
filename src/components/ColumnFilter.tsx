@@ -114,13 +114,13 @@ export function useColumnFilters<T>(rows: T[], defs: ColFilterDef<T>[]): ColumnF
 const control: React.CSSProperties = {
   width: "100%",
   minWidth: 0,
-  padding: "0.25rem 0.4rem",
+  padding: "0.2rem 0.35rem",
   borderRadius: 5,
   border: "1px solid var(--border)",
   background: "var(--bg)",
   color: "var(--text)",
   font: "inherit",
-  fontSize: "0.8rem",
+  fontSize: "0.74rem",
 };
 
 /** Renders a header row of filter controls, one cell per column def. */
@@ -136,7 +136,7 @@ export function FilterRow<T>({
   return (
     <tr>
       {defs.map((d) => (
-        <th key={d.key} style={{ padding: "0.25rem 0.4rem", verticalAlign: "top" }}>
+        <th key={d.key} style={{ padding: "0.2rem 0.3rem", verticalAlign: "top" }}>
           {d.type === "none" || !d.value ? null : d.type === "select" ? (
             <MultiSelect
               options={(cf.options[d.key] ?? []).map((o) => ({ value: o, label: o }))}

@@ -151,9 +151,9 @@ h3 { font-size: 1rem; margin: 1rem 0 0.5rem; }
 }
 .icon-btn:hover { background: var(--surface-2); color: var(--text); }
 
-.content { padding: 1.5rem 1.5rem 4rem; width: 100%; max-width: 1180px; margin: 0 auto; }
+.content { padding: 1.25rem 1.25rem 4rem; width: 100%; max-width: 1600px; margin: 0 auto; }
 /* keep the old container name working inside the shell */
-.container { padding: 1.5rem 1.5rem 4rem; width: 100%; max-width: 1180px; margin: 0 auto; }
+.container { padding: 1.25rem 1.25rem 4rem; width: 100%; max-width: 1600px; margin: 0 auto; }
 
 /* Mobile drawer */
 .scrim { display: none; }
@@ -220,14 +220,18 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* ---------- Tables ---------- */
 .table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+/* Tabelas compactas: letra menor e menos espaço, para caber mais colunas
+   na tela sem rolar para o lado. */
+table { width: 100%; border-collapse: collapse; font-size: 0.8rem; line-height: 1.3; }
 th, td {
   text-align: left;
-  padding: 0.55rem 0.7rem;
+  padding: 0.4rem 0.45rem;
   border-bottom: 1px solid var(--border-soft);
   vertical-align: top;
 }
-th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
+th { color: var(--muted); font-weight: 600; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.03em; }
+td button { padding: 0.3rem 0.6rem; font-size: 0.78rem; border-radius: 7px; }
+td select, td input { padding: 0.3rem 0.45rem; font-size: 0.8rem; border-radius: 6px; }
 tbody tr:hover { background: var(--surface-2); }
 
 /* ---------- Forms ---------- */
