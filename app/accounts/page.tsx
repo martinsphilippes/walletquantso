@@ -1,5 +1,6 @@
 "use client";
 
+import { brl } from "@/lib/br/money";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { loadErrorMessage } from "@/lib/errors";
 import { LoginGate } from "@/components/LoginGate";
@@ -32,8 +33,6 @@ const TYPE_LABELS: Record<AccountType, string> = {
 };
 const TYPES = Object.keys(TYPE_LABELS) as AccountType[];
 
-const brl = (n: number) =>
-  n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 export default function AccountsPage() {
   return (

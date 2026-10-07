@@ -111,7 +111,7 @@ async function createLinkedFees(
     const rec: Transaction = {
       ownerId,
       date,
-      amount: round2(ch.amount),
+      amount: Math.round(ch.amount * 10000) / 10000,
       type: "expense",
       description: desc,
       accountId: ch.targetAccount.id!,

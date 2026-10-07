@@ -1,5 +1,6 @@
 "use client";
 
+import { brl } from "@/lib/br/money";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadErrorMessage } from "@/lib/errors";
 import { LoginGate } from "@/components/LoginGate";
@@ -57,8 +58,6 @@ const TYPE_LABELS: Record<TransactionType, string> = {
   transfer: "Transferência",
 };
 
-const brl = (n: number) =>
-  n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 const brDate = (iso: string) => iso.split("-").reverse().join("/");
 

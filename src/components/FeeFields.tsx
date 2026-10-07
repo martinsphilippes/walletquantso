@@ -11,6 +11,7 @@
 
 import { useState } from "react";
 import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
+import { brl } from "@/lib/br/money";
 import {
   computeFee,
   describeFee,
@@ -57,7 +58,6 @@ export function resolveFee(
 
 const fmt2 = (n: number) =>
   n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const brl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 /**
  * Aviso dos gastos em OUTRAS contas que esta operação vai gerar (regras

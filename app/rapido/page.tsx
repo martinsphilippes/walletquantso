@@ -7,6 +7,7 @@
 // gráficos, sem tabelas — carrega o mínimo e abre rápido. Os dados são os
 // mesmos do app completo (mesma conta, mesmo login).
 
+import { brl } from "@/lib/br/money";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadErrorMessage } from "@/lib/errors";
 import Link from "next/link";
@@ -41,8 +42,6 @@ import { DateParts } from "@/components/DateParts";
 import { LinkedFeeNote } from "@/components/FeeFields";
 import type { Account, Bill, Category, CostCenter, Transaction } from "@/types";
 
-const brl = (n: number) =>
-  n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 
 

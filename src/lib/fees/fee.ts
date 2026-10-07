@@ -122,7 +122,9 @@ export function linkedChargesFor(
       if (rule.accountId === src!.id) continue;
       const on = type === "income" ? rule.onIncome : type === "expense" ? rule.onExpense : rule.onTransfer;
       if (!on) continue;
-      const amount = round2(gross * ((rule.percent ?? 0) / 100) + (rule.fixed ?? 0));
+      // Valor exato (até 4 casas): regras como "0,425 fixo" não podem ser
+      // arredondadas para centavos, senão o app não bate com o banco.
+      const amount = Math.round((gross * ((rule.percent ?? 0) / 100) + (rule.fixed ?? 0)) * 10000) / 10000;
       if (amount <= 0) continue;
       out.push({ rule, sourceAccount: src!, targetAccount: byId(rule.accountId), amount });
     }

@@ -105,6 +105,11 @@ describe("regras vinculadas (gasto em outra conta)", () => {
     expect(linkedChargesFor("transfer", "c6", "depix", 100, withTransfer)[0].amount).toBe(1.5);
   });
 
+  it("valor fixo com fração de centavo é mantido exato", () => {
+    const d = { ...depix, linkedFees: [{ ...depix.linkedFees![0], percent: 0, fixed: 0.425 }] };
+    expect(linkedChargesFor("expense", "depix", null, 400, [d, acc("lbtc")])[0].amount).toBe(0.425);
+  });
+
   it("conta sem regra não gera nada", () => {
     expect(linkedChargesFor("expense", "c6", null, 200, all)).toHaveLength(0);
   });
