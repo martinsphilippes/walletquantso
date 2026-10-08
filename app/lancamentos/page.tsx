@@ -29,7 +29,7 @@ import { FilterField } from "@/components/FilterField";
 import { todayBr, daysAgoBr, monthRangeBr } from "@/lib/br/date";
 import { loadPeriod, savePreset, saveCustomPeriod } from "@/lib/period-presets";
 import { effectiveCostCenterId } from "@/lib/categories/tree";
-import { DateParts } from "@/components/DateParts";
+import { DatePicker } from "@/components/DatePicker";
 import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
 import { transactionsToCsv } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
@@ -664,25 +664,23 @@ function Lancamentos() {
             </FilterField>
           )}
           <FilterField label="Data inicial (de)">
-            <input
-              type="date"
+            <DatePicker
               value={filters.from ?? ""}
-              onChange={(e) => {
-                set({ from: e.target.value || undefined });
-                saveCustomPeriod("wq.lanc.period", e.target.value, filters.to ?? "");
+              allowEmpty
+              onChange={(iso) => {
+                set({ from: iso || undefined });
+                saveCustomPeriod("wq.lanc.period", iso, filters.to ?? "");
               }}
-              style={fieldStyle}
             />
           </FilterField>
           <FilterField label="Data final (até)">
-            <input
-              type="date"
+            <DatePicker
               value={filters.to ?? ""}
-              onChange={(e) => {
-                set({ to: e.target.value || undefined });
-                saveCustomPeriod("wq.lanc.period", filters.from ?? "", e.target.value);
+              allowEmpty
+              onChange={(iso) => {
+                set({ to: iso || undefined });
+                saveCustomPeriod("wq.lanc.period", filters.from ?? "", iso);
               }}
-              style={fieldStyle}
             />
           </FilterField>
           {activeFilterCount > 0 && (
@@ -970,7 +968,7 @@ function Lancamentos() {
                       <td colSpan={11} style={{ padding: "0.6rem 0.75rem", background: "var(--bg)" }}>
                         <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "flex-end" }}>
                           <InlineField label="Data">
-                            <DateParts
+                            <DatePicker
                               value={editDraft.date}
                               onChange={(iso) => setEditDraft({ ...editDraft, date: iso })}
                             />

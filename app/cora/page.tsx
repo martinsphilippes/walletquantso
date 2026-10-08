@@ -13,7 +13,7 @@ import {
   setCoraSyncConfig,
 } from "@/services/cora";
 import { compareWithCora, signedForAccount } from "@/lib/cora/reconcile";
-import { DateParts } from "@/components/DateParts";
+import { DatePicker } from "@/components/DatePicker";
 import type { Account, CoraSyncConfig, Transaction } from "@/types";
 import type { NormalizedEntry } from "@/lib/cora/statement";
 import { daysAgoBr } from "@/lib/br/date";
@@ -304,11 +304,11 @@ function CoraSync() {
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
             <span className="muted" style={{ fontSize: "0.75rem" }}>De</span>
-            <DateParts value={start} onChange={setStart} />
+            <DatePicker value={start} onChange={setStart} />
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
             <span className="muted" style={{ fontSize: "0.75rem" }}>Até</span>
-            <DateParts value={end} onChange={setEnd} />
+            <DatePicker value={end} onChange={setEnd} />
           </label>
           <button disabled={busy} onClick={search}>
             {busy ? "Buscando…" : "Buscar no Cora"}

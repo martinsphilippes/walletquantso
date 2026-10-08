@@ -15,6 +15,7 @@ import type { Account, Category, Contact, CostCenter, TransactionType } from "@/
 import type { TransactionInput } from "@/services/transactions";
 import { todayBr } from "@/lib/br/date";
 import { LinkedFeeNote } from "@/components/FeeFields";
+import { DatePicker } from "@/components/DatePicker";
 
 interface Props {
   accounts: Account[];
@@ -33,18 +34,6 @@ interface Props {
   onSubmit: (input: TransactionInput) => void;
   onCancel: () => void;
 }
-
-const MONTHS = [
-  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
-  "Jul", "Ago", "Set", "Out", "Nov", "Dez",
-];
-
-/** Number of days in a given month (1-based month). */
-function daysInMonth(year: number, month: number): number {
-  return new Date(year, month, 0).getDate();
-}
-
-
 
 /** Format an existing numeric amount for editing (e.g. 123.4 -> "123,40"). */
 function formatAmount(value: number | undefined): string {
@@ -67,13 +56,8 @@ export function TransactionForm({
   onSubmit,
   onCancel,
 }: Props) {
-  const initialDate = initial?.date ?? todayBr();
-  const [iy, im, id] = initialDate.split("-").map(Number);
-
   const [type, setType] = useState<TransactionType>(initial?.type ?? "expense");
-  const [day, setDay] = useState<number>(id || new Date().getDate());
-  const [month, setMonth] = useState<number>(im || new Date().getMonth() + 1);
-  const [year, setYear] = useState<number>(iy || new Date().getFullYear());
+  const [date, setDate] = useState<string>(initial?.date || todayBr());
   const [amount, setAmount] = useState(formatAmount(initial?.amount));
   const [description, setDescription] = useState(initial?.description ?? "");
   const [accountId, setAccountId] = useState(initial?.accountId ?? "");
@@ -106,14 +90,6 @@ export function TransactionForm({
   const [feeFocus, setFeeFocus] = useState<"fee" | "realized" | null>(null);
   const [feeText, setFeeText] = useState("");
   const [realizedText, setRealizedText] = useState("");
-
-  const thisYear = new Date().getFullYear();
-  const years: number[] = [];
-  for (let y = thisYear + 1; y >= thisYear - 6; y--) years.push(y);
-
-  // Clamp the day to the selected month/year (e.g. 31 -> 30 in April).
-  const maxDay = daysInMonth(year, month);
-  const safeDay = Math.min(day, maxDay);
 
   const gross = parseBrCurrency(amount) ?? 0;
   const feeTarget = feeAccountFor(type, accountId, type === "transfer" ? transferAccountId : null, accounts);
@@ -154,7 +130,6 @@ export function TransactionForm({
       if (transferAccountId === accountId)
         return setError("A conta de destino deve ser diferente da origem.");
     }
-    const date = `${year}-${String(month).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}`;
     onSubmit({
       date,
       amount: value,
@@ -233,46 +208,9 @@ export function TransactionForm({
             <option value="transfer">Transferência</option>
           </select>
         </label>
-        <div style={{ ...col, flex: "1 1 220px" }}>
+        <div style={col}>
           <span className="muted">Data</span>
-          <div style={{ display: "flex", gap: "0.35rem" }}>
-            <select
-              aria-label="Dia"
-              value={safeDay}
-              onChange={(e) => setDay(Number(e.target.value))}
-              style={{ ...f, flex: "0 0 4.2rem" }}
-            >
-              {Array.from({ length: maxDay }, (_, i) => i + 1).map((d) => (
-                <option key={d} value={d}>
-                  {String(d).padStart(2, "0")}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Mês"
-              value={month}
-              onChange={(e) => setMonth(Number(e.target.value))}
-              style={{ ...f, flex: "1 1 auto" }}
-            >
-              {MONTHS.map((m, i) => (
-                <option key={m} value={i + 1}>
-                  {m}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Ano"
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-              style={{ ...f, flex: "0 0 5.2rem" }}
-            >
-              {years.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-          </div>
+          <DatePicker value={date} onChange={setDate} />
         </div>
         <label style={col}>
           <span className="muted">{feeTarget ? "Valor lançado (R$)" : "Valor (R$)"}</span>

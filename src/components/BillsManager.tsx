@@ -26,7 +26,7 @@ import {
 } from "@/services/bills";
 import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
 import { effectiveCostCenterId } from "@/lib/categories/tree";
-import { DateParts } from "@/components/DateParts";
+import { DatePicker } from "@/components/DatePicker";
 import { feeAccountFor } from "@/lib/fees/fee";
 import { FEE_AUTO, FeeFields, LinkedFeeNote, resolveFee, type FeeState } from "@/components/FeeFields";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
@@ -868,13 +868,13 @@ export function BillsManager({ kind }: { kind: BillKind }) {
             />
           </Field>
           <Field label="Vencimento">
-            <DateParts
+            <DatePicker
               value={creating.dueDate}
               onChange={(iso) => setCreating({ ...creating, dueDate: iso })}
             />
           </Field>
           <Field label="Competência">
-            <DateParts
+            <DatePicker
               value={creating.competenceDate}
               onChange={(iso) => setCreating({ ...creating, competenceDate: iso })}
             />
@@ -1243,7 +1243,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
             </div>
             <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
               <span className="muted" style={{ fontSize: "0.8rem" }}>Data da baixa</span>
-              <DateParts value={bulkDate} onChange={setBulkDate} />
+              <DatePicker value={bulkDate} onChange={setBulkDate} />
             </label>
             <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
               <span className="muted" style={{ fontSize: "0.8rem" }}>
@@ -1470,7 +1470,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                 inputMode="decimal"
                                 style={{ ...fieldStyle, width: 130, textAlign: "right" }}
                               />
-                              <DateParts value={partialDate} onChange={setPartialDate} />
+                              <DatePicker value={partialDate} onChange={setPartialDate} />
                               <select
                                 value={partialAccount}
                                 onChange={(e) => {
@@ -1544,7 +1544,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                 onChange={(e) => setPayAmount(maskBrAmount(e.target.value))}
                                 style={{ ...fieldStyle, width: 110, textAlign: "right" }}
                               />
-                              <DateParts value={payDate} onChange={setPayDate} />
+                              <DatePicker value={payDate} onChange={setPayDate} />
                               <select
                                 value={payAccount}
                                 onChange={(e) => {
@@ -1613,13 +1613,13 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                 />
                               </Field>
                               <Field label="Vencimento">
-                                <DateParts
+                                <DatePicker
                                   value={draft.dueDate}
                                   onChange={(iso) => setDraft({ ...draft, dueDate: iso })}
                                 />
                               </Field>
                               <Field label="Competência">
-                                <DateParts
+                                <DatePicker
                                   value={draft.competenceDate}
                                   onChange={(iso) => setDraft({ ...draft, competenceDate: iso })}
                                 />

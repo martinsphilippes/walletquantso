@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadErrorMessage } from "@/lib/errors";
 import { LoginGate } from "@/components/LoginGate";
-import { DateParts } from "@/components/DateParts";
+import { DatePicker } from "@/components/DatePicker";
 import { useAuth } from "@/services/auth-context";
 import { hasPendingSync, onListsChange } from "@/services/live-store";
 import { listAccounts, listCategories, listCostCenters } from "@/services/firestore";
@@ -636,7 +636,7 @@ function Motoristas() {
               </select>
             </Field>
             <Field label="Data">
-              <DateParts value={rDate} onChange={setRDate} />
+              <DatePicker value={rDate} onChange={setRDate} />
             </Field>
             {rDiarias.length > 0 ? (
               rDiarias.map((dt) => (
@@ -887,7 +887,7 @@ function Motoristas() {
             </div>
             <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap" }}>
               <Field label={`Vencimento: ${describeDue(today, payDue)}`}>
-                <DateParts value={payDue} onChange={setPayDue} />
+                <DatePicker value={payDue} onChange={setPayDue} />
               </Field>
               <button className="btn-primary" disabled={busy} onClick={() => void gerarTitulo()}>
                 Confirmar e gerar título

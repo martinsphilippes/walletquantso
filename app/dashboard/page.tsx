@@ -24,6 +24,7 @@ import { TransactionForm } from "@/components/TransactionForm";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import { FilterField } from "@/components/FilterField";
+import { DatePicker } from "@/components/DatePicker";
 import { transactionsToCsv } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
 import { filterTransactions, type DashboardFilters } from "@/lib/dashboard/filter";
@@ -393,25 +394,23 @@ function Dashboard() {
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
           <strong style={{ alignSelf: "center" }}>Período dos indicadores</strong>
           <FilterField label="Data inicial (de)">
-            <input
-              type="date"
+            <DatePicker
               value={dashFrom}
-              onChange={(e) => {
-                setDashFrom(e.target.value);
-                saveCustomPeriod("wq.dash.period", e.target.value, dashTo);
+              allowEmpty
+              onChange={(iso) => {
+                setDashFrom(iso);
+                saveCustomPeriod("wq.dash.period", iso, dashTo);
               }}
-              style={fieldStyle}
             />
           </FilterField>
           <FilterField label="Data final (até)">
-            <input
-              type="date"
+            <DatePicker
               value={dashTo}
-              onChange={(e) => {
-                setDashTo(e.target.value);
-                saveCustomPeriod("wq.dash.period", dashFrom, e.target.value);
+              allowEmpty
+              onChange={(iso) => {
+                setDashTo(iso);
+                saveCustomPeriod("wq.dash.period", dashFrom, iso);
               }}
-              style={fieldStyle}
             />
           </FilterField>
           <button
@@ -780,25 +779,23 @@ function Dashboard() {
             })()}
           </div>
           <FilterField label="Data inicial (de)">
-            <input
-              type="date"
+            <DatePicker
               value={bdFrom}
-              onChange={(e) => {
-                setBdFrom(e.target.value);
-                saveCustomPeriod("wq.bd.period", e.target.value, bdTo);
+              allowEmpty
+              onChange={(iso) => {
+                setBdFrom(iso);
+                saveCustomPeriod("wq.bd.period", iso, bdTo);
               }}
-              style={fieldStyle}
             />
           </FilterField>
           <FilterField label="Data final (até)">
-            <input
-              type="date"
+            <DatePicker
               value={bdTo}
-              onChange={(e) => {
-                setBdTo(e.target.value);
-                saveCustomPeriod("wq.bd.period", bdFrom, e.target.value);
+              allowEmpty
+              onChange={(iso) => {
+                setBdTo(iso);
+                saveCustomPeriod("wq.bd.period", bdFrom, iso);
               }}
-              style={fieldStyle}
             />
           </FilterField>
         </div>
@@ -1043,20 +1040,10 @@ function Dashboard() {
             </select>
           </FilterField>
           <FilterField label="Data inicial (de)">
-            <input
-              type="date"
-              value={filters.from ?? ""}
-              onChange={(e) => set({ from: e.target.value || undefined })}
-              style={fieldStyle}
-            />
+            <DatePicker value={filters.from ?? ""} allowEmpty onChange={(iso) => set({ from: iso || undefined })} />
           </FilterField>
           <FilterField label="Data final (até)">
-            <input
-              type="date"
-              value={filters.to ?? ""}
-              onChange={(e) => set({ to: e.target.value || undefined })}
-              style={fieldStyle}
-            />
+            <DatePicker value={filters.to ?? ""} allowEmpty onChange={(iso) => set({ to: iso || undefined })} />
           </FilterField>
           {Object.keys(filters).length > 0 && (
             <button style={{ background: "var(--border)" }} onClick={() => setFilters({})}>

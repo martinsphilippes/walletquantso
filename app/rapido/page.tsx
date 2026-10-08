@@ -38,7 +38,7 @@ import {
 } from "@/lib/fees/fee";
 import { todayBr, currentMonthBr } from "@/lib/br/date";
 import { onListsChange } from "@/services/live-store";
-import { DateParts } from "@/components/DateParts";
+import { DatePicker } from "@/components/DatePicker";
 import { LinkedFeeNote } from "@/components/FeeFields";
 import type { Account, Bill, Category, CostCenter, Transaction } from "@/types";
 
@@ -551,7 +551,7 @@ function Rapido() {
         <div style={{ marginTop: "0.6rem" }}>
           <span className="muted" style={{ fontSize: "0.8rem" }}>Data</span>
           <div style={{ marginTop: "0.25rem" }}>
-            <DateParts value={date} onChange={setDate} />
+            <DatePicker value={date} onChange={setDate} />
           </div>
         </div>
 

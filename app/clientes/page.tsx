@@ -38,7 +38,7 @@ import {
 import { zonesFromMatrix } from "@/lib/clients/zones";
 import Papa from "papaparse";
 import { parseBrCurrency } from "@/lib/br/parse";
-import { DateParts } from "@/components/DateParts";
+import { DatePicker } from "@/components/DatePicker";
 import { todayBr } from "@/lib/br/date";
 import type { Account, Category, Client, Contact, CostCenter, DeliveryZone } from "@/types";
 
@@ -833,7 +833,7 @@ function Clientes() {
                       </Field>
                     )}
                     <Field label="Vencimento">
-                      <DateParts value={dueDate} onChange={setDueDate} />
+                      <DatePicker value={dueDate} onChange={setDueDate} />
                     </Field>
                     <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
                       <span className="muted" style={{ fontSize: "0.8rem" }}>Tipo do título</span>
