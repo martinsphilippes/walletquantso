@@ -23,7 +23,7 @@ import {
 import { TransactionForm } from "@/components/TransactionForm";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import { MultiSelect } from "@/components/MultiSelect";
-import { computeFee, feeAccountFor } from "@/lib/fees/fee";
+import { computeFee, feeAccountFor, linkedChargesFor } from "@/lib/fees/fee";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import { FilterField } from "@/components/FilterField";
 import { todayBr, daysAgoBr, monthRangeBr } from "@/lib/br/date";
@@ -173,6 +173,14 @@ function Lancamentos() {
     [txs, filters],
   );
   const summary = useMemo(() => summarize(filtered), [filtered]);
+  // Para mostrar, embaixo do valor, a taxa e os gastos vinculados (ex.: L-BTC)
+  // que o lançamento gerou — são lançamentos à parte, achados pelo id.
+  const txById = useMemo(
+    () => new Map((txs ?? []).filter((t) => t.id).map((t) => [t.id as string, t])),
+    [txs],
+  );
+  const linkedOf = (t: Transaction): Transaction[] =>
+    (t.linkedFeeTransactionIds ?? []).map((id) => txById.get(id)).filter((l): l is Transaction => !!l);
 
   const set = (patch: Partial<DashboardFilters>) =>
     setFilters((prev) => ({ ...prev, ...patch }));
@@ -935,6 +943,11 @@ function Lancamentos() {
                           + taxa {brl(t.feeAmount!)}
                         </div>
                       )}
+                      {linkedOf(t).map((l) => (
+                        <div key={l.id} className="muted" style={{ fontSize: "0.72rem", fontWeight: 400 }}>
+                          + {nameOfAccount(l.accountId)} {brl(l.amount)}
+                        </div>
+                      ))}
                     </td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       <button
@@ -1114,25 +1127,29 @@ function Lancamentos() {
                             />
                           </InlineField>
                           {(() => {
-                            if (form.mode === "edit" && (form.tx.feeAmount ?? 0) > 0) {
-                              return (
+                            // Taxa e gastos vinculados (ex.: L-BTC): na edição, os já
+                            // lançados; na duplicação, os que serão calculados pela conta.
+                            const parts: string[] = [];
+                            if (form.mode === "edit") {
+                              if ((form.tx.feeAmount ?? 0) > 0) parts.push(`Taxa ${brl(form.tx.feeAmount!)}`);
+                              for (const l of linkedOf(form.tx)) parts.push(`${nameOfAccount(l.accountId)} ${brl(l.amount)}`);
+                              return parts.length > 0 ? (
                                 <span className="muted" style={{ fontSize: "0.78rem", alignSelf: "center" }}>
-                                  Taxa vinculada: {brl(form.tx.feeAmount!)} (lançamento à parte — edite-o na lista)
+                                  Vinculados: {parts.join(" · ")} (lançamentos à parte — edite-os na lista)
                                 </span>
-                              );
+                              ) : null;
                             }
                             if (form.mode !== "clone") return null;
                             const v = parseBrCurrency(editDraft.amount) ?? 0;
-                            const tg = feeAccountFor(
-                              editDraft.type,
-                              editDraft.accountId,
-                              editDraft.type === "transfer" ? editDraft.transferAccountId : null,
-                              accounts,
-                            );
+                            const tAcc = editDraft.type === "transfer" ? editDraft.transferAccountId : null;
+                            const tg = feeAccountFor(editDraft.type, editDraft.accountId, tAcc, accounts);
                             const fv = tg?.account.fee ? computeFee(v, tg.account.fee) : 0;
-                            return tg && fv > 0 ? (
+                            if (tg && fv > 0) parts.push(`Taxa ${tg.account.name} ${brl(fv)}`);
+                            for (const c of linkedChargesFor(editDraft.type, editDraft.accountId, tAcc, v, accounts))
+                              parts.push(`${c.targetAccount?.name ?? "?"} ${brl(c.amount)}`);
+                            return parts.length > 0 ? (
                               <span className="muted" style={{ fontSize: "0.78rem", alignSelf: "center" }}>
-                                + Taxa {tg.account.name}: {brl(fv)} (lançada à parte)
+                                + {parts.join(" · ")} (lançados à parte)
                               </span>
                             ) : null;
                           })()}

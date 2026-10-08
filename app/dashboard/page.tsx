@@ -184,6 +184,11 @@ function Dashboard() {
   );
 
   const recentTxs = useMemo(() => (txs ?? []).slice(0, 5), [txs]);
+  // Taxa e gastos vinculados (ex.: L-BTC) de cada lançamento, achados pelo id.
+  const txById = useMemo(
+    () => new Map((txs ?? []).filter((t) => t.id).map((t) => [t.id as string, t])),
+    [txs],
+  );
 
   // Projetada × Realizada nos painéis de categoria/centro (escolha gravada).
   const [bdMode, setBdMode] = useState<BreakdownMode>("projected");
@@ -682,6 +687,19 @@ function Dashboard() {
                     >
                       {t.type === "expense" ? "-" : t.type === "income" ? "+" : ""}
                       {brl(t.amount)}
+                      {(t.feeAmount ?? 0) > 0 && (
+                        <div className="muted" style={{ fontSize: "0.72rem", fontWeight: 400 }}>
+                          + taxa {brl(t.feeAmount!)}
+                        </div>
+                      )}
+                      {(t.linkedFeeTransactionIds ?? [])
+                        .map((id) => txById.get(id))
+                        .filter((l): l is Transaction => !!l)
+                        .map((l) => (
+                          <div key={l.id} className="muted" style={{ fontSize: "0.72rem", fontWeight: 400 }}>
+                            + {nameOfAccount(l.accountId)} {brl(l.amount)}
+                          </div>
+                        ))}
                     </td>
                   </tr>
                 ))}

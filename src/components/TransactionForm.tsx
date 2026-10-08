@@ -3,18 +3,11 @@
 import { useMemo, useRef, useState } from "react";
 import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
 import { effectiveCostCenterId } from "@/lib/categories/tree";
-import {
-  computeFee,
-  describeFee,
-  feeAccountFor,
-  feeFromRealized,
-  learnedPercent,
-  realizedFromFee,
-} from "@/lib/fees/fee";
+import { feeAccountFor } from "@/lib/fees/fee";
 import type { Account, Category, Contact, CostCenter, TransactionType } from "@/types";
 import type { TransactionInput } from "@/services/transactions";
 import { todayBr } from "@/lib/br/date";
-import { LinkedFeeNote } from "@/components/FeeFields";
+import { FEE_AUTO, FeeFields, resolveFee, type FeeState } from "@/components/FeeFields";
 import { DatePicker } from "@/components/DatePicker";
 
 interface Props {
@@ -77,47 +70,20 @@ export function TransactionForm({
   const [error, setError] = useState("");
   const amountRef = useRef<HTMLInputElement>(null);
 
-  // ── Taxa da conta (ex.: Depix) ─────────────────────────────────────────
-  // null = calculada pela configuração da conta; número = valor fixado. Na
-  // edição de um lançamento existente começa com a taxa que ele já tinha
-  // (ou zero, se não tinha): lançamentos antigos não ganham taxa sozinhos.
+  // ── Taxa da conta (ex.: Depix) e gastos vinculados (ex.: L-BTC) ─────────
+  // override null = calculada pela configuração da conta; número = valor
+  // fixado. Na edição de um lançamento existente começa com a taxa que ele
+  // já tinha (ou zero, se não tinha): lançamentos antigos não ganham taxa
+  // sozinhos. Os campos ficam no FeeFields, o mesmo das baixas de títulos.
   const editingExisting = !!initial && "fee" in initial;
-  const [feeOverride, setFeeOverride] = useState<number | null>(
-    editingExisting ? (initial?.fee?.amount ?? 0) : null,
+  const [fee, setFee] = useState<FeeState>(
+    editingExisting ? { override: initial?.fee?.amount ?? 0, typed: false } : FEE_AUTO,
   );
-  // O usuário digitou na taxa ou no realizado nesta tela → aprende o percentual.
-  const [feeTyped, setFeeTyped] = useState(false);
-  const [feeFocus, setFeeFocus] = useState<"fee" | "realized" | null>(null);
-  const [feeText, setFeeText] = useState("");
-  const [realizedText, setRealizedText] = useState("");
+  const resetFee = () => setFee(FEE_AUTO);
 
   const gross = parseBrCurrency(amount) ?? 0;
-  const feeTarget = feeAccountFor(type, accountId, type === "transfer" ? transferAccountId : null, accounts);
-  const feeCfg = feeTarget?.account.fee ?? null;
-  const autoFee = feeCfg ? computeFee(gross, feeCfg) : 0;
-  const feeValue = feeTarget ? Math.max(0, feeOverride ?? autoFee) : 0;
-  const realizedValue = realizedFromFee(type, gross, feeValue);
-  const feeIsLearned =
-    feeTyped && !!feeCfg && gross > 0 && Math.abs(feeValue - autoFee) > 0.005;
-  const newPercent = feeIsLearned && feeCfg ? learnedPercent(gross, feeValue, feeCfg.fixed ?? 0) : null;
-
-  function onFeeInput(raw: string) {
-    const masked = maskBrAmount(raw);
-    setFeeText(masked);
-    setFeeTyped(true);
-    setFeeOverride(parseBrCurrency(masked) ?? 0);
-  }
-  function onRealizedInput(raw: string) {
-    const masked = maskBrAmount(raw);
-    setRealizedText(masked);
-    setFeeTyped(true);
-    const r = parseBrCurrency(masked) ?? 0;
-    setFeeOverride(Math.max(0, feeFromRealized(type, gross, r)));
-  }
-  function resetFee() {
-    setFeeOverride(null);
-    setFeeTyped(false);
-  }
+  const feeTransferAccountId = type === "transfer" ? transferAccountId : null;
+  const feeTarget = feeAccountFor(type, accountId, feeTransferAccountId, accounts);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -141,9 +107,10 @@ export function TransactionForm({
       costCenterId: costCenterId || null,
       contactId: contactId || null,
       notes: notes.trim() || undefined,
-      fee: feeTarget && feeValue > 0
-        ? { accountId: feeTarget.account.id!, amount: feeValue, learn: feeIsLearned }
-        : null,
+      fee: (() => {
+        const d = resolveFee(type, accountId, feeTransferAccountId, value, accounts, fee);
+        return d && d.amount > 0 ? d : null;
+      })(),
     });
 
     if (quickEntry) {
@@ -225,87 +192,17 @@ export function TransactionForm({
         </label>
       </div>
 
-      {feeTarget && feeCfg && (
-        <div
-          style={{
-            display: "flex",
-            gap: "0.75rem",
-            flexWrap: "wrap",
-            alignItems: "flex-end",
-            marginTop: "0.75rem",
-            padding: "0.6rem 0.75rem",
-            border: "1px dashed var(--border)",
-            borderRadius: 8,
-          }}
-        >
-          <label style={col}>
-            <span className="muted">
-              Taxa {feeTarget.account.name} ({describeFee(feeCfg)})
-            </span>
-            <input
-              value={feeFocus === "fee" ? feeText : formatAmount(feeValue)}
-              onFocus={() => {
-                setFeeFocus("fee");
-                setFeeText(formatAmount(feeValue));
-              }}
-              onBlur={() => setFeeFocus(null)}
-              onChange={(e) => onFeeInput(e.target.value)}
-              inputMode="numeric"
-              style={{ ...f, textAlign: "right" }}
-            />
-          </label>
-          <label style={col}>
-            <span className="muted">
-              {type === "expense"
-                ? "Valor realizado (sai da conta)"
-                : type === "income"
-                  ? "Valor realizado (entra na conta)"
-                  : "Valor realizado (chega no destino)"}
-            </span>
-            <input
-              value={feeFocus === "realized" ? realizedText : formatAmount(realizedValue)}
-              onFocus={() => {
-                setFeeFocus("realized");
-                setRealizedText(formatAmount(realizedValue));
-              }}
-              onBlur={() => setFeeFocus(null)}
-              onChange={(e) => onRealizedInput(e.target.value)}
-              inputMode="numeric"
-              style={{ ...f, textAlign: "right", fontWeight: 700 }}
-            />
-          </label>
-          <div style={{ flex: "2 1 240px", fontSize: "0.8rem" }} className="muted">
-            {newPercent != null ? (
-              <>
-                Nova taxa: <strong style={{ color: "var(--warn)" }}>
-                  {newPercent.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}%
-                </strong>
-                {(feeCfg.fixed ?? 0) > 0 ? " + fixo" : ""} — passa a valer nos próximos lançamentos.{" "}
-                <button
-                  type="button"
-                  onClick={resetFee}
-                  style={{ background: "transparent", border: "none", color: "var(--focus)", padding: 0, cursor: "pointer", font: "inherit" }}
-                >
-                  usar a taxa da conta
-                </button>
-              </>
-            ) : (
-              <>A taxa vira um lançamento à parte. Edite a taxa ou o realizado se o valor real for outro.</>
-            )}
-          </div>
-        </div>
-      )}
-
-      {accountId && gross > 0 && (
-        <div style={{ marginTop: "0.5rem" }}>
-          <LinkedFeeNote
-            type={type}
-            accountId={accountId}
-            transferAccountId={type === "transfer" ? transferAccountId : null}
-            gross={gross}
-            accounts={accounts}
-          />
-        </div>
+      {accountId && (
+        <FeeFields
+          type={type}
+          accountId={accountId}
+          transferAccountId={feeTransferAccountId}
+          gross={gross}
+          accounts={accounts}
+          state={fee}
+          onChange={setFee}
+          style={{ marginTop: "0.75rem" }}
+        />
       )}
 
       <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginTop: "0.75rem" }}>
