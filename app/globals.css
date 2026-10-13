@@ -156,6 +156,17 @@ h3 { font-size: 1rem; margin: 1rem 0 0.5rem; }
 }
 .icon-btn:hover { background: var(--surface-2); color: var(--text); }
 
+/* Botão de atualizar o sistema (topo): acende quando há versão nova. */
+.update-btn { position: relative; font-size: 1.25rem; }
+.update-btn.has-update { border-color: var(--ok); color: var(--ok); }
+.update-btn .dot {
+  position: absolute; top: -4px; right: -4px;
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--ok); border: 2px solid var(--bg);
+}
+.update-btn.spinning .ic { display: inline-block; animation: wq-spin 0.8s linear infinite; }
+@keyframes wq-spin { to { transform: rotate(360deg); } }
+
 .content { padding: 1.25rem 1.25rem calc(4rem + env(safe-area-inset-bottom, 0px)); width: 100%; max-width: 1600px; margin: 0 auto; }
 /* keep the old container name working inside the shell */
 .container { padding: 1.25rem 1.25rem 4rem; width: 100%; max-width: 1600px; margin: 0 auto; }

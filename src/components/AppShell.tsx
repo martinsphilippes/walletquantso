@@ -9,6 +9,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/services/auth-context";
 import { signOut } from "@/services/auth";
+import { UpdateButton } from "@/components/UpdateButton";
 
 interface NavEntry {
   label: string;
@@ -230,6 +231,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             ☰
           </button>
           <div className="spacer" />
+          <UpdateButton />
           {user && (
             <>
               <span className="muted" style={{ fontSize: "0.85rem" }}>{user.email}</span>
