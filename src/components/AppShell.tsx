@@ -4,7 +4,7 @@
 // slide-in drawer (mobile) and a top header. Brand identity from the
 // Quantso logo (monochrome, dark).
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/services/auth-context";
@@ -24,8 +24,9 @@ interface NavGroup {
 }
 
 // O menu em tópicos que abrem e fecham. O dia a dia fica em cima; os
-// cadastros e as ferramentas, agrupados embaixo. A seção da tela atual
-// abre sozinha; o resto lembra a última escolha do usuário.
+// cadastros e as ferramentas, agrupados embaixo. Ao trocar de tela o tópico
+// dela abre sozinho; fora isso, cada tópico lembra a última escolha do
+// usuário (qualquer um pode ser fechado, inclusive o da tela atual).
 const NAV_GROUPS: NavGroup[] = [
   {
     key: "dia",
@@ -80,6 +81,11 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 const NAV: NavEntry[] = NAV_GROUPS.flatMap((g) => g.items);
 
+/** A rota atual é esta tela? (/dashboard só exato; as outras incluem subrotas.) */
+function isActivePath(pathname: string, href: string): boolean {
+  return pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+}
+
 const OPEN_KEY = "wq.nav.open";
 /** Seções abertas lembradas no aparelho (padrão: só "Dia a dia"). */
 function loadOpen(): Record<string, boolean> {
@@ -102,17 +108,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setOpen(loadOpen());
   }, []);
-  const toggleGroup = (key: string) => {
-    setOpen((prev) => {
-      const next = { ...prev, [key]: !prev[key] };
-      try {
-        localStorage.setItem(OPEN_KEY, JSON.stringify(next));
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
+  const persistOpen = (next: Record<string, boolean>) => {
+    try {
+      localStorage.setItem(OPEN_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+    return next;
   };
+  const toggleGroup = (key: string) => setOpen((prev) => persistOpen({ ...prev, [key]: !prev[key] }));
+
+  // Ao TROCAR de tela, o tópico da tela nova abre sozinho (para o item atual
+  // ficar à vista). Depois disso qualquer tópico pode ser fechado, inclusive o
+  // da tela atual — e fechado ele fica, mesmo ao recarregar; o título dele
+  // ganha destaque para mostrar onde você está.
+  const prevPath = useRef(pathname);
+  useEffect(() => {
+    if (prevPath.current === pathname) return;
+    prevPath.current = pathname;
+    const g = NAV_GROUPS.find((grp) => grp.items.some((i) => isActivePath(pathname, i.href)));
+    if (g) setOpen((prev) => (prev[g.key] ? prev : persistOpen({ ...prev, [g.key]: true })));
+  }, [pathname]);
 
   // Acesso restrito só enxerga Motoristas/Corridas: qualquer outra rota volta
   // para lá (as regras do Firestore já bloqueiam os dados; isto é a cortesia).
@@ -128,10 +144,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   // Antes do login ninguém vê os módulos; depois, só o que a conta pode usar.
   const signedIn = !loading && !!user;
-  const isActive = (href: string) =>
-    pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+  const isActive = (href: string) => isActivePath(pathname, href);
   // Acesso restrito: só a tela dele, sem tópicos. Dono: tópicos que abrem e
-  // fecham; o da tela atual fica sempre aberto.
+  // fecham, inclusive o da tela atual.
   const groups: NavGroup[] = !signedIn
     ? []
     : restricted
@@ -175,7 +190,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             const hasActive = g.items.some((i) => isActive(i.href));
             // Sem rótulo (acesso restrito) ou com a barra recolhida: só os itens.
             if (!g.label || collapsed) return <div key={g.key}>{g.items.map(renderItem)}</div>;
-            const isOpen = hasActive || !!open[g.key];
+            const isOpen = !!open[g.key];
             return (
               <div key={g.key} className="nav-group">
                 <button
@@ -183,7 +198,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   className={`nav-group-head${hasActive ? " has-active" : ""}`}
                   onClick={() => toggleGroup(g.key)}
                   aria-expanded={isOpen}
-                  title={hasActive ? "A tela atual está neste tópico" : undefined}
+                  title={hasActive && !isOpen ? "A tela atual está neste tópico" : undefined}
                 >
                   <span className="label">{g.label}</span>
                   <span className="chev" aria-hidden>{isOpen ? "▾" : "▸"}</span>
