@@ -26,6 +26,7 @@ import { listCategories, listCostCenters } from "@/services/firestore";
 import { createBill } from "@/services/bills";
 import { todayBr } from "@/lib/br/date";
 import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
+import { DatePicker } from "@/components/DatePicker";
 import type { Category, Client, CostCenter, DeliveryZone } from "@/types";
 
 const brl = (n: number) =>
@@ -75,17 +76,8 @@ export function PedidosWhatsAppTool() {
   const [billMsg, setBillMsg] = useState("");
   const [generating, setGenerating] = useState(false);
 
-  // Data do título gerado: dia e mês livres; ano fixo no corrente — a partir
-  // de novembro libera também o ano seguinte (cobranças da virada).
-  const hoje = todayBr(); // YYYY-MM-DD
-  const anoAtual = Number(hoje.slice(0, 4));
-  const [dueDay, setDueDay] = useState(Number(hoje.slice(8, 10)));
-  const [dueMonth, setDueMonth] = useState(Number(hoje.slice(5, 7)));
-  const [dueYear, setDueYear] = useState(anoAtual);
-  const liberaProximoAno = Number(hoje.slice(5, 7)) >= 11;
-  const daysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate();
-  const safeDueDay = Math.min(dueDay, daysInMonth(dueYear, dueMonth));
-  const dueDateIso = `${dueYear}-${String(dueMonth).padStart(2, "0")}-${String(safeDueDay).padStart(2, "0")}`;
+  // Data do título gerado (vencimento e competência): escolhida no calendário.
+  const [dueDateIso, setDueDateIso] = useState(todayBr());
 
   // Categorias e centros de custo para validar a classificação do título:
   // o título gerado tem que sair com o centro/categoria do cliente.
@@ -854,34 +846,7 @@ export function PedidosWhatsAppTool() {
             )}
             <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
               <span>Data do título:</span>
-              <select value={safeDueDay} onChange={(e) => setDueDay(Number(e.target.value))}>
-                {Array.from({ length: daysInMonth(dueYear, dueMonth) }, (_, i) => i + 1).map(
-                  (d) => (
-                    <option key={d} value={d}>
-                      {String(d).padStart(2, "0")}
-                    </option>
-                  ),
-                )}
-              </select>
-              <select value={dueMonth} onChange={(e) => setDueMonth(Number(e.target.value))}>
-                {["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"].map(
-                  (m, i) => (
-                    <option key={m} value={i + 1}>
-                      {m}
-                    </option>
-                  ),
-                )}
-              </select>
-              {liberaProximoAno ? (
-                <select value={dueYear} onChange={(e) => setDueYear(Number(e.target.value))}>
-                  <option value={anoAtual}>{anoAtual}</option>
-                  <option value={anoAtual + 1}>{anoAtual + 1}</option>
-                </select>
-              ) : (
-                <span className="muted" title="O ano fica fixo; a partir de novembro libera o ano seguinte.">
-                  {anoAtual}
-                </span>
-              )}
+              <DatePicker value={dueDateIso} onChange={setDueDateIso} ariaLabel="Data do título" />
             </div>
             <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
               <button
