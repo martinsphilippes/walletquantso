@@ -1,5 +1,6 @@
 "use client";
 import { PanelHead } from "@/components/PanelHead";
+import { effectiveCostCenterId } from "@/lib/categories/tree";
 
 // WalletQuantso — tela de Clientes do negócio de entregas.
 //
@@ -98,7 +99,10 @@ interface Draft {
   zones: ZoneDraft[];
   contactId: string;
   accountId: string;
+  /** Categoria principal e subcategoria separadas na tela; o cliente guarda
+   *  um único categoryId (a subcategoria, quando escolhida). */
   categoryId: string;
+  subcategoryId: string;
   costCenterId: string;
 }
 
@@ -110,10 +114,12 @@ const emptyDraft = (): Draft => ({
   contactId: "",
   accountId: "",
   categoryId: "",
+  subcategoryId: "",
   costCenterId: "",
 });
 
-function draftFromClient(c: Client): Draft {
+function draftFromClient(c: Client, catById: Map<string, Category>): Draft {
+  const cat = c.categoryId ? catById.get(c.categoryId) : undefined;
   return {
     name: c.name,
     dailyRate: c.dailyRate != null ? fmtMoney(c.dailyRate) : "",
@@ -125,7 +131,8 @@ function draftFromClient(c: Client): Draft {
     })),
     contactId: c.contactId ?? "",
     accountId: c.accountId ?? "",
-    categoryId: c.categoryId ?? "",
+    categoryId: cat?.parentId ?? cat?.id ?? c.categoryId ?? "",
+    subcategoryId: cat?.parentId ? (cat.id ?? "") : "",
     costCenterId: c.costCenterId ?? "",
   };
 }
@@ -227,6 +234,18 @@ function Clientes() {
   }, [load]);
 
   const mainCategories = useMemo(() => categories.filter((c) => !c.parentId), [categories]);
+  const catById = useMemo(
+    () => new Map(categories.filter((c) => c.id).map((c) => [c.id as string, c])),
+    [categories],
+  );
+  const subOptions = draft.categoryId ? categories.filter((c) => c.parentId === draft.categoryId) : [];
+
+  // Trocar a categoria zera a subcategoria; sem centro escolhido, a categoria
+  // puxa o centro dela (como nos outros formulários).
+  function pickCategory(id: string) {
+    const cc = !draft.costCenterId ? effectiveCostCenterId(id ? catById.get(id) : undefined, catById) : null;
+    setDraft({ ...draft, categoryId: id, subcategoryId: "", costCenterId: cc || draft.costCenterId });
+  }
 
   function startCreate() {
     setEditingId(null);
@@ -237,7 +256,7 @@ function Clientes() {
 
   function startEdit(c: Client) {
     setEditingId(c.id!);
-    setDraft(draftFromClient(c));
+    setDraft(draftFromClient(c, catById));
     setImportMsg("");
     setFormOpen(true);
   }
@@ -274,7 +293,7 @@ function Clientes() {
       zones,
       contactId: draft.contactId || null,
       accountId: draft.accountId || null,
-      categoryId: draft.categoryId || null,
+      categoryId: (draft.subcategoryId || draft.categoryId) || null,
       costCenterId: draft.costCenterId || null,
       createdAt: Date.now(),
     };
@@ -616,12 +635,30 @@ function Clientes() {
                 </select>
               </Field>
               <Field label="Categoria (receita)">
-                <select
-                  value={draft.categoryId}
-                  onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}
-                >
+                <select value={draft.categoryId} onChange={(e) => pickCategory(e.target.value)}>
                   <option value="">—</option>
                   {mainCategories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Subcategoria">
+                <select
+                  value={draft.subcategoryId}
+                  onChange={(e) => setDraft({ ...draft, subcategoryId: e.target.value })}
+                  disabled={subOptions.length === 0}
+                  title={
+                    !draft.categoryId
+                      ? "Escolha a categoria primeiro"
+                      : subOptions.length === 0
+                        ? "Esta categoria não tem subcategorias"
+                        : undefined
+                  }
+                >
+                  <option value="">{subOptions.length === 0 ? "— sem subcategorias —" : "—"}</option>
+                  {subOptions.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
