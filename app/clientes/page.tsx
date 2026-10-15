@@ -37,10 +37,14 @@ import {
 } from "@/lib/clients/billing";
 import { zonesFromMatrix } from "@/lib/clients/zones";
 import Papa from "papaparse";
-import { parseBrCurrency } from "@/lib/br/parse";
+import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
 import { DatePicker } from "@/components/DatePicker";
 import { todayBr } from "@/lib/br/date";
 import type { Account, Category, Client, Contact, CostCenter, DeliveryZone } from "@/types";
+
+/** Valor em reais para os campos com máscara de centavos ("70" → "70,00"). */
+const fmtMoney = (n: number) =>
+  n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -111,12 +115,12 @@ const emptyDraft = (): Draft => ({
 function draftFromClient(c: Client): Draft {
   return {
     name: c.name,
-    dailyRate: c.dailyRate != null ? String(c.dailyRate).replace(".", ",") : "",
+    dailyRate: c.dailyRate != null ? fmtMoney(c.dailyRate) : "",
     revenuePercent: c.revenuePercent != null ? String(c.revenuePercent).replace(".", ",") : "",
     zones: (c.zones ?? []).map((z) => ({
       id: z.id,
       name: z.name,
-      price: String(z.price).replace(".", ","),
+      price: fmtMoney(z.price),
     })),
     contactId: c.contactId ?? "",
     accountId: c.accountId ?? "",
@@ -168,7 +172,7 @@ function Clientes() {
           ...added.map((z) => ({
             id: rid(),
             name: z.name,
-            price: String(z.price).replace(".", ","),
+            price: fmtMoney(z.price),
           })),
         ],
       });
@@ -480,8 +484,8 @@ function Clientes() {
                 <input
                   placeholder="Ex.: 90,00"
                   value={draft.dailyRate}
-                  onChange={(e) => setDraft({ ...draft, dailyRate: e.target.value })}
-                  inputMode="decimal"
+                  onChange={(e) => setDraft({ ...draft, dailyRate: maskBrAmount(e.target.value) })}
+                  inputMode="numeric"
                   style={{ ...fieldStyle, width: 120, textAlign: "right" }}
                 />
               </Field>
@@ -550,10 +554,10 @@ function Clientes() {
                   value={z.price}
                   onChange={(e) => {
                     const zones = [...draft.zones];
-                    zones[i] = { ...z, price: e.target.value };
+                    zones[i] = { ...z, price: maskBrAmount(e.target.value) };
                     setDraft({ ...draft, zones });
                   }}
-                  inputMode="decimal"
+                  inputMode="numeric"
                   style={{ ...fieldStyle, width: 110, textAlign: "right" }}
                 />
                 <button
@@ -825,8 +829,8 @@ function Clientes() {
                       <Field label={`Faturamento entregue (R$) — cobra ${String(c.revenuePercent).replace(".", ",")}%`}>
                         <input
                           value={revenue}
-                          onChange={(e) => setRevenue(e.target.value)}
-                          inputMode="decimal"
+                          onChange={(e) => setRevenue(maskBrAmount(e.target.value))}
+                          inputMode="numeric"
                           placeholder="0,00"
                           style={{ ...fieldStyle, width: 140, textAlign: "right" }}
                         />

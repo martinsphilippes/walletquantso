@@ -752,9 +752,9 @@ export function PedidosWhatsAppTool() {
                           </select>
                           <input
                             value={d.price}
-                            onChange={(e) => setD({ price: e.target.value })}
-                            placeholder="Preço (ex.: 13)"
-                            inputMode="decimal"
+                            onChange={(e) => setD({ price: maskBrAmount(e.target.value) })}
+                            placeholder="Preço (ex.: 13,00)"
+                            inputMode="numeric"
                             style={{
                               width: 100,
                               textAlign: "right",
