@@ -250,6 +250,15 @@ td button { padding: 0.3rem 0.6rem; font-size: 0.78rem; border-radius: 7px; }
 td select, td input { padding: 0.3rem 0.45rem; font-size: 0.8rem; border-radius: 6px; }
 tbody tr:hover { background: var(--surface-2); }
 
+/* Tabelas densas (painéis de contas do Dashboard): letra menor para todas as
+   colunas caberem lado a lado sem rolar. */
+table.dense { font-size: 0.72rem; line-height: 1.25; }
+table.dense th, table.dense td { padding: 0.3rem 0.35rem; }
+table.dense th { font-size: 0.6rem; }
+table.dense .badge { font-size: 0.62rem; padding: 0.05rem 0.4rem; }
+table.dense td button { padding: 0.22rem 0.5rem; font-size: 0.7rem; }
+table.dense td select, table.dense td input { padding: 0.25rem 0.4rem; font-size: 0.74rem; }
+
 /* ---------- Forms ---------- */
 input, select, textarea {
   font: inherit;

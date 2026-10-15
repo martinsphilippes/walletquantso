@@ -1,7 +1,9 @@
 "use client";
 
 import { brl } from "@/lib/br/money";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
+import { FEE_AUTO, FeeFields, resolveFee, type FeeState } from "@/components/FeeFields";
 import { loadErrorMessage } from "@/lib/errors";
 import { LoginGate } from "@/components/LoginGate";
 import { useAuth } from "@/services/auth-context";
@@ -12,7 +14,7 @@ import {
   listCostCenters,
   listTransactions,
 } from "@/services/firestore";
-import { listBills } from "@/services/bills";
+import { addPayment, listBills } from "@/services/bills";
 import { onListsChange } from "@/services/live-store";
 import {
   createTransaction,
@@ -58,6 +60,12 @@ const TYPE_LABELS: Record<TransactionType, string> = {
   expense: "Despesa",
   transfer: "Transferência",
 };
+
+/** Id de baixa (único dentro do título). */
+const rid = () =>
+  (typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
 
 const brDate = (iso: string) => iso.split("-").reverse().join("/");
@@ -1001,15 +1009,19 @@ function Dashboard() {
           title="Contas a pagar"
           kind="payable"
           bills={payables}
+          accounts={accounts}
           accountName={accountName}
           costCenterName={costCenterName}
+          onChanged={load}
         />
         <BillListPanel
           title="Contas a receber"
           kind="receivable"
           bills={receivables}
+          accounts={accounts}
           accountName={accountName}
           costCenterName={costCenterName}
+          onChanged={load}
         />
       </div>
 
@@ -1217,58 +1229,200 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
   );
 }
 
+/**
+ * Painel de contas em aberto do Dashboard, com baixa direto na linha: o botão
+ * Pagar/Receber abre valor, data, conta e a taxa da conta (ex.: Depix e o
+ * gasto L-BTC), e "Confirmar" quita o título pelo valor informado — a mesma
+ * baixa de Contas a pagar/receber (vira lançamento e sai da lista).
+ */
 function BillListPanel({
   title,
   kind,
   bills,
+  accounts,
   accountName,
   costCenterName,
+  onChanged,
 }: {
   title: string;
   kind: Bill["kind"];
   bills: Bill[];
+  accounts: Account[];
   accountName: Map<string, string>;
   costCenterName: Map<string, string>;
+  /** Recarrega os dados depois de uma baixa. */
+  onChanged: () => Promise<void>;
 }) {
   const open = sortByDueDate(bills.filter((b) => remaining(b) > 0));
   const total = open.reduce((s, b) => s + remaining(b), 0);
-  const color = kind === "payable" ? "var(--err)" : "var(--ok)";
-  const sign = kind === "payable" ? "-" : "";
+  const isPayable = kind === "payable";
+  const color = isPayable ? "var(--err)" : "var(--ok)";
+  const sign = isPayable ? "-" : "";
+  const verb = isPayable ? "Pagar" : "Receber";
+  const txType: TransactionType = isPayable ? "expense" : "income";
+
+  const [payingId, setPayingId] = useState<string | null>(null);
+  const [payAmount, setPayAmount] = useState("");
+  const [payDate, setPayDate] = useState(todayBr());
+  const [payAccount, setPayAccount] = useState("");
+  const [payFee, setPayFee] = useState<FeeState>(FEE_AUTO);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  function startPay(b: Bill) {
+    setPayingId(b.id!);
+    setPayAmount(
+      remaining(b).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    );
+    setPayDate(todayBr());
+    setPayAccount(b.accountId ?? "");
+    setPayFee(FEE_AUTO);
+    setMsg("");
+  }
+
+  async function confirmPay(b: Bill) {
+    const amount = parseBrCurrency(payAmount);
+    if (amount == null || amount <= 0) {
+      setMsg("❌ Informe um valor maior que zero.");
+      return;
+    }
+    const account = payAccount || b.accountId || "";
+    if (!account) {
+      setMsg("❌ Escolha a conta da baixa.");
+      return;
+    }
+    setBusy(true);
+    setMsg("");
+    try {
+      const decision = resolveFee(txType, account, null, amount, accounts, payFee);
+      await addPayment(
+        b.id!,
+        { id: rid(), date: payDate || todayBr(), amount, accountId: account },
+        { settle: true, fee: decision ? { amount: decision.amount, learn: decision.learn } : undefined },
+      );
+      setPayingId(null);
+      await onChanged();
+      setMsg(`✅ ${isPayable ? "Pago" : "Recebido"} ${brl(amount)} — ${b.description}.`);
+    } catch (err) {
+      setMsg(`❌ Falha ao ${isPayable ? "pagar" : "receber"}: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const mini: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 3, fontSize: "0.72rem" };
 
   return (
     <div className="panel">
       <h2>{title}</h2>
+      {msg && (
+        <p style={{ fontSize: "0.8rem", color: msg.startsWith("❌") ? "var(--err)" : "var(--ok)", marginTop: 0 }}>
+          {msg}
+        </p>
+      )}
       {open.length === 0 ? (
         <p className="muted">Nenhuma conta em aberto.</p>
       ) : (
         <div style={{ overflowX: "auto" }}>
-          <table>
+          <table className="dense">
             <thead>
               <tr>
-                <th>Vencimento</th>
+                <th>Venc.</th>
                 <th>Descrição</th>
                 <th>Centro</th>
                 <th>Conta</th>
                 <th style={{ textAlign: "right" }}>Valor</th>
+                <th aria-label="Ações" />
               </tr>
             </thead>
             <tbody>
               {open.map((b) => (
-                <tr key={b.id}>
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    {brDate(b.dueDate)}
-                    {billStatus(b) === "overdue" && (
-                      <span className="badge err" style={{ marginLeft: 6 }}>Vencido</span>
-                    )}
-                  </td>
-                  <td>{b.description}</td>
-                  <td>{b.costCenterId ? (costCenterName.get(b.costCenterId) ?? "—") : "—"}</td>
-                  <td>{b.accountId ? (accountName.get(b.accountId) ?? "—") : "—"}</td>
-                  <td style={{ textAlign: "right", whiteSpace: "nowrap", color }}>
-                    {sign}
-                    {brl(remaining(b))}
-                  </td>
-                </tr>
+                <Fragment key={b.id}>
+                  <tr>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      {brDate(b.dueDate)}
+                      {billStatus(b) === "overdue" && (
+                        <div>
+                          <span className="badge err">Vencido</span>
+                        </div>
+                      )}
+                    </td>
+                    <td>{b.description}</td>
+                    <td>{b.costCenterId ? (costCenterName.get(b.costCenterId) ?? "—") : "—"}</td>
+                    <td>{b.accountId ? (accountName.get(b.accountId) ?? "—") : "—"}</td>
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap", color, fontWeight: 600 }}>
+                      {sign}
+                      {brl(remaining(b))}
+                    </td>
+                    <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>
+                      <button
+                        className={payingId === b.id ? undefined : "btn-primary"}
+                        disabled={busy}
+                        onClick={() => (payingId === b.id ? setPayingId(null) : startPay(b))}
+                        style={payingId === b.id ? { background: "var(--border)" } : undefined}
+                      >
+                        {payingId === b.id ? "Fechar" : verb}
+                      </button>
+                    </td>
+                  </tr>
+                  {payingId === b.id && (
+                    <tr>
+                      <td colSpan={6} style={{ background: "var(--bg)", padding: "0.5rem 0.6rem" }}>
+                        <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+                          <label style={mini}>
+                            <span className="muted">Valor (R$)</span>
+                            <input
+                              value={payAmount}
+                              onChange={(e) => setPayAmount(maskBrAmount(e.target.value))}
+                              inputMode="numeric"
+                              style={{ ...fieldStyle, width: 110, textAlign: "right", fontWeight: 700 }}
+                            />
+                          </label>
+                          <div style={mini}>
+                            <span className="muted">Data</span>
+                            <DatePicker value={payDate} onChange={setPayDate} ariaLabel="Data da baixa" />
+                          </div>
+                          <label style={mini}>
+                            <span className="muted">Conta</span>
+                            <select
+                              value={payAccount}
+                              onChange={(e) => {
+                                setPayAccount(e.target.value);
+                                setPayFee(FEE_AUTO);
+                              }}
+                              style={fieldStyle}
+                            >
+                              <option value="">Escolha…</option>
+                              {accounts.map((a) => (
+                                <option key={a.id} value={a.id}>
+                                  {a.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <button className="btn-primary" disabled={busy} onClick={() => void confirmPay(b)}>
+                            {busy ? "Salvando…" : `Confirmar ${verb.toLowerCase()}`}
+                          </button>
+                          <button style={{ background: "var(--border)" }} disabled={busy} onClick={() => setPayingId(null)}>
+                            Cancelar
+                          </button>
+                          <span className="muted" style={{ fontSize: "0.72rem", flexBasis: "100%" }}>
+                            Quita o título pelo valor informado: ele sai desta lista e vira um lançamento na conta.
+                          </span>
+                          <FeeFields
+                            compact
+                            type={txType}
+                            accountId={payAccount || b.accountId || ""}
+                            gross={parseBrCurrency(payAmount) ?? 0}
+                            accounts={accounts}
+                            state={payFee}
+                            onChange={setPayFee}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
             <tfoot>
@@ -1280,6 +1434,7 @@ function BillListPanel({
                     {brl(total)}
                   </strong>
                 </td>
+                <td />
               </tr>
             </tfoot>
           </table>
