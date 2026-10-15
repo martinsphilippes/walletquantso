@@ -34,13 +34,14 @@ import { DatePicker } from "@/components/DatePicker";
 import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
 import { transactionsToCsv } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
-import {
-  filterTransactions,
-  summarize,
-  type DashboardFilters,
-} from "@/lib/dashboard/filter";
+import { filterTransactions, type DashboardFilters } from "@/lib/dashboard/filter";
+import { computeOverview } from "@/lib/dashboard/overview";
+import { computeCashBalances } from "@/lib/dashboard/cash";
+import { listBills } from "@/services/bills";
+import { OverviewCards, CashBalancesPanel } from "@/components/OverviewStats";
 import type {
   Account,
+  Bill,
   Category,
   Contact,
   CostCenter,
@@ -73,6 +74,10 @@ function Lancamentos() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  // Títulos em aberto entram nos indicadores do topo (a pagar/receber,
+  // projetado, vencido, pendentes) e nos saldos de caixa — como no Dashboard.
+  const [payables, setPayables] = useState<Bill[]>([]);
+  const [receivables, setReceivables] = useState<Bill[]>([]);
   const [error, setError] = useState("");
   const [filters, setFilters] = useState<DashboardFilters>({});
 
@@ -96,12 +101,14 @@ function Lancamentos() {
     if (!user) return;
     setError("");
     try {
-      const [t, a, c, cc, ct] = await Promise.all([
+      const [t, a, c, cc, ct, pay, rec] = await Promise.all([
         listTransactions(user.uid),
         listAccounts(user.uid),
         listCategories(user.uid),
         listCostCenters(user.uid),
         listContacts(user.uid),
+        listBills(user.uid, "payable"),
+        listBills(user.uid, "receivable"),
       ]);
       setTxs(t);
       setAccounts(a);
@@ -110,6 +117,8 @@ function Lancamentos() {
       ct.sort((x, y) => x.name.localeCompare(y.name, "pt-BR"));
       setCostCenters(cc);
       setContacts(ct);
+      setPayables(pay);
+      setReceivables(rec);
     } catch (err) {
       setError(`Falha ao carregar: ${loadErrorMessage(err)}`);
       setTxs([]);
@@ -173,7 +182,20 @@ function Lancamentos() {
     () => (txs ? filterTransactions(txs, filters) : []),
     [txs, filters],
   );
-  const summary = useMemo(() => summarize(filtered), [filtered]);
+  // Indicadores do topo (os mesmos do Dashboard) no período do filtro desta
+  // tela; saldos de caixa não dependem de período.
+  const overview = useMemo(
+    () =>
+      computeOverview(accounts, txs ?? [], payables, receivables, undefined, {
+        from: filters.from || undefined,
+        to: filters.to || undefined,
+      }),
+    [accounts, txs, payables, receivables, filters.from, filters.to],
+  );
+  const cash = useMemo(
+    () => computeCashBalances(accounts, txs ?? [], payables, receivables),
+    [accounts, txs, payables, receivables],
+  );
   // Para mostrar, embaixo do valor, a taxa e os gastos vinculados (ex.: L-BTC)
   // que o lançamento gerou — são lançamentos à parte, achados pelo id.
   const txById = useMemo(
@@ -480,16 +502,15 @@ function Lancamentos() {
     <>
       {error && <p className="badge err">{error}</p>}
 
-      <div className="stat-row">
-        <Stat label="Receitas" value={brl(summary.income)} color="var(--ok)" />
-        <Stat label="Despesas" value={brl(summary.expense)} color="var(--err)" />
-        <Stat
-          label="Resultado"
-          value={brl(summary.balance)}
-          color={summary.balance >= 0 ? "var(--ok)" : "var(--err)"}
-        />
-        <Stat label="Lançamentos" value={String(summary.count)} />
-      </div>
+      {/* Indicadores e saldos de caixa (os mesmos do Dashboard), no período do filtro */}
+      <OverviewCards overview={overview} />
+      {(filters.from || filters.to) && (
+        <p className="muted" style={{ margin: "-0.25rem 0 0", fontSize: "0.82rem" }}>
+          Receitas/despesas realizadas <strong>no período do filtro</strong>; a pagar/receber e
+          pendentes que <strong>vencem no período</strong>; saldo atual <strong>até a data final</strong>.
+        </p>
+      )}
+      <CashBalancesPanel cash={cash} panelId="lanc-saldos" />
 
       {form?.mode === "new" ? (
         <TransactionForm
@@ -1189,17 +1210,6 @@ function InlineField({ label, children }: { label: string; children: React.React
       <span className="muted">{label}</span>
       {children}
     </label>
-  );
-}
-
-function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div className="stat">
-      <div className="n" style={{ fontSize: "1.2rem", ...(color ? { color } : {}) }}>
-        {value}
-      </div>
-      <div className="muted">{label}</div>
-    </div>
   );
 }
 
