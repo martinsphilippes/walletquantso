@@ -1,4 +1,5 @@
 "use client";
+import { PanelHead } from "@/components/PanelHead";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadErrorMessage } from "@/lib/errors";
@@ -374,7 +375,7 @@ function Conciliacao() {
 
       {summary && account && (
         <div className="panel">
-          <h2 style={{ marginTop: 0 }}>Acertar com o banco (recomeço limpo)</h2>
+          <PanelHead id="conc-acertar" title="Acertar com o banco (recomeço limpo)" />
           <p className="muted" style={{ fontSize: "0.85rem" }}>
             Digite o saldo que aparece <strong>agora</strong> no app do banco. O sistema cria um
             lançamento visível de <strong>"Ajuste de saldo"</strong> com a diferença exata (fica

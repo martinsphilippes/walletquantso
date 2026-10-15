@@ -1,4 +1,5 @@
 "use client";
+import { PanelHead } from "@/components/PanelHead";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadErrorMessage } from "@/lib/errors";
@@ -145,7 +146,7 @@ function Reports() {
       </div>
 
       <div className="panel">
-        <h2>Receitas x Despesas por mês</h2>
+        <PanelHead id="rel-meses" title="Receitas x Despesas por mês" />
         {byMonth.length === 0 ? (
           <p className="muted">Sem dados ainda.</p>
         ) : (
@@ -194,7 +195,7 @@ function Reports() {
       </div>
 
       <div className="panel">
-        <h2>Por categoria</h2>
+        <PanelHead id="rel-categoria" title="Por categoria" />
         <div
           style={{
             display: "flex",

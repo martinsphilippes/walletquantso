@@ -1,4 +1,5 @@
 "use client";
+import { PanelHead } from "@/components/PanelHead";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadErrorMessage } from "@/lib/errors";
@@ -410,7 +411,7 @@ function Contacts() {
       </div>
 
       <div className="panel">
-        <h2>Novo contato</h2>
+        <PanelHead id="novo-contato" title="Novo contato" />
         <form onSubmit={createNew} style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
           <input
             placeholder="Nome"

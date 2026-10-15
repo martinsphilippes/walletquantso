@@ -1,4 +1,5 @@
 "use client";
+import { PanelHead } from "@/components/PanelHead";
 
 import { brl } from "@/lib/br/money";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
@@ -864,7 +865,7 @@ function Accounts() {
       </div>
 
       <div className="panel">
-        <h2>Nova conta</h2>
+        <PanelHead id="nova-conta" title="Nova conta" />
         <form onSubmit={createNew} style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
           <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem", flex: "2 1 220px" }}>
             <span className="muted" style={{ fontSize: "0.8rem" }}>Nome da conta</span>

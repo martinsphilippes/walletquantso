@@ -1,4 +1,5 @@
 "use client";
+import { PanelHead } from "@/components/PanelHead";
 
 // WalletQuantso — shared manager for the "Categorias" and "Subcategorias"
 // screens. The hierarchy is: cost center → category → subcategory. The
@@ -630,7 +631,7 @@ export function CategoryManager({ mode }: { mode: CategoryManagerMode }) {
       </div>
 
       <div className="panel">
-        <h2>{isSub ? "Nova subcategoria" : "Nova categoria"}</h2>
+        <PanelHead id={isSub ? "nova-subcategoria" : "nova-categoria"} title={isSub ? "Nova subcategoria" : "Nova categoria"} />
         <p className="muted" style={{ marginTop: 0 }}>
           {isSub
             ? "Uma subcategoria pertence a uma categoria e herda o centro de custo e o tipo dela."

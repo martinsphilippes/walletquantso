@@ -1,4 +1,5 @@
 "use client";
+import { PanelHead } from "@/components/PanelHead";
 
 // WalletQuantso — tela de Clientes do negócio de entregas.
 //
@@ -469,7 +470,7 @@ function Clientes() {
 
       {formOpen && (
         <div className="panel">
-          <h2>{editingId ? "Editar cliente" : "Novo cliente"}</h2>
+          <PanelHead id="cliente-form" title={editingId ? "Editar cliente" : "Novo cliente"} />
           <form onSubmit={saveClient}>
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
               <Field label="Nome do cliente">

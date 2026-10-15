@@ -1,4 +1,5 @@
 "use client";
+import { PanelHead } from "@/components/PanelHead";
 
 import { useMemo, useState } from "react";
 import { readSpreadsheet } from "@/lib/import/reader";
@@ -178,7 +179,7 @@ function Importer() {
       </p>
 
       <div className="panel">
-        <h2>1. O que você está importando?</h2>
+        <PanelHead id="imp-1" title="1. O que você está importando?" />
         <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
           <label style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
             <input
@@ -215,7 +216,7 @@ function Importer() {
 
       {headers.length > 0 && !report && (
         <div className="panel">
-          <h2>2. Mapeamento de colunas</h2>
+          <PanelHead id="imp-2" title="2. Mapeamento de colunas" />
           <p className="muted">
             Detectamos automaticamente. “Data”, “Valor” e “Conta” são obrigatórios.
           </p>
@@ -254,7 +255,7 @@ function Importer() {
 
       {preview && !report && (
         <div className="panel">
-          <h2>3. Pré-visualização</h2>
+          <PanelHead id="imp-3" title="3. Pré-visualização" />
           <div className="stat-row">
             <Stat n={preview.rows.length} label="Total" />
             <Stat n={preview.importable.length} label="Importáveis" color="var(--ok)" />
@@ -333,7 +334,7 @@ function Importer() {
 
       {!isBills && reconciled && preview && !report && (
         <div className="panel">
-          <h2>4. Reconciliação</h2>
+          <PanelHead id="imp-4" title="4. Reconciliação" />
           <p>
             <label>
               <input
@@ -375,7 +376,7 @@ function Importer() {
 
       {isBills && preview && !report && (
         <div className="panel">
-          <h2>4. Gravar títulos</h2>
+          <PanelHead id="imp-4b" title="4. Gravar títulos" />
           <p className="muted">
             Cada linha vira um título em aberto (a pagar/a receber). O valor é o total; as
             baixas você registra depois em Contas a pagar/receber.
@@ -390,7 +391,7 @@ function Importer() {
 
       {report && (
         <div className="panel">
-          <h2>5. Importação concluída</h2>
+          <PanelHead id="imp-5" title="5. Importação concluída" />
           {reverted ? (
             <p className="badge warn">
               Importação desfeita — {report.imported} {importedAsBills ? "título(s)" : "lançamento(s)"} removido(s).

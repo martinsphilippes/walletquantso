@@ -1,4 +1,5 @@
 "use client";
+import { PanelHead } from "@/components/PanelHead";
 
 import { brl } from "@/lib/br/money";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
@@ -514,7 +515,7 @@ function Lancamentos() {
       )}
 
       <div className="panel">
-        <h2>Filtros</h2>
+        <PanelHead id="lanc-filtros" title="Filtros" />
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: "0.75rem" }}>
           {(() => {
             const presets: Array<{ label: string; preset: string; from: string; to: string }> = [

@@ -1,4 +1,5 @@
 "use client";
+import { PanelHead } from "@/components/PanelHead";
 
 // WalletQuantso — payables/receivables manager, shared by the "contas a pagar"
 // and "contas a receber" pages via the `kind` prop. Handles create, edit,
@@ -853,7 +854,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
       </div>
 
       <div className="panel" ref={createFormRef}>
-        <h2>Novo título</h2>
+        <PanelHead id={`novo-titulo-${kind}`} title="Novo título" />
         <form
           onSubmit={createNew}
           style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}
@@ -1051,7 +1052,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
       </div>
 
       <div className="panel">
-        <h2>Filtros</h2>
+        <PanelHead id={`filtros-${kind}`} title="Filtros" />
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
           <Field label="Conta">
             <select value={fAccount} onChange={(e) => setFAccount(e.target.value)}>

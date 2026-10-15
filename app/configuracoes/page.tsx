@@ -1,4 +1,5 @@
 "use client";
+import { PanelHead } from "@/components/PanelHead";
 
 // WalletQuantso — Configurações: notificações pelo Telegram.
 //
@@ -83,7 +84,7 @@ function TelegramPanel() {
 
   return (
     <div className="panel">
-      <h2>Notificações no Telegram</h2>
+      <PanelHead id="telegram" title="Notificações no Telegram" />
       <p className="muted" style={{ marginTop: 0 }}>
         Todo dia às <strong>7h</strong> o robô manda três mensagens: as <strong>contas a pagar em aberto,
         agrupadas por conta</strong> (atrasadas em vermelho, vencendo hoje em amarelo), os{" "}

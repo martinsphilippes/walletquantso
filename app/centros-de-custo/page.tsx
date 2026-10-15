@@ -1,4 +1,5 @@
 "use client";
+import { PanelHead } from "@/components/PanelHead";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadErrorMessage } from "@/lib/errors";
@@ -351,7 +352,7 @@ function CostCenters() {
       </div>
 
       <div className="panel">
-        <h2>Novo centro de custo</h2>
+        <PanelHead id="novo-centro" title="Novo centro de custo" />
         <form onSubmit={createNew} style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
           <input
             placeholder="Nome (ex.: Casa, Empresa, Projeto X)"

@@ -1,4 +1,5 @@
 "use client";
+import { PanelHead } from "@/components/PanelHead";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadErrorMessage } from "@/lib/errors";
@@ -317,7 +318,7 @@ function CoraSync() {
       </div>
 
       <div className="panel">
-        <h2 style={{ marginTop: 0 }}>Sincronização automática</h2>
+        <PanelHead id="cora-sync" title="Sincronização automática" />
         <p className="muted" style={{ marginTop: 0 }}>
           Quando ativada, a Wallet busca sozinha as novas movimentações do Cora
           de tempos em tempos e cria os lançamentos na conta escolhida acima —
@@ -444,7 +445,7 @@ function CoraSync() {
 
       {comparison && (
         <div className="panel">
-          <h2 style={{ marginTop: 0 }}>Conferência Cora × Wallet</h2>
+          <PanelHead id="cora-conferencia" title="Conferência Cora × Wallet" />
           <p className="muted" style={{ marginTop: 0 }}>
             Comparação do período {brDate(start)} a {brDate(end)} na conta{" "}
             <strong>{account?.name ?? "—"}</strong>.

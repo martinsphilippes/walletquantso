@@ -1,4 +1,5 @@
 "use client";
+import { PanelHead } from "@/components/PanelHead";
 
 // WalletQuantso — Motoristas / Corridas.
 //
@@ -612,7 +613,7 @@ function Motoristas() {
 
       {/* ── Lançar corridas ─────────────────────────────────────────────── */}
       <div className="panel">
-        <h2>Lançar corridas</h2>
+        <PanelHead id="mot-lancar" title="Lançar corridas" />
         {activeDrivers.length === 0 ? (
           <p className="muted">Cadastre um motorista abaixo para começar.</p>
         ) : clients.length === 0 ? (
@@ -732,7 +733,7 @@ function Motoristas() {
 
       {/* ── Motoristas + títulos ────────────────────────────────────────── */}
       <div className="panel">
-        <h2>Motoristas</h2>
+        <PanelHead id="mot-motoristas" title="Motoristas" />
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
           <Field label="Novo motorista">
             <input
@@ -907,7 +908,7 @@ function Motoristas() {
 
       {/* ── Lançamentos recentes ────────────────────────────────────────── */}
       <div className="panel">
-        <h2>Corridas lançadas</h2>
+        <PanelHead id="mot-corridas" title="Corridas lançadas" />
         <p className="muted" style={{ marginTop: 0 }}>
           {openRides.length} em aberto (ainda sem título) · {rides.length - openRides.length - paidRides.length} em
           título aguardando pagamento · {paidRides.length} pago(s){" "}
@@ -1003,7 +1004,7 @@ function Motoristas() {
       {!restricted && (
         <>
           <div className="panel">
-            <h2>Configuração de pagamento</h2>
+            <PanelHead id="mot-pagamento" title="Configuração de pagamento" />
             <p className="muted" style={{ marginTop: 0, fontSize: "0.85rem" }}>
               Uma regra por cliente: vencimento, diárias (uma ou várias — ex.: Manhã R$ 50, Noite R$ 70),
               taxas de entrega (uma ou várias — ex.: Normal R$ 8 e Longa R$ 12) e a classificação do título.
@@ -1245,7 +1246,7 @@ function Motoristas() {
           </div>
 
           <div className="panel">
-            <h2>Acessos restritos</h2>
+            <PanelHead id="mot-acessos" title="Acessos restritos" />
             <p className="muted" style={{ marginTop: 0 }}>
               E-mails liberados aqui entram no app e enxergam <strong>só esta tela</strong>. A pessoa cria a
               conta com o e-mail liberado na tela de login (&quot;Criar conta&quot;) — ou entra com o Google,
