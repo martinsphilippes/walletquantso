@@ -189,6 +189,20 @@ h3 { font-size: 1rem; margin: 1rem 0 0.5rem; }
 }
 
 /* ---------- Panels & cards ---------- */
+/* Cabeçalho de quadro com botão de minimizar (PanelHead): minimizado, tudo
+   o que vem depois do cabeçalho dentro do quadro some. */
+.panel-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
+.panel-head h2 { margin: 0; flex: 1; min-width: 0; }
+.panel-head[data-collapsed="true"] { margin-bottom: 0; }
+.panel-head[data-collapsed="true"] ~ * { display: none !important; }
+.panel-min {
+  flex: none; width: 28px; height: 28px; border-radius: 7px;
+  border: 1px solid var(--border); background: transparent; color: var(--text-dim);
+  padding: 0; font-size: 1.05rem; line-height: 1; font-weight: 600;
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.panel-min:hover { background: var(--surface-2); color: var(--text); }
+
 .panel {
   background: var(--surface);
   border: 1px solid var(--border);

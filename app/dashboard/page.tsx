@@ -27,6 +27,7 @@ import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/Col
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import { FilterField } from "@/components/FilterField";
 import { DatePicker } from "@/components/DatePicker";
+import { PanelHead } from "@/components/PanelHead";
 import { transactionsToCsv } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
 import { filterTransactions, type DashboardFilters } from "@/lib/dashboard/filter";
@@ -507,7 +508,7 @@ function Dashboard() {
 
       {/* Saldos de caixa (largura inteira) */}
       <div className="panel">
-          <h2>Saldos de caixa</h2>
+          <PanelHead id="saldos" title="Saldos de caixa" />
           {cash.rows.length === 0 ? (
             <p className="muted">Nenhuma conta cadastrada ainda.</p>
           ) : (
@@ -566,7 +567,7 @@ function Dashboard() {
         }}
       >
         <div className="panel">
-          <h2 style={{ marginBottom: 0 }}>Resultado do mês</h2>
+          <PanelHead id="resultado-mes" title="Resultado do mês" />
           <div style={{ display: "flex", gap: 6, margin: "6px 0 10px" }}>
             {(
               [
@@ -623,7 +624,7 @@ function Dashboard() {
         </div>
 
         <div className="panel">
-          <h2 style={{ marginBottom: 0 }}>Resultados de caixa</h2>
+          <PanelHead id="resultados-caixa" title="Resultados de caixa" />
           <p className="muted" style={{ marginTop: 2 }}>Movimentado (realizado)</p>
           <ChartSwitcher
             storageKey="wq.chart.resultadosCaixa"
@@ -659,7 +660,7 @@ function Dashboard() {
 
       {/* Últimos lançamentos */}
       <div className="panel">
-        <h2>Últimos lançamentos</h2>
+        <PanelHead id="ultimos" title="Últimos lançamentos" />
         {recentTxs.length === 0 ? (
           <p className="muted">
             Nenhum lançamento feito ainda. Lançamentos são registros das suas receitas e despesas.
@@ -840,7 +841,7 @@ function Dashboard() {
         }}
       >
         <div className="panel">
-          <h2 style={{ marginBottom: 0 }}>Receitas por categoria</h2>
+          <PanelHead id="rec-categoria" title="Receitas por categoria" />
           <BreakdownToggle mode={bdMode} onChange={chooseBdMode} />
           {receitasCat.length === 0 ? (
             <p className="muted">Sem receitas para exibir.</p>
@@ -866,7 +867,7 @@ function Dashboard() {
         </div>
 
         <div className="panel">
-          <h2 style={{ marginBottom: 0 }}>Despesas por categoria</h2>
+          <PanelHead id="desp-categoria" title="Despesas por categoria" />
           <BreakdownToggle mode={bdMode} onChange={chooseBdMode} />
           {despesasCat.length === 0 ? (
             <p className="muted">Sem despesas para exibir.</p>
@@ -894,7 +895,7 @@ function Dashboard() {
 
       {/* Resultados por centros (situação projetada) */}
       <div className="panel">
-        <h2 style={{ marginBottom: 0 }}>Resultados por centros</h2>
+        <PanelHead id="centros" title="Resultados por centros" />
         <BreakdownToggle mode={bdMode} onChange={chooseBdMode} />
         {centros.length === 0 ? (
           <p className="muted">Nenhum centro de custo com movimento.</p>
@@ -961,7 +962,7 @@ function Dashboard() {
         }}
       >
         <div className="panel">
-          <h2 style={{ marginBottom: 0 }}>Receitas por centro</h2>
+          <PanelHead id="rec-centro" title="Receitas por centro" />
           <BreakdownToggle mode={bdMode} onChange={chooseBdMode} />
           {receitasCentro.length === 0 ? (
             <p className="muted">Sem receitas para exibir.</p>
@@ -979,7 +980,7 @@ function Dashboard() {
         </div>
 
         <div className="panel">
-          <h2 style={{ marginBottom: 0 }}>Despesas por centro</h2>
+          <PanelHead id="desp-centro" title="Despesas por centro" />
           <BreakdownToggle mode={bdMode} onChange={chooseBdMode} />
           {despesasCentro.length === 0 ? (
             <p className="muted">Sem despesas para exibir.</p>
@@ -1027,7 +1028,7 @@ function Dashboard() {
 
       {/* Lançamentos (movimentos realizados) */}
       <div className="panel">
-        <h2>Lançamentos</h2>
+        <PanelHead id="lancamentos" title="Lançamentos" />
         <div
           style={{
             display: "flex",
@@ -1314,7 +1315,7 @@ function BillListPanel({
 
   return (
     <div className="panel">
-      <h2>{title}</h2>
+      <PanelHead id={`bills-${kind}`} title={title} />
       {msg && (
         <p style={{ fontSize: "0.8rem", color: msg.startsWith("❌") ? "var(--err)" : "var(--ok)", marginTop: 0 }}>
           {msg}
