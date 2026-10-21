@@ -20,12 +20,32 @@ export interface ChargeInput {
   deliveries?: Record<string, number>;
   /** Faturamento entregue no período (para clientes com percentual). */
   revenue?: number | null;
+  /**
+   * Caminho inverso: o valor a cobrar já com o percentual aplicado. Quando
+   * informado (> 0) vale ele, exato, e o faturamento é deduzido (valor ÷ %).
+   */
+  revenueValue?: number | null;
 }
 
 export interface Charge {
   total: number;
   /** Linhas descritivas para compor a descrição do título. */
   lines: string[];
+}
+
+/**
+ * Parte do percentual sobre o faturamento: base (faturamento) e valor
+ * cobrado, pelos dois caminhos — digitou o faturamento (valor = base × %) ou
+ * digitou o valor (base = valor ÷ %). null quando não se aplica.
+ */
+export function revenueParts(client: Client, input: ChargeInput): { base: number; value: number } | null {
+  const pct = client.revenuePercent ?? 0;
+  if (pct <= 0) return null;
+  const typedValue = input.revenueValue ?? 0;
+  if (typedValue > 0) return { base: round((typedValue * 100) / pct), value: round(typedValue) };
+  const revenue = input.revenue ?? 0;
+  if (revenue > 0) return { base: round(revenue), value: round((revenue * pct) / 100) };
+  return null;
 }
 
 /** Total e descrição da cobrança de um cliente para o que foi informado. */
@@ -52,11 +72,10 @@ export function computeCharge(client: Client, input: ChargeInput): Charge {
     }
   }
 
-  const pct = client.revenuePercent ?? 0;
-  const revenue = input.revenue ?? 0;
-  if (pct > 0 && revenue > 0) {
-    total += (revenue * pct) / 100;
-    lines.push(`${String(pct).replace(".", ",")}% de ${brl(revenue)}`);
+  const rev = revenueParts(client, input);
+  if (rev) {
+    total += rev.value;
+    lines.push(`${String(client.revenuePercent).replace(".", ",")}% de ${brl(rev.base)}`);
   }
 
   return { total: round(total), lines };

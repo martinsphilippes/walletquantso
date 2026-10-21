@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeCharge, chargeDescription } from "./billing";
+import { computeCharge, chargeDescription, revenueParts } from "./billing";
 import type { Client } from "@/types";
 
 function client(p: Partial<Client>): Client {
@@ -32,6 +32,20 @@ describe("computeCharge", () => {
     const charge = computeCharge(c, { revenue: 2000 });
     expect(charge.total).toBe(240);
     expect(charge.lines[0]).toContain("12% de");
+  });
+
+  it("caminho inverso: digitando o valor do título, deduz o faturamento (valor ÷ %)", () => {
+    const c = client({ name: "Qpaozinho", revenuePercent: 12 });
+    expect(revenueParts(c, { revenueValue: 150 })).toEqual({ base: 1250, value: 150 });
+    expect(revenueParts(c, { revenue: 2000 })).toEqual({ base: 2000, value: 240 });
+    // O valor digitado vale exato, mesmo quando a base não fecha em centavos.
+    expect(revenueParts(c, { revenueValue: 100 })).toEqual({ base: 833.33, value: 100 });
+    const charge = computeCharge(c, { revenueValue: 100 });
+    expect(charge.total).toBe(100);
+    expect(charge.lines[0].replace(/ /g, " ")).toBe("12% de R$ 833,33");
+    // O valor digitado tem prioridade sobre o faturamento, e sem percentual não há nada.
+    expect(revenueParts(c, { revenue: 2000, revenueValue: 150 })?.value).toBe(150);
+    expect(revenueParts(client({ name: "x" }), { revenueValue: 150 })).toBeNull();
   });
 
   it("combina diária + entregas + percentual no mesmo título", () => {

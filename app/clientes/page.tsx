@@ -34,6 +34,7 @@ import {
   CHARGE_PERIOD_LABEL,
   computeCharge,
   chargeDescription,
+  revenueParts,
   type ChargeInput,
   type ChargePeriod,
 } from "@/lib/clients/billing";
@@ -200,6 +201,10 @@ function Clientes() {
   const [afternoon, setAfternoon] = useState("");
   const [deliveries, setDeliveries] = useState<Record<string, string>>({});
   const [revenue, setRevenue] = useState("");
+  // Caminho inverso do percentual: o valor do título digitado; `revenueSource`
+  // diz qual dos dois campos foi digitado por último (o outro é calculado).
+  const [revenueValue, setRevenueValue] = useState("");
+  const [revenueSource, setRevenueSource] = useState<"revenue" | "value">("revenue");
   const [dueDate, setDueDate] = useState(todayBr());
   // Tipo do título (vai na descrição): semanal ou mensal.
   const [chargePeriod, setChargePeriod] = useState<ChargePeriod | null>(null);
@@ -343,6 +348,8 @@ function Clientes() {
     setAfternoon("");
     setDeliveries({});
     setRevenue("");
+    setRevenueValue("");
+    setRevenueSource("revenue");
     setDueDate(todayBr());
     setChargePeriod(null);
     setChargeMsg("");
@@ -358,7 +365,8 @@ function Clientes() {
       morningShifts: parseInt(morning, 10) || 0,
       afternoonShifts: parseInt(afternoon, 10) || 0,
       deliveries: dels,
-      revenue: revenue.trim() ? parseBrCurrency(revenue) : null,
+      revenue: revenueSource === "revenue" && revenue.trim() ? parseBrCurrency(revenue) : null,
+      revenueValue: revenueSource === "value" && revenueValue.trim() ? parseBrCurrency(revenueValue) : null,
     };
   }
 
@@ -436,8 +444,7 @@ function Clientes() {
         entregasQty += qty;
         entregasValor += qty * z.price;
       }
-      const pct = c.revenuePercent ?? 0;
-      const revenueBase = pct > 0 && (input.revenue ?? 0) > 0 ? (input.revenue as number) : null;
+      const rev = revenueParts(c, input);
       await addClientBilling({
         ownerId: user.uid,
         clientId: c.id!,
@@ -448,8 +455,8 @@ function Clientes() {
         diariasValor: Math.round(diariasQty * rate * 100) / 100,
         entregas: entregasQty,
         entregasValor: Math.round(entregasValor * 100) / 100,
-        revenueBase,
-        revenueValor: revenueBase != null ? Math.round(((revenueBase * pct) / 100) * 100) / 100 : null,
+        revenueBase: rev?.base ?? null,
+        revenueValor: rev?.value ?? null,
         total: charge.total,
         details: [CHARGE_PERIOD_LABEL[chargePeriod], ...charge.lines].join(" · "),
         billId,
@@ -464,6 +471,8 @@ function Clientes() {
       setAfternoon("");
       setDeliveries({});
       setRevenue("");
+      setRevenueValue("");
+      setRevenueSource("revenue");
     } catch (err) {
       setChargeMsg(`❌ Falha ao gerar: ${(err as Error).message}`);
     } finally {
@@ -863,17 +872,54 @@ function Clientes() {
                         </Field>
                       </>
                     )}
-                    {(c.revenuePercent ?? 0) > 0 && (
-                      <Field label={`Faturamento entregue (R$) — cobra ${String(c.revenuePercent).replace(".", ",")}%`}>
-                        <input
-                          value={revenue}
-                          onChange={(e) => setRevenue(maskBrAmount(e.target.value))}
-                          inputMode="numeric"
-                          placeholder="0,00"
-                          style={{ ...fieldStyle, width: 140, textAlign: "right" }}
-                        />
-                      </Field>
-                    )}
+                    {(c.revenuePercent ?? 0) > 0 &&
+                      (() => {
+                        // Dois caminhos: digita o faturamento e vê o valor do
+                        // título, ou digita o valor e vê o faturamento. O campo
+                        // digitado por último manda; o outro é calculado.
+                        const pctLabel = String(c.revenuePercent).replace(".", ",");
+                        const rev = revenueParts(c, chargeInput());
+                        const revenueShown = revenueSource === "revenue" ? revenue : rev ? fmtMoney(rev.base) : "";
+                        const valueShown = revenueSource === "value" ? revenueValue : rev ? fmtMoney(rev.value) : "";
+                        return (
+                          <>
+                            <Field label="Faturamento entregue (R$)">
+                              <input
+                                value={revenueShown}
+                                onChange={(e) => {
+                                  setRevenue(maskBrAmount(e.target.value));
+                                  setRevenueSource("revenue");
+                                }}
+                                inputMode="numeric"
+                                placeholder="0,00"
+                                style={{
+                                  ...fieldStyle,
+                                  width: 140,
+                                  textAlign: "right",
+                                  fontWeight: revenueSource === "revenue" ? 700 : 400,
+                                }}
+                              />
+                            </Field>
+                            <Field label={`Valor do título (R$) — ${pctLabel}% do faturamento`}>
+                              <input
+                                value={valueShown}
+                                onChange={(e) => {
+                                  setRevenueValue(maskBrAmount(e.target.value));
+                                  setRevenueSource("value");
+                                }}
+                                inputMode="numeric"
+                                placeholder="0,00"
+                                style={{
+                                  ...fieldStyle,
+                                  width: 140,
+                                  textAlign: "right",
+                                  fontWeight: revenueSource === "value" ? 700 : 400,
+                                }}
+                              />
+                            </Field>
+                          </>
+                        );
+                      })()}
                     <Field label="Vencimento">
                       <DatePicker value={dueDate} onChange={setDueDate} />
                     </Field>
