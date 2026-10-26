@@ -35,6 +35,12 @@ export interface ParseResult {
   rows: ParsedRow[];
   /** Diárias declaradas na conversa (nome do entregador + turno + dia). */
   shifts: ShiftRow[];
+  /**
+   * Dias escritos na lista com dia da semana + data ("Sextas 23/10",
+   * "Domingo — 25/10"): cada um é um dia trabalhado e vale uma diária, mesmo
+   * que nenhuma entrega venha depois dele. Em ordem, sem repetição.
+   */
+  markedDays: string[];
   skipped: string[];
 }
 
@@ -109,7 +115,7 @@ const GIBBERISH_WORD = /^[a-z]{2,14}$/;
 // o remetente atual e o dia vira o marcador das linhas seguintes.
 const SENDER_DAY_LINE = new RegExp(
   "^([" + LETTER + "][" + LETTER + "'.]*(?:\\s+[" + LETTER + "][" + LETTER + "'.]*){0,5})\\s+" +
-    "((?:segunda|ter[cç]a|quarta|quinta|sexta)\\s*-?\\s*feira|s[aá]bado|domingo|ontem|hoje)" +
+    "((?:segunda|ter[cç]a|quarta|quinta|sexta)s?\\s*-?\\s*feiras?|s[aá]bados?|domingos?|ontem|hoje)" +
     "\\s*(?:\\(?\\s*\\d{1,2}[/.]\\d{1,2}(?:[/.]\\d{2,4})?\\s*\\)?)?\\s*$",
   "i",
 );
@@ -155,8 +161,10 @@ function mostRecentPastWeekday(targetDow: number, today: Date): Date {
   return d;
 }
 
+// Aceita também o plural que o pessoal escreve nas listas ("Sextas 23/10",
+// "Domingos — 25/10", "segundas-feiras").
 function weekdayRegex(stem: string, feira: boolean): RegExp {
-  const pattern = feira ? "\\b" + stem + "\\b(?:\\s*-?\\s*feira\\b)?" : "\\b" + stem + "\\b";
+  const pattern = feira ? "\\b" + stem + "s?\\b(?:\\s*-?\\s*feiras?\\b)?" : "\\b" + stem + "s?\\b";
   return new RegExp(pattern);
 }
 
@@ -254,8 +262,20 @@ function isPureDayPeriodLine(line: string): boolean {
   return remaining.length <= 3;
 }
 
+// Sobra de OCR no fim da linha: uma letra minúscula solta ou um símbolo solto
+// (visto/✓ lido como "o", "»", "•") — "Rio vermelho o" → "Rio vermelho".
+const TRAILING_LONE = /\s+(?:[a-zà-ÿ]|[^\p{L}\p{N}\s])$/u;
+// Sobra de OCR no começo de um item numerado: "F 4-Felipe - Rio vermelho".
+const LEADING_ITEM_NOISE = /^\S\s+(?=\d{1,3}\s*[-.)]\s*\S)/;
+
 function stripTrailingNoise(bairro: string): string {
-  return bairro.replace(TRAILING_NOISE, "").trim();
+  return bairro.replace(TRAILING_NOISE, "").trim().replace(TRAILING_LONE, "").trim();
+}
+
+/** Linha de dia escrita na lista: dia da semana + data ("Sextas 23/10"). */
+function isWeekdayWithDate(line: string): boolean {
+  const n = normalizeAccents(line.toLowerCase());
+  return findWeekdayMatch(n) != null && EXPLICIT_DATE.test(n);
 }
 
 function normalizePhone(raw: string): string {
@@ -359,6 +379,12 @@ export function parseConversation(
   const rows: ParsedRow[] = [];
   const shifts: ShiftRow[] = [];
   const skipped: string[] = [];
+  const markedDays: string[] = [];
+  const markDay = (line: string) => {
+    if (currentDate && isWeekdayWithDate(line) && !markedDays.includes(currentDate)) {
+      markedDays.push(currentDate);
+    }
+  };
   // Remetentes que postaram entregas em cada dia — quem entregou mas nunca
   // escreveu o turno também fez uma diária (o turno só fica em branco).
   const senderDeliveries = new Map<string, { name: string; dia: string }>();
@@ -415,7 +441,8 @@ export function parseConversation(
       .trim()
       .replace(DASH_VARIANTS, "-")
       .replace(/^[_~]+|[_~]+$/g, "")
-      .trim();
+      .trim()
+      .replace(LEADING_ITEM_NOISE, "");
     if (!line) continue;
 
     // "Mensagem apagada" some por inteiro — não é entrega, diária nem dúvida.
@@ -454,6 +481,7 @@ export function parseConversation(
         setPeriodAndDeclareShift,
       );
       if (!consumedHeader) currentPeriod = toTitleCase(inner);
+      else markDay(inner);
       continue;
     }
 
@@ -479,6 +507,7 @@ export function parseConversation(
         (d) => (currentDate = d),
         setPeriodAndDeclareShift,
       );
+      markDay(line);
       continue;
     }
 
@@ -573,5 +602,5 @@ export function parseConversation(
     if (!anonymous && !declared) shifts.push({ name, periodo: "—", dia });
   }
 
-  return { rows, shifts, skipped };
+  return { rows, shifts, markedDays, skipped };
 }

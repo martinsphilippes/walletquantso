@@ -638,3 +638,42 @@ NOITE
     expect(rows[0].bairro).toBe("Trobogy");
   });
 });
+
+describe("parseConversation — dias no plural ('Sextas 23/10', 'Domingos — 25/10') e ruído do OCR", () => {
+  // Segunda, 26/10/2026.
+  const OCT26 = new Date(2026, 9, 26);
+  const text = `Bom dia, vou mandar agora 555
+Sextas 23/10
+1- Flavia - Federação
+2-Eduardo- rio vermelho
+F 4-Felipe - Rio vermelho o
+Sábado 24/10
+1- Carla - Barra
+Domingos — 25/10
+1- Joana - Graça`;
+
+  it("dia no plural com data é marcador de dia, não entrega", () => {
+    const { rows } = parseConversation(text, OCT26);
+    expect(rows.some((r) => r.bairro.includes("25/10"))).toBe(false);
+    expect(rows.find((r) => r.cotacao === "Flavia")?.dia).toBe("23/10/2026");
+    expect(rows.find((r) => r.cotacao === "Carla")?.dia).toBe("24/10/2026");
+    expect(rows.find((r) => r.cotacao === "Joana")?.dia).toBe("25/10/2026");
+  });
+
+  it("'F 4-Felipe - Rio vermelho o': letra solta antes do número e no fim são ruído", () => {
+    const { rows, skipped } = parseConversation(text, OCT26);
+    expect(rows.find((r) => r.cotacao === "Felipe")).toMatchObject({ bairro: "Rio vermelho", dia: "23/10/2026" });
+    expect(rows).toHaveLength(5);
+    expect(skipped).toEqual(["Bom dia, vou mandar agora 555"]);
+  });
+
+  it("dia com data escrito na lista conta como dia trabalhado, mesmo sem entrega depois", () => {
+    const { markedDays } = parseConversation(`${text}\nSegundas 26/10`, OCT26);
+    expect(markedDays).toEqual(["23/10/2026", "24/10/2026", "25/10/2026", "26/10/2026"]);
+  });
+
+  it("'São Domingos' como bairro continua sendo entrega", () => {
+    const { rows } = parseConversation("Domingo 25/10\n1- Ana - São Domingos", OCT26);
+    expect(rows).toEqual([expect.objectContaining({ cotacao: "Ana", bairro: "São Domingos", dia: "25/10/2026" })]);
+  });
+});

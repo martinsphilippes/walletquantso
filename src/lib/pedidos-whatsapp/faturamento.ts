@@ -126,6 +126,11 @@ export function computeFaturamento(
   diariasOverride?: number,
   declaredShifts?: ShiftRow[],
   revenue?: number | RevenueEntry[] | null,
+  /**
+   * Dias escritos na lista ("Domingos 25/10", ver ParseResult.markedDays):
+   * um dia marcado sem nenhuma entrega nem diária vale 1 diária mesmo assim.
+   */
+  markedDays?: string[],
 ): FaturamentoResult {
   // Entregas: preço pela tabela de bairros, com casamento tolerante.
   const zones = (client.zones ?? [])
@@ -180,6 +185,10 @@ export function computeFaturamento(
       const periodo = r.periodo && r.periodo !== "—" ? r.periodo : "";
       extraKeys.add(`${r.dia}|${periodo}`);
     }
+    for (const d of markedDays ?? []) {
+      if (daysWithShifts.has(d) || rows.some((r) => r.dia === d)) continue;
+      extraKeys.add(`${d}|`);
+    }
     for (const k of extraKeys) {
       const [dia, p] = k.split("|");
       const periodo = p || "Dia";
@@ -201,7 +210,17 @@ export function computeFaturamento(
       dias.add(r.dia);
       byPeriod.set(periodo || "—", dias);
     }
-    diariasDetectadas = rate > 0 && rows.length > 0 ? shiftKeys.size : 0;
+    // Dia escrito na lista sem nenhuma entrega depois: ainda é dia trabalhado.
+    for (const d of markedDays ?? []) {
+      if (rows.some((r) => r.dia === d)) continue;
+      const key = `${d}|`;
+      if (!shiftKeys.has(key)) diariasDetalhe.push({ name: "", dia: d, periodo: "—" });
+      shiftKeys.add(key);
+      const dias = byPeriod.get("—") ?? new Set<string>();
+      dias.add(d);
+      byPeriod.set("—", dias);
+    }
+    diariasDetectadas = rate > 0 && shiftKeys.size > 0 ? shiftKeys.size : 0;
     turnos = [...byPeriod.entries()].map(
       ([p, dias]) => `${p === "—" ? "Dia" : p} × ${dias.size}`,
     );

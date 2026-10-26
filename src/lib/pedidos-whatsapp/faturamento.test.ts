@@ -321,3 +321,34 @@ describe("diárias: declaração única não esconde os outros dias", () => {
     expect(computeFaturamento(c, rows, undefined, shifts).diariasDetectadas).toBe(2);
   });
 });
+
+describe("computeFaturamento — dias escritos na lista ('Sextas 23/10', 'Domingos — 25/10')", () => {
+  const OCT26 = new Date(2026, 9, 26);
+  const piaccere: Client = {
+    ownerId: "u",
+    name: "Pizzaria Piaccere",
+    createdAt: 0,
+    dailyRate: 50,
+    zones: [
+      { id: "fed", name: "Federação", price: 8 },
+      { id: "rv", name: "Rio Vermelho", price: 7 },
+    ],
+  };
+
+  it("cada dia vira uma diária; o dia escrito sem entrega depois também conta", () => {
+    const text = `Sextas 23/10
+1- Flavia - Federação
+F 4-Felipe - Rio vermelho o
+Sábado 24/10
+2-Eduardo- rio vermelho
+Domingos — 25/10`;
+    const parsed = parseConversation(text, OCT26, { zoneNames: piaccere.zones!.map((z) => z.name) });
+    expect(parsed.rows).toHaveLength(3);
+    const f = computeFaturamento(piaccere, parsed.rows, undefined, parsed.shifts, null, parsed.markedDays);
+    expect(f.semPreco).toEqual([]);
+    expect(f.entregasValor).toBe(22); // 8 + 7 + 7
+    expect(f.diariasDetectadas).toBe(3); // 23, 24 e 25/10
+    expect(f.diariasDetalhe.map((d) => d.dia)).toEqual(["23/10/2026", "24/10/2026", "25/10/2026"]);
+    expect(f.diariasValor).toBe(150);
+  });
+});

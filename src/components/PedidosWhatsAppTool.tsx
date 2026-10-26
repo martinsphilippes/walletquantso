@@ -171,13 +171,13 @@ export function PedidosWhatsAppTool() {
 
   const liveParsed = useMemo(() => {
     if (!selectedClient || !text.trim())
-      return { rows: [], shifts: [], skipped: [] as string[] };
+      return { rows: [], shifts: [], markedDays: [] as string[], skipped: [] as string[] };
     // A tabela de bairros do cliente ajuda o parser a reconhecer entregas
     // "Nome Bairro" sem traço ("Claudia rio vermelho").
     const r = parseConversation(text, new Date(), {
       zoneNames: selectedClient.zones?.map((z) => z.name),
     });
-    return { rows: r.rows, shifts: r.shifts, skipped: r.skipped };
+    return { rows: r.rows, shifts: r.shifts, markedDays: r.markedDays, skipped: r.skipped };
   }, [selectedClient, text]);
   const liveRows = liveParsed.rows;
 
@@ -199,11 +199,24 @@ export function PedidosWhatsAppTool() {
     if (!selectedClient) return null;
     // Cliente de percentual: o painel abre mesmo sem conversa reconhecida,
     // para digitar o faturamento e gerar o título por aqui.
-    if (liveRows.length === 0 && liveParsed.shifts.length === 0 && !clientHasPercent) return null;
+    if (
+      liveRows.length === 0 &&
+      liveParsed.shifts.length === 0 &&
+      liveParsed.markedDays.length === 0 &&
+      !clientHasPercent
+    )
+      return null;
     const override = diariasStr.trim() === "" ? undefined : parseInt(diariasStr, 10) || 0;
     const revenue = revenueEntries.length > 0 ? revenueEntries : null;
-    return computeFaturamento(selectedClient, liveRows, override, liveParsed.shifts, revenue);
-  }, [selectedClient, liveRows, liveParsed.shifts, diariasStr, revenueEntries, clientHasPercent]);
+    return computeFaturamento(
+      selectedClient,
+      liveRows,
+      override,
+      liveParsed.shifts,
+      revenue,
+      liveParsed.markedDays,
+    );
+  }, [selectedClient, liveRows, liveParsed.shifts, liveParsed.markedDays, diariasStr, revenueEntries, clientHasPercent]);
 
   // Trocar de cliente ou mudar o texto zera os ajustes manuais.
   useEffect(() => {
