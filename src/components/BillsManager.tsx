@@ -24,7 +24,9 @@ import {
   removePayment,
   backfillPaymentTransactions,
   settleBillAtPaid,
+  linkTransactionsToBill,
 } from "@/services/bills";
+import { LinkExistingPanel } from "@/components/LinkExistingPanel";
 import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
 import { effectiveCostCenterId } from "@/lib/categories/tree";
 import { DatePicker } from "@/components/DatePicker";
@@ -42,7 +44,7 @@ import {
   STATUS_LABELS,
   type BillStatus,
 } from "@/lib/bills/status";
-import type { Account, Bill, BillKind, Category, Contact, CostCenter } from "@/types";
+import type { Account, Bill, BillKind, Category, Contact, CostCenter, Transaction } from "@/types";
 import { todayBr } from "@/lib/br/date";
 
 const brl = (n: number) =>
@@ -521,6 +523,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
 
   function startEdit(b: Bill) {
     setPayingId(null);
+    setLinkingId(null);
     setEditingId(b.id!);
     // Se o título aponta para uma subcategoria, separa em categoria + sub.
     const cat = b.categoryId ? catById.get(b.categoryId) : undefined;
@@ -680,9 +683,45 @@ export function BillsManager({ kind }: { kind: BillKind }) {
   const [partialDate, setPartialDate] = useState(today());
   const [partialAccount, setPartialAccount] = useState("");
 
+  // "Abater lançamentos": o dinheiro do título já entrou/saiu antes, em
+  // lançamentos que existem — o usuário marca quais e eles viram baixas do
+  // título (sem lançamento novo, sem contar duas vezes).
+  const [linkingId, setLinkingId] = useState<string | null>(null);
+
+  function startLink(b: Bill) {
+    setEditingId(null);
+    setPayingId(null);
+    setPartialId(null);
+    setLinkingId(b.id!);
+  }
+
+  async function confirmLink(b: Bill, chosen: Transaction[], classify: boolean) {
+    setBusy(true);
+    setError("");
+    try {
+      const r = await linkTransactionsToBill(b.id!, chosen, { classify });
+      setLinkingId(null);
+      if (r.remaining <= 0) {
+        // Quitado pelos lançamentos: sai da lista (como numa baixa total).
+        setBills((prev) => (prev ?? []).filter((x) => x.id !== b.id));
+        sel.clear();
+      }
+      await load();
+      setError(
+        `✅ ${r.count} lançamento(s) abatido(s) (${brl(r.total)}) em "${b.description}". ` +
+          (r.remaining > 0 ? `Saldo em aberto: ${brl(r.remaining)}.` : "Título quitado — saiu da lista."),
+      );
+    } catch (err) {
+      setError(`Falha ao abater: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function startPartial(b: Bill) {
     setEditingId(null);
     setPayingId(null);
+    setLinkingId(null);
     setPartialId(b.id!);
     setPartialAmount("");
     setPartialDate(today());
@@ -754,6 +793,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
   function startPay(b: Bill) {
     setEditingId(null);
     setPartialId(null);
+    setLinkingId(null);
     setPayingId(b.id!);
     setPayAmount(remaining(b).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     setPayDate(today());
@@ -1358,6 +1398,13 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                               >
                                 {settleLabel} parcialmente
                               </button>{" "}
+                              <button
+                                style={{ background: "var(--border)", padding: "0.3rem 0.6rem" }}
+                                title={`Marque lançamentos que já ${isPayable ? "foram pagos" : "foram recebidos"} (ex.: ao longo do mês) para abater deste título — sem criar lançamento novo.`}
+                                onClick={() => (linkingId === b.id ? setLinkingId(null) : startLink(b))}
+                              >
+                                Abater lançamentos
+                              </button>{" "}
                             </>
                           )}
                           {paid > 0 && rem > 0 && (
@@ -1391,6 +1438,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                               setEditingId(null);
                               setPayingId(null);
                               setPartialId(null);
+                              setLinkingId(null);
                               setConfirmDelId(b.id!);
                             }}
                           >
@@ -1455,6 +1503,23 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                 </div>
                               );
                             })()}
+                          </td>
+                        </tr>
+                      )}
+
+                      {linkingId === b.id && user && (
+                        <tr key={`${b.id}-link`}>
+                          <td colSpan={11} style={subRowStyle}>
+                            <LinkExistingPanel
+                              bill={b}
+                              bills={bills}
+                              accounts={accounts}
+                              categories={categories}
+                              ownerId={user.uid}
+                              busy={busy}
+                              onConfirm={(chosen, classify) => void confirmLink(b, chosen, classify)}
+                              onCancel={() => setLinkingId(null)}
+                            />
                           </td>
                         </tr>
                       )}
@@ -1745,9 +1810,16 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                               Baixas:{" "}
                               {b.payments.map((p) => (
                                 <span key={p.id} style={{ marginRight: "0.6rem" }}>
+                                  {p.linked && (
+                                    <span title="Lançamento que já existia, abatido neste título">🔗 </span>
+                                  )}
                                   {brDate(p.date)} — {brl(p.amount)}{" "}
                                   <button
-                                    title="Desfazer esta baixa"
+                                    title={
+                                      p.linked
+                                        ? "Desvincular: o lançamento continua em Lançamentos e o valor volta para o saldo do título"
+                                        : "Desfazer esta baixa"
+                                    }
                                     onClick={() => undoPayment(b.id!, p.id)}
                                     style={{
                                       background: "transparent",

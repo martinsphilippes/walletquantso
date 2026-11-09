@@ -12,6 +12,7 @@ import {
   doc,
   getDoc,
   updateDoc,
+  writeBatch,
   type DocumentData,
 } from "firebase/firestore";
 import { db } from "./firebase";
@@ -23,7 +24,19 @@ import {
   deleteTransactionWithFee,
 } from "./transactions";
 import { setRidesBillState } from "./drivers";
-import type { Bill, BillKind, BillPayment } from "@/types";
+import { classifyPatch, linkedPaymentsFor } from "@/lib/bills/link";
+import type { Bill, BillKind, BillPayment, Transaction } from "@/types";
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+const newPaymentId = () =>
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+/** Lançamento abatido num título volta a ficar livre (continua em Lançamentos). */
+async function unlinkTransaction(txId: string): Promise<void> {
+  await updateDoc(doc(db, COLLECTIONS.transactions, txId), { billId: null, billPaymentId: null }).catch(() => {});
+}
 
 /** Título de motorista quitado/reaberto/excluído → reflete nos lançamentos de corrida. */
 async function syncRides(ownerId: string, billId: string, state: "paid" | "unpaid" | "detached"): Promise<void> {
@@ -56,9 +69,69 @@ export async function updateBill(id: string, patch: Partial<Bill>): Promise<void
 /** Delete a bill. */
 export async function removeBill(id: string): Promise<void> {
   const snap = await getDoc(doc(db, COLLECTIONS.bills, id));
-  const ownerId = snap.exists() ? (snap.data() as Bill).ownerId : null;
+  const bill = snap.exists() ? (snap.data() as Bill) : null;
+  const ownerId = bill?.ownerId ?? null;
   await deleteDoc(doc(db, COLLECTIONS.bills, id));
+  // Lançamentos que já existiam e foram abatidos neste título ficam livres.
+  for (const p of bill?.payments ?? []) {
+    if (p.linked && p.transactionId) await unlinkTransaction(p.transactionId);
+  }
   if (ownerId) await syncRides(ownerId, id, "detached");
+}
+
+/**
+ * Abate no título lançamentos que JÁ existem (recebidos/pagos antes de o
+ * título ser gerado, ex.: Pix do cliente ao longo do mês): cada um vira uma
+ * baixa que aponta para ele, sem criar lançamento novo — o dinheiro segue
+ * contado uma vez só, pelo lançamento. O lançamento fica marcado como baixa
+ * deste título (billId/billPaymentId) e, com `classify`, recebe a categoria,
+ * o centro e o contato do título onde estiverem vazios. Tudo é gravado de uma
+ * vez (lote): ou abate todos, ou nenhum.
+ */
+export async function linkTransactionsToBill(
+  id: string,
+  txs: Transaction[],
+  opts?: { classify?: boolean },
+): Promise<{ count: number; total: number; remaining: number }> {
+  const snap = await getDoc(doc(db, COLLECTIONS.bills, id));
+  if (!snap.exists()) throw new Error("Título não encontrado.");
+  const bill: Bill = { ...(snap.data() as Bill), id };
+  const want = bill.kind === "receivable" ? "income" : "expense";
+  const already = new Set((bill.payments ?? []).map((p) => p.transactionId).filter(Boolean));
+  const chosen = txs.filter(
+    (t) => !!t.id && t.type === want && !t.feeOfId && t.amount > 0 && !already.has(t.id),
+  );
+  if (chosen.length === 0) throw new Error("Nenhum lançamento válido para abater neste título.");
+  // Limite do lote do Firestore (500 escritas), com folga.
+  if (chosen.length > 400) throw new Error("Selecione até 400 lançamentos por vez.");
+  // Nunca abate duas vezes: lançamento que já é baixa de outro título que
+  // ainda existe fica de fora (título apagado libera o lançamento).
+  for (const t of chosen) {
+    if (!t.billId || t.billId === id) continue;
+    const other = await getDoc(doc(db, COLLECTIONS.bills, t.billId)).catch(() => null);
+    if (other?.exists()) throw new Error(`"${t.description}" já é baixa de outro título.`);
+  }
+
+  const newPayments = linkedPaymentsFor(chosen, newPaymentId);
+  const payments = [...(bill.payments ?? []), ...newPayments];
+  const batch = writeBatch(db);
+  chosen.forEach((t, i) => {
+    batch.update(doc(db, COLLECTIONS.transactions, t.id!), {
+      billId: id,
+      billPaymentId: newPayments[i].id,
+      ...(opts?.classify ? classifyPatch(t, bill) : {}),
+    });
+  });
+  batch.update(doc(db, COLLECTIONS.bills, id), { payments });
+  await batch.commit();
+
+  const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  if (totalPaid + 0.005 >= bill.amount) await syncRides(bill.ownerId, id, "paid");
+  return {
+    count: newPayments.length,
+    total: round2(newPayments.reduce((s, p) => s + p.amount, 0)),
+    remaining: round2(Math.max(0, bill.amount - totalPaid)),
+  };
 }
 
 /**
@@ -138,13 +211,19 @@ export async function addPayment(
   }
 }
 
-/** Remove a settlement from a bill, deleting its materialized transaction too. */
+/**
+ * Remove a settlement from a bill, deleting its materialized transaction too.
+ * Baixa que abateu um lançamento que já existia (`linked`): o lançamento NÃO
+ * é apagado — só deixa de ser baixa deste título.
+ */
 export async function removePayment(id: string, paymentId: string): Promise<void> {
   const snap = await getDoc(doc(db, COLLECTIONS.bills, id));
   if (!snap.exists()) throw new Error("Título não encontrado.");
   const bill = snap.data() as Bill;
   const gone = (bill.payments ?? []).find((p) => p.id === paymentId);
-  if (gone?.transactionId) {
+  if (gone?.transactionId && gone.linked) {
+    await unlinkTransaction(gone.transactionId);
+  } else if (gone?.transactionId) {
     try {
       await deleteTransactionWithFee(gone.transactionId);
     } catch {

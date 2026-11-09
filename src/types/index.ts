@@ -199,6 +199,12 @@ export interface BillPayment {
    * counting). Older payments made before this feature have it unset.
    */
   transactionId?: string | null;
+  /**
+   * A baixa abateu um lançamento que JÁ existia (recebido/pago antes do
+   * título ser gerado) em vez de criar um novo. Desfazer só desliga o
+   * lançamento do título; ele continua em Lançamentos.
+   */
+  linked?: boolean;
 }
 
 /**

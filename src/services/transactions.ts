@@ -9,7 +9,49 @@ import { db } from "./firebase";
 import { COLLECTIONS, appendAudit } from "./firestore";
 import { dedupHash } from "@/lib/import/engine";
 import { computeFee, feeApplies, learnedPercent, linkedChargesFor, mainAmount } from "@/lib/fees/fee";
+import { setRidesBillState } from "./drivers";
 import type { Account, Bill, BillPayment, Transaction, TransactionType } from "@/types";
+
+/**
+ * Baixa que abateu um lançamento já existente (BillPayment.linked) acompanha
+ * o lançamento: editado, o título leva o novo valor/data/conta; excluído (ou
+ * virou outro tipo), o título volta a ter esse valor em aberto. Baixas comuns
+ * (que criaram o próprio lançamento) não mudam aqui. Falhas são ignoradas:
+ * o lançamento é o que importa.
+ */
+async function syncLinkedPayment(
+  billId: string,
+  paymentId: string,
+  next: { date: string; amount: number; accountId: string; type: TransactionType } | null,
+): Promise<boolean> {
+  try {
+    const ref = doc(db, COLLECTIONS.bills, billId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return false;
+    const bill = snap.data() as Bill;
+    const current = bill.payments ?? [];
+    const p = current.find((x) => x.id === paymentId);
+    if (!p?.linked) return false;
+    const want: TransactionType = bill.kind === "receivable" ? "income" : "expense";
+    const detach = !next || next.type !== want;
+    const payments = detach
+      ? current.filter((x) => x.id !== paymentId)
+      : current.map((x) =>
+          x.id === paymentId
+            ? { ...x, date: next.date, amount: round2(Math.abs(next.amount)), accountId: next.accountId || null }
+            : x,
+        );
+    await updateDoc(ref, { payments });
+    const paidBefore = current.reduce((s, x) => s + (x.amount || 0), 0) + 0.005 >= bill.amount;
+    const paidAfter = payments.reduce((s, x) => s + (x.amount || 0), 0) + 0.005 >= bill.amount;
+    if (paidBefore !== paidAfter) {
+      await setRidesBillState(bill.ownerId, billId, paidAfter ? "paid" : "unpaid").catch(() => {});
+    }
+    return detach;
+  } catch {
+    return false;
+  }
+}
 
 export interface TransactionInput {
   date: string; // ISO YYYY-MM-DD
@@ -352,10 +394,22 @@ export async function updateTransaction(
   await updateDoc(ref, {
     ...patch,
     ...(old?.feeOfId ? { feeOfId: old.feeOfId } : {}),
+    // Baixa de título continua sendo baixa depois de editada (antes a edição
+    // apagava essa marca e o lançamento parecia livre para outro título).
+    ...(old?.billId ? { billId: old.billId, billPaymentId: old.billPaymentId ?? null } : {}),
     notes: input.notes?.trim() ?? null,
     ...feePatch,
     ...linkedPatch,
   });
+  if (old?.billId && old.billPaymentId) {
+    const detached = await syncLinkedPayment(old.billId, old.billPaymentId, {
+      date: input.date,
+      amount: feePatch.amount ?? patch.amount,
+      accountId: input.accountId,
+      type: input.type,
+    });
+    if (detached) await updateDoc(ref, { billId: null, billPaymentId: null }).catch(() => {});
+  }
   await appendAudit({
     ownerId,
     action: "manual_update",
@@ -409,6 +463,8 @@ export async function removeTransaction(ownerId: string, id: string): Promise<vo
       feeGross: null,
     }).catch(() => {});
   }
+  // Lançamento abatido num título: o título volta a ter esse valor em aberto.
+  if (t?.billId && t.billPaymentId) await syncLinkedPayment(t.billId, t.billPaymentId, null);
   await deleteDoc(ref);
   await appendAudit({ ownerId, action: "manual_delete", details: { id }, at: now });
 }
