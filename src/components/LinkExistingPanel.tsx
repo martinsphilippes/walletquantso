@@ -6,7 +6,10 @@
 // para o lançamento: nenhum lançamento novo é criado e o dinheiro continua
 // contado uma vez só. Período, conta e busca ajudam a achar; os sugeridos
 // (mesmo cliente/fornecedor, mesma categoria ou o nome do título na
-// descrição) aparecem primeiro.
+// descrição) aparecem primeiro. Recebimentos que já são baixa de outro título
+// (ex.: os semanais do Qpaozinho, adiantamentos do mensal) também aparecem,
+// identificados: abatê-los aqui não desfaz a baixa do semanal. Abre dentro de
+// uma janela (Modal), para caber inteiro na tela.
 
 import { useEffect, useMemo, useState } from "react";
 import { brl } from "@/lib/br/money";
@@ -74,8 +77,16 @@ export function LinkExistingPanel({
     () => (txs ? linkCandidates(bill, txs, bills, { from, to, accountId, query }) : []),
     [txs, bill, bills, from, to, accountId, query],
   );
+  // Sem filtros: para saber de quais títulos são os escolhidos, mesmo os que
+  // ficaram fora do filtro atual.
+  const paidByOf = useMemo(() => {
+    const m = new Map<string, Bill>();
+    if (txs) for (const c of linkCandidates(bill, txs, bills)) if (c.paidBy) m.set(c.tx.id!, c.paidBy);
+    return m;
+  }, [txs, bill, bills]);
   const chosen = useMemo(() => (txs ?? []).filter((t) => t.id && sel.has(t.id)), [txs, sel]);
   const sum = linkSummary(bill, chosen);
+  const chosenFromOthers = chosen.filter((t) => paidByOf.has(t.id!)).length;
   const visibleIds = new Set(list.map((c) => c.tx.id!));
   const hidden = chosen.filter((t) => !visibleIds.has(t.id!)).length;
   const allOn = list.length > 0 && list.every((c) => sel.has(c.tx.id!));
@@ -109,14 +120,11 @@ export function LinkExistingPanel({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.55rem" }}>
-      <div>
-        <strong>Abater lançamentos já {verb}</strong>
-        <span className="muted" style={{ fontSize: "0.82rem" }}>
-          {" "}
-          — marque o que já {isPayable ? "saiu" : "entrou"} por conta deste título. Cada lançamento vira uma
-          baixa do título; nenhum lançamento novo é criado e o dinheiro não é contado duas vezes.
-        </span>
-      </div>
+      <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
+        Marque o que já {isPayable ? "saiu" : "entrou"} por conta deste título, inclusive o que já foi{" "}
+        {verb.replace(/s$/, "")} em outro título (ex.: os semanais). Cada lançamento vira uma baixa deste título;
+        nenhum lançamento novo é criado e o dinheiro não é contado duas vezes.
+      </p>
 
       <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "flex-end" }}>
         <MiniField label="De">
@@ -151,8 +159,8 @@ export function LinkExistingPanel({
         <p className="muted" style={{ margin: 0 }}>Carregando lançamentos…</p>
       ) : list.length === 0 ? (
         <p className="muted" style={{ margin: 0 }}>
-          Nenhum lançamento de {isPayable ? "despesa" : "receita"} livre nesse filtro. Amplie o período ou
-          limpe a busca.
+          Nenhum lançamento de {isPayable ? "despesa" : "receita"} nesse filtro. Amplie o período ou limpe a
+          busca.
         </p>
       ) : (
         <div style={{ maxHeight: 340, overflow: "auto", border: "1px solid var(--border)", borderRadius: 8 }}>
@@ -176,7 +184,7 @@ export function LinkExistingPanel({
               </tr>
             </thead>
             <tbody>
-              {list.map(({ tx, suggested }) => {
+              {list.map(({ tx, suggested, paidBy }) => {
                 const on = sel.has(tx.id!);
                 return (
                   <tr
@@ -194,7 +202,7 @@ export function LinkExistingPanel({
                       />
                     </td>
                     <td style={{ whiteSpace: "nowrap" }}>{brDate(tx.date)}</td>
-                    <td>
+                    <td style={{ minWidth: 200 }}>
                       {tx.description}
                       {suggested && (
                         <span
@@ -203,6 +211,13 @@ export function LinkExistingPanel({
                         >
                           sugerido
                         </span>
+                      )}
+                      {paidBy && (
+                        <div className="muted" style={{ fontSize: "0.68rem", marginTop: 2 }}>
+                          {paidBy.description.trim() === tx.description.trim()
+                            ? `já é baixa do título com este nome · venc. ${brDate(paidBy.dueDate)}`
+                            : `já é baixa de: ${paidBy.description} · venc. ${brDate(paidBy.dueDate)}`}
+                        </div>
                       )}
                     </td>
                     <td>{accountName.get(tx.accountId) ?? "—"}</td>
@@ -242,6 +257,12 @@ export function LinkExistingPanel({
           </span>
         )}
       </div>
+      {chosenFromOthers > 0 && (
+        <p className="muted" style={{ margin: 0, fontSize: "0.8rem" }}>
+          {chosenFromOthers} dos escolhidos já são baixa de outro título: aquele título continua quitado e este
+          passa a cobrar só a diferença.
+        </p>
+      )}
 
       <label style={{ display: "flex", gap: "0.45rem", alignItems: "center", fontSize: "0.85rem" }}>
         <input type="checkbox" checked={classify} onChange={(e) => setClassify(e.target.checked)} />

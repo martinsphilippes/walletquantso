@@ -27,6 +27,7 @@ import {
   linkTransactionsToBill,
 } from "@/services/bills";
 import { LinkExistingPanel } from "@/components/LinkExistingPanel";
+import { Modal } from "@/components/Modal";
 import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
 import { effectiveCostCenterId } from "@/lib/categories/tree";
 import { DatePicker } from "@/components/DatePicker";
@@ -1507,23 +1508,6 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                         </tr>
                       )}
 
-                      {linkingId === b.id && user && (
-                        <tr key={`${b.id}-link`}>
-                          <td colSpan={11} style={subRowStyle}>
-                            <LinkExistingPanel
-                              bill={b}
-                              bills={bills}
-                              accounts={accounts}
-                              categories={categories}
-                              ownerId={user.uid}
-                              busy={busy}
-                              onConfirm={(chosen, classify) => void confirmLink(b, chosen, classify)}
-                              onCancel={() => setLinkingId(null)}
-                            />
-                          </td>
-                        </tr>
-                      )}
-
                       {partialId === b.id && (
                         <tr key={`${b.id}-partial`}>
                           <td colSpan={11} style={subRowStyle}>
@@ -1845,6 +1829,38 @@ export function BillsManager({ kind }: { kind: BillKind }) {
           </div>
         )}
       </div>
+
+      {/* Abater lançamentos já recebidos/pagos: janela própria, para caber
+          inteira na tela (a tabela de títulos é mais larga que o iPad). */}
+      {linkingId &&
+        user &&
+        (() => {
+          const lb = bills.find((x) => x.id === linkingId);
+          if (!lb) return null;
+          return (
+            <Modal
+              title={`Abater lançamentos já ${isPayable ? "pagos" : "recebidos"}`}
+              subtitle={
+                <>
+                  <strong style={{ color: "var(--text)" }}>{lb.description}</strong> · vence {brDate(lb.dueDate)} ·
+                  em aberto <strong style={{ color: "var(--text)" }}>{brl(remaining(lb))}</strong>
+                </>
+              }
+              onClose={() => setLinkingId(null)}
+            >
+              <LinkExistingPanel
+                bill={lb}
+                bills={bills}
+                accounts={accounts}
+                categories={categories}
+                ownerId={user.uid}
+                busy={busy}
+                onConfirm={(chosen, classify) => void confirmLink(lb, chosen, classify)}
+                onCancel={() => setLinkingId(null)}
+              />
+            </Modal>
+          );
+        })()}
     </>
   );
 }

@@ -10,47 +10,62 @@ import { COLLECTIONS, appendAudit } from "./firestore";
 import { dedupHash } from "@/lib/import/engine";
 import { computeFee, feeApplies, learnedPercent, linkedChargesFor, mainAmount } from "@/lib/fees/fee";
 import { setRidesBillState } from "./drivers";
+import { liveList } from "./live-store";
 import type { Account, Bill, BillPayment, Transaction, TransactionType } from "@/types";
 
 /**
- * Baixa que abateu um lançamento já existente (BillPayment.linked) acompanha
- * o lançamento: editado, o título leva o novo valor/data/conta; excluído (ou
- * virou outro tipo), o título volta a ter esse valor em aberto. Baixas comuns
- * (que criaram o próprio lançamento) não mudam aqui. Falhas são ignoradas:
- * o lançamento é o que importa.
+ * Baixas vinculadas (BillPayment.linked) que abatem este lançamento em
+ * QUALQUER título — inclusive quando ele é baixa comum de outro título (ex.:
+ * o semanal recebido abatido no mensal) — acompanham o lançamento: editado,
+ * o título leva o novo valor/data/conta; excluído (ou virou outro tipo), o
+ * título volta a ter esse valor em aberto. Baixas comuns não mudam aqui.
+ * Devolve os ids dos títulos dos quais o lançamento foi desligado. Falhas
+ * são ignoradas: o lançamento é o que importa.
  */
-async function syncLinkedPayment(
-  billId: string,
-  paymentId: string,
+async function syncLinkedPayments(
+  ownerId: string,
+  txId: string,
   next: { date: string; amount: number; accountId: string; type: TransactionType } | null,
-): Promise<boolean> {
+): Promise<string[]> {
+  const detachedFrom: string[] = [];
+  let all: Bill[];
   try {
-    const ref = doc(db, COLLECTIONS.bills, billId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return false;
-    const bill = snap.data() as Bill;
-    const current = bill.payments ?? [];
-    const p = current.find((x) => x.id === paymentId);
-    if (!p?.linked) return false;
-    const want: TransactionType = bill.kind === "receivable" ? "income" : "expense";
-    const detach = !next || next.type !== want;
-    const payments = detach
-      ? current.filter((x) => x.id !== paymentId)
-      : current.map((x) =>
-          x.id === paymentId
-            ? { ...x, date: next.date, amount: round2(Math.abs(next.amount)), accountId: next.accountId || null }
-            : x,
-        );
-    await updateDoc(ref, { payments });
-    const paidBefore = current.reduce((s, x) => s + (x.amount || 0), 0) + 0.005 >= bill.amount;
-    const paidAfter = payments.reduce((s, x) => s + (x.amount || 0), 0) + 0.005 >= bill.amount;
-    if (paidBefore !== paidAfter) {
-      await setRidesBillState(bill.ownerId, billId, paidAfter ? "paid" : "unpaid").catch(() => {});
-    }
-    return detach;
+    all = await liveList<Bill>(COLLECTIONS.bills, ownerId);
   } catch {
-    return false;
+    return detachedFrom;
   }
+  const isThis = (p: BillPayment) => !!p.linked && p.transactionId === txId;
+  for (const b of all) {
+    if (!b.id || !(b.payments ?? []).some(isThis)) continue;
+    try {
+      const ref = doc(db, COLLECTIONS.bills, b.id);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) continue;
+      const bill = snap.data() as Bill;
+      const current = bill.payments ?? [];
+      if (!current.some(isThis)) continue;
+      const want: TransactionType = bill.kind === "receivable" ? "income" : "expense";
+      const detach = !next || next.type !== want;
+      const payments = detach
+        ? current.filter((x) => !isThis(x))
+        : current.map((x) =>
+            isThis(x)
+              ? { ...x, date: next.date, amount: round2(Math.abs(next.amount)), accountId: next.accountId || null }
+              : x,
+          );
+      if (JSON.stringify(payments) === JSON.stringify(current)) continue;
+      await updateDoc(ref, { payments });
+      if (detach) detachedFrom.push(b.id);
+      const paidBefore = current.reduce((s, x) => s + (x.amount || 0), 0) + 0.005 >= bill.amount;
+      const paidAfter = payments.reduce((s, x) => s + (x.amount || 0), 0) + 0.005 >= bill.amount;
+      if (paidBefore !== paidAfter) {
+        await setRidesBillState(bill.ownerId, b.id, paidAfter ? "paid" : "unpaid").catch(() => {});
+      }
+    } catch {
+      /* título apagado ou sem permissão: segue */
+    }
+  }
+  return detachedFrom;
 }
 
 export interface TransactionInput {
@@ -401,14 +416,14 @@ export async function updateTransaction(
     ...feePatch,
     ...linkedPatch,
   });
-  if (old?.billId && old.billPaymentId) {
-    const detached = await syncLinkedPayment(old.billId, old.billPaymentId, {
-      date: input.date,
-      amount: feePatch.amount ?? patch.amount,
-      accountId: input.accountId,
-      type: input.type,
-    });
-    if (detached) await updateDoc(ref, { billId: null, billPaymentId: null }).catch(() => {});
+  const detachedFrom = await syncLinkedPayments(ownerId, id, {
+    date: input.date,
+    amount: feePatch.amount ?? patch.amount,
+    accountId: input.accountId,
+    type: input.type,
+  });
+  if (old?.billId && detachedFrom.includes(old.billId)) {
+    await updateDoc(ref, { billId: null, billPaymentId: null }).catch(() => {});
   }
   await appendAudit({
     ownerId,
@@ -463,8 +478,8 @@ export async function removeTransaction(ownerId: string, id: string): Promise<vo
       feeGross: null,
     }).catch(() => {});
   }
-  // Lançamento abatido num título: o título volta a ter esse valor em aberto.
-  if (t?.billId && t.billPaymentId) await syncLinkedPayment(t.billId, t.billPaymentId, null);
+  // Lançamento abatido em algum título: o título volta a ter esse valor em aberto.
+  await syncLinkedPayments(ownerId, id, null);
   await deleteDoc(ref);
   await appendAudit({ ownerId, action: "manual_delete", details: { id }, at: now });
 }
@@ -515,5 +530,8 @@ export async function deleteTransactionWithFee(id: string): Promise<void> {
   const t = snap?.exists() ? (snap.data() as Transaction) : null;
   if (t?.feeTransactionId) await deleteDoc(doc(db, COLLECTIONS.transactions, t.feeTransactionId)).catch(() => {});
   await deleteLinkedFees(t?.linkedFeeTransactionIds);
+  // Ex.: desfeita a baixa do semanal, o mensal que abatia esse recebimento
+  // volta a cobrar o valor.
+  if (t) await syncLinkedPayments(t.ownerId, id, null);
   await deleteDoc(ref);
 }

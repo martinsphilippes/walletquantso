@@ -33,9 +33,21 @@ const newPaymentId = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-/** Lançamento abatido num título volta a ficar livre (continua em Lançamentos). */
-async function unlinkTransaction(txId: string): Promise<void> {
-  await updateDoc(doc(db, COLLECTIONS.transactions, txId), { billId: null, billPaymentId: null }).catch(() => {});
+/**
+ * Lançamento abatido num título volta a ficar livre (continua em
+ * Lançamentos). Só mexe na marca se ela for DESTE título: um recebimento que
+ * é baixa de outro título (ex.: o semanal) continua sendo baixa dele.
+ */
+async function unlinkTransaction(txId: string, billId: string): Promise<void> {
+  try {
+    const ref = doc(db, COLLECTIONS.transactions, txId);
+    const snap = await getDoc(ref);
+    if (snap.exists() && (snap.data() as Transaction).billId === billId) {
+      await updateDoc(ref, { billId: null, billPaymentId: null });
+    }
+  } catch {
+    /* lançamento já apagado: nada a desligar */
+  }
 }
 
 /** Título de motorista quitado/reaberto/excluído → reflete nos lançamentos de corrida. */
@@ -74,19 +86,22 @@ export async function removeBill(id: string): Promise<void> {
   await deleteDoc(doc(db, COLLECTIONS.bills, id));
   // Lançamentos que já existiam e foram abatidos neste título ficam livres.
   for (const p of bill?.payments ?? []) {
-    if (p.linked && p.transactionId) await unlinkTransaction(p.transactionId);
+    if (p.linked && p.transactionId) await unlinkTransaction(p.transactionId, id);
   }
   if (ownerId) await syncRides(ownerId, id, "detached");
 }
 
 /**
  * Abate no título lançamentos que JÁ existem (recebidos/pagos antes de o
- * título ser gerado, ex.: Pix do cliente ao longo do mês): cada um vira uma
- * baixa que aponta para ele, sem criar lançamento novo — o dinheiro segue
- * contado uma vez só, pelo lançamento. O lançamento fica marcado como baixa
- * deste título (billId/billPaymentId) e, com `classify`, recebe a categoria,
- * o centro e o contato do título onde estiverem vazios. Tudo é gravado de uma
- * vez (lote): ou abate todos, ou nenhum.
+ * título ser gerado, ex.: Pix do cliente ao longo do mês, ou os semanais já
+ * recebidos que adiantam o mensal): cada um vira uma baixa vinculada que
+ * aponta para ele, sem criar lançamento novo — o dinheiro segue contado uma
+ * vez só, pelo lançamento. Lançamento livre fica marcado como baixa deste
+ * título (billId/billPaymentId); o que já é baixa de outro título continua
+ * sendo dele (o semanal segue quitado). Com `classify`, recebe a categoria, o
+ * centro e o contato do título onde estiverem vazios. Um lançamento abate no
+ * máximo um título. Tudo é gravado de uma vez (lote): ou abate todos, ou
+ * nenhum.
  */
 export async function linkTransactionsToBill(
   id: string,
@@ -104,23 +119,33 @@ export async function linkTransactionsToBill(
   if (chosen.length === 0) throw new Error("Nenhum lançamento válido para abater neste título.");
   // Limite do lote do Firestore (500 escritas), com folga.
   if (chosen.length > 400) throw new Error("Selecione até 400 lançamentos por vez.");
-  // Nunca abate duas vezes: lançamento que já é baixa de outro título que
-  // ainda existe fica de fora (título apagado libera o lançamento).
-  for (const t of chosen) {
-    if (!t.billId || t.billId === id) continue;
-    const other = await getDoc(doc(db, COLLECTIONS.bills, t.billId)).catch(() => null);
-    if (other?.exists()) throw new Error(`"${t.description}" já é baixa de outro título.`);
+  // Nunca abate duas vezes: o que já abate outro título (baixa vinculada)
+  // fica de fora. Baixa comum de outro título (ex.: semanal) pode abater.
+  const all = await liveList<Bill>(COLLECTIONS.bills, bill.ownerId).catch(() => null);
+  const allIds = new Set<string>();
+  const linkedElsewhere = new Set<string>();
+  for (const b of all ?? []) {
+    if (b.id) allIds.add(b.id);
+    if (b.id === id) continue;
+    for (const p of b.payments ?? []) if (p.linked && p.transactionId) linkedElsewhere.add(p.transactionId);
   }
+  const dup = chosen.find((t) => linkedElsewhere.has(t.id!));
+  if (dup) throw new Error(`"${dup.description}" já foi abatido em outro título.`);
 
   const newPayments = linkedPaymentsFor(chosen, newPaymentId);
   const payments = [...(bill.payments ?? []), ...newPayments];
   const batch = writeBatch(db);
   chosen.forEach((t, i) => {
-    batch.update(doc(db, COLLECTIONS.transactions, t.id!), {
-      billId: id,
-      billPaymentId: newPayments[i].id,
+    // Livre = sem título, ou título que não existe mais. Sem a lista de
+    // títulos (falha de leitura), não arrisca: não troca a marca de ninguém.
+    const free = !t.billId || t.billId === id || (all !== null && !allIds.has(t.billId));
+    const patch: Partial<Transaction> = {
+      ...(free ? { billId: id, billPaymentId: newPayments[i].id } : {}),
       ...(opts?.classify ? classifyPatch(t, bill) : {}),
-    });
+    };
+    if (Object.keys(patch).length > 0) {
+      batch.update(doc(db, COLLECTIONS.transactions, t.id!), patch as DocumentData);
+    }
   });
   batch.update(doc(db, COLLECTIONS.bills, id), { payments });
   await batch.commit();
@@ -222,7 +247,7 @@ export async function removePayment(id: string, paymentId: string): Promise<void
   const bill = snap.data() as Bill;
   const gone = (bill.payments ?? []).find((p) => p.id === paymentId);
   if (gone?.transactionId && gone.linked) {
-    await unlinkTransaction(gone.transactionId);
+    await unlinkTransaction(gone.transactionId, id);
   } else if (gone?.transactionId) {
     try {
       await deleteTransactionWithFee(gone.transactionId);
