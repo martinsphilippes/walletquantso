@@ -219,6 +219,28 @@ export function BillsManager({ kind }: { kind: BillKind }) {
   useEffect(() => onListsChange(() => { void load(); }), [load]);
 
   const t = today();
+
+  // A tabela de títulos é mais larga que a tela do iPad e rola para o lado.
+  // Os painéis abertos dentro dela (pagar, parcial, editar, excluir, baixas)
+  // ficam presos à parte visível, para nenhum botão ficar fora da tela.
+  const [tableW, setTableW] = useState<number | null>(null);
+  const tableRo = useRef<ResizeObserver | null>(null);
+  const tableWrapRef = useCallback((el: HTMLDivElement | null) => {
+    tableRo.current?.disconnect();
+    tableRo.current = null;
+    if (!el) return;
+    setTableW(el.clientWidth);
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(() => setTableW(el.clientWidth));
+      ro.observe(el);
+      tableRo.current = ro;
+    }
+  }, []);
+  const stickyIn: React.CSSProperties = {
+    position: "sticky",
+    left: 12,
+    ...(tableW ? { maxWidth: Math.max(240, tableW - 24) } : {}),
+  };
   const contactName = useMemo(
     () => new Map(contacts.map((c) => [c.id!, c.name])),
     [contacts],
@@ -352,7 +374,11 @@ export function BillsManager({ kind }: { kind: BillKind }) {
   }, [cf.filtered, sel.selectedIds]);
   const bulkNeedsAccount = bulkTargets.some((b) => !b.accountId);
 
-  async function bulkPay() {
+  /**
+   * `onDue`: cada título vencido é baixado na própria data de vencimento (a
+   * data programada); os que ainda não venceram, na data de hoje.
+   */
+  async function bulkPay(onDue = false) {
     if (bulkTargets.length === 0) return;
     if (bulkNeedsAccount && !bulkAccount) {
       setError("Alguns títulos não têm conta: escolha a conta da baixa.");
@@ -367,7 +393,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
           b.id!,
           {
             id: rid(),
-            date: bulkDate || today(),
+            date: onDue ? (b.dueDate < today() ? b.dueDate : today()) : bulkDate || today(),
             amount: remaining(b),
             accountId: bulkAccount || b.accountId || "",
           },
@@ -803,7 +829,8 @@ export function BillsManager({ kind }: { kind: BillKind }) {
     setPayFee(FEE_AUTO);
   }
 
-  async function confirmPay(b: Bill) {
+  /** `onDate`: baixa numa data específica (ex.: o vencimento programado). */
+  async function confirmPay(b: Bill, onDate?: string) {
     const amount = parseBrCurrency(payAmount);
     if (amount == null || amount <= 0) {
       setError("Informe um valor de baixa maior que zero.");
@@ -825,7 +852,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
         b.id!,
         {
           id: rid(),
-          date: payDate || today(),
+          date: onDate || payDate || today(),
           amount,
           accountId: account,
         },
@@ -1301,6 +1328,15 @@ export function BillsManager({ kind }: { kind: BillKind }) {
             <button className="btn-primary" disabled={busy} onClick={() => void bulkPay()}>
               Confirmar {settleLabel.toLowerCase()} de {bulkTargets.length}
             </button>
+            {bulkTargets.some((b) => b.dueDate < t) && (
+              <button
+                disabled={busy}
+                title="Cada título vencido é baixado na própria data de vencimento; os que ainda não venceram, na data de hoje."
+                onClick={() => void bulkPay(true)}
+              >
+                Confirmar cada um no vencimento
+              </button>
+            )}
             <button style={{ background: "var(--border)" }} onClick={() => setBulkPayOpen(false)}>
               Cancelar
             </button>
@@ -1313,7 +1349,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
               : "Nenhum título pendente. 🎉"}
           </p>
         ) : (
-          <div style={{ overflowX: "auto" }}>
+          <div ref={tableWrapRef} style={{ overflowX: "auto" }}>
             <table>
               <thead>
                 <tr>
@@ -1461,6 +1497,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                               return (
                                 <div
                                   style={{
+                                    ...stickyIn,
                                     display: "flex",
                                     gap: "0.6rem",
                                     flexWrap: "wrap",
@@ -1511,7 +1548,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                       {partialId === b.id && (
                         <tr key={`${b.id}-partial`}>
                           <td colSpan={11} style={subRowStyle}>
-                            <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
+                            <div style={{ ...stickyIn, display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
                               <strong>{isPayable ? "Pagamento parcial" : "Recebimento parcial"}:</strong>
                               <input
                                 placeholder={`Valor ${isPayable ? "pago" : "recebido"} (R$)`}
@@ -1573,7 +1610,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                       {paying && (
                         <tr key={`${b.id}-pay`}>
                           <td colSpan={11} style={subRowStyle}>
-                            <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
+                            <div style={{ ...stickyIn, display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
                               <strong>{settleLabel}:</strong>
                               <select
                                 value={payMode}
@@ -1606,6 +1643,16 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                               <button disabled={busy} onClick={() => confirmPay(b)}>
                                 Confirmar
                               </button>
+                              {b.dueDate < t && (
+                                <button
+                                  className="btn-primary"
+                                  disabled={busy}
+                                  title={`Registra o ${isPayable ? "pagamento" : "recebimento"} na data programada do título (${brDate(b.dueDate)}), não na data de hoje.`}
+                                  onClick={() => confirmPay(b, b.dueDate)}
+                                >
+                                  Confirmar no vencimento · {brDate(b.dueDate)}
+                                </button>
+                              )}
                               <button
                                 style={{ background: "var(--border)" }}
                                 onClick={() => setPayingId(null)}
@@ -1634,7 +1681,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                       {editing && (
                         <tr key={`${b.id}-edit`}>
                           <td colSpan={11} style={subRowStyle}>
-                            <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+                            <div style={{ ...stickyIn, display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "flex-end" }}>
                               <Field label="Descrição">
                                 <input
                                   value={draft.description}
@@ -1790,7 +1837,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                       {paid > 0 && (
                         <tr key={`${b.id}-hist`}>
                           <td colSpan={11} style={{ ...subRowStyle, paddingTop: 0 }}>
-                            <span className="muted" style={{ fontSize: "0.8rem" }}>
+                            <div className="muted" style={{ ...stickyIn, fontSize: "0.8rem" }}>
                               Baixas:{" "}
                               {b.payments.map((p) => (
                                 <span key={p.id} style={{ marginRight: "0.6rem" }}>
@@ -1817,7 +1864,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                   </button>
                                 </span>
                               ))}
-                            </span>
+                            </div>
                           </td>
                         </tr>
                       )}

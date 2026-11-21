@@ -1197,7 +1197,8 @@ function BillListPanel({
     setMsg("");
   }
 
-  async function confirmPay(b: Bill) {
+  /** `onDate`: baixa numa data específica (ex.: o vencimento programado). */
+  async function confirmPay(b: Bill, onDate?: string) {
     const amount = parseBrCurrency(payAmount);
     if (amount == null || amount <= 0) {
       setMsg("❌ Informe um valor maior que zero.");
@@ -1214,7 +1215,7 @@ function BillListPanel({
       const decision = resolveFee(txType, account, null, amount, accounts, payFee);
       await addPayment(
         b.id!,
-        { id: rid(), date: payDate || todayBr(), amount, accountId: account },
+        { id: rid(), date: onDate || payDate || todayBr(), amount, accountId: account },
         { settle: true, fee: decision ? { amount: decision.amount, learn: decision.learn } : undefined },
       );
       setPayingId(null);
@@ -1320,6 +1321,15 @@ function BillListPanel({
                           <button className="btn-primary" disabled={busy} onClick={() => void confirmPay(b)}>
                             {busy ? "Salvando…" : `Confirmar ${verb.toLowerCase()}`}
                           </button>
+                          {b.dueDate < todayBr() && (
+                            <button
+                              disabled={busy}
+                              title={`Registra na data programada do título (${brDate(b.dueDate)}), não na data de hoje.`}
+                              onClick={() => void confirmPay(b, b.dueDate)}
+                            >
+                              No vencimento · {brDate(b.dueDate)}
+                            </button>
+                          )}
                           <button style={{ background: "var(--border)" }} disabled={busy} onClick={() => setPayingId(null)}>
                             Cancelar
                           </button>
