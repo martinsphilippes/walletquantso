@@ -129,13 +129,17 @@ h3 { font-size: 1rem; margin: 1rem 0 0.5rem; }
 .main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 .topbar {
-  /* Cobre a área da barra de status do iPhone/iPad (safe area). */
-  padding-top: env(safe-area-inset-top, 0px);
+  /* O fundo cobre a área da barra de status do iPhone/iPad (safe area) e os
+     botões ficam ABAIXO dela, onde dá para tocar. (Antes um "padding: 0 1rem"
+     depois do padding-top zerava esse espaço: os botões ficavam centralizados
+     metade embaixo da barra de status, borrados e sem responder ao toque.)
+     As laterais respeitam o recorte da câmera com o iPhone deitado. */
   height: calc(var(--header-h) + env(safe-area-inset-top, 0px));
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0 1rem;
+  padding: env(safe-area-inset-top, 0px) max(1rem, env(safe-area-inset-right, 0px)) 0
+    max(1rem, env(safe-area-inset-left, 0px));
   border-bottom: 1px solid var(--border);
   /* Sólida: o conteúdo rolado não aparece por trás da barra. */
   background: var(--bg);
@@ -185,7 +189,7 @@ h3 { font-size: 1rem; margin: 1rem 0 0.5rem; }
   .sidebar.collapsed .nav-item .label,
   .sidebar.collapsed .sidebar-brand .word { display: inline; }
   .scrim.show { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 40; }
-  .content, .container { padding: 1rem 1rem 4rem; }
+  .content, .container { padding: 1rem 1rem calc(4rem + env(safe-area-inset-bottom, 0px)); }
 }
 
 /* ---------- Panels & cards ---------- */
