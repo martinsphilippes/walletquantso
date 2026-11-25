@@ -19,6 +19,12 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
     return (
       <div className="panel">
         <p className="muted">Carregando…</p>
+        {/* Aparece sozinho depois de alguns segundos (só CSS: funciona mesmo
+            se o app ainda não terminou de abrir) e recarrega a página. */}
+        <p className="muted slow-hint" style={{ fontSize: "0.85rem", marginBottom: 0 }}>
+          Está demorando mais que o normal. Confira a internet e{" "}
+          <a href="">toque aqui para recarregar</a>.
+        </p>
       </div>
     );
   }

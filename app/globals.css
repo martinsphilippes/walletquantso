@@ -309,6 +309,11 @@ label { font-size: 0.9rem; }
 
 .muted { color: var(--muted); }
 
+/* Aviso de demora: escondido nos primeiros segundos e revelado só por CSS
+   (sem depender do JavaScript, que pode ainda estar carregando). */
+.slow-hint { visibility: hidden; animation: wq-reveal 0s linear 12s forwards; }
+@keyframes wq-reveal { to { visibility: visible; } }
+
 /* ---------- Stat cards ---------- */
 .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.9rem; }
 .stat {

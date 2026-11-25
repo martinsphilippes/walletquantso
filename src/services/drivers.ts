@@ -119,12 +119,21 @@ export function removeMember(email: string): Promise<void> {
 }
 
 /** Acesso restrito do e-mail logado (null = não é acesso restrito). */
-export async function getMembership(email: string): Promise<Member | null> {
+/**
+ * Acesso restrito cadastrado para este e-mail (ou null se não há). Lança erro
+ * quando não deu para perguntar ao servidor (offline, sem permissão), para
+ * quem chama distinguir "não é membro" de "não sei ainda".
+ */
+export async function fetchMembership(email: string): Promise<Member | null> {
   const id = normalizeEmail(email);
   if (!id) return null;
+  const snap = await getDoc(doc(db, COLLECTIONS.members, id));
+  return snap.exists() ? ({ id: snap.id, ...(snap.data() as object) } as Member) : null;
+}
+
+export async function getMembership(email: string): Promise<Member | null> {
   try {
-    const snap = await getDoc(doc(db, COLLECTIONS.members, id));
-    return snap.exists() ? ({ id: snap.id, ...(snap.data() as object) } as Member) : null;
+    return await fetchMembership(email);
   } catch {
     // Sem permissão/offline: trata como conta normal (dona dos próprios dados).
     return null;
