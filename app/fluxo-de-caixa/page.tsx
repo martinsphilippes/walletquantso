@@ -10,6 +10,7 @@ import { projectCashFlow, type CashFlowMonth } from "@/lib/cashflow/project";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import type { Account, Bill, Transaction } from "@/types";
 import { currentMonthBr } from "@/lib/br/date";
+import { SelectBox } from "@/components/SelectBox";
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -165,25 +166,25 @@ function Fluxo() {
           </div>
           <label style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }}>
             <span className="muted" style={{ fontSize: "0.75rem" }}>Mês</span>
-            <select value={selMonth} onChange={(e) => setSelMonth(e.target.value)}>
+            <SelectBox value={selMonth} onChange={(e) => setSelMonth(e.target.value)}>
               <option value="">Todos</option>
               {MONTHS.map((m, i) => (
                 <option key={m} value={String(i + 1).padStart(2, "0")}>
                   {m}
                 </option>
               ))}
-            </select>
+            </SelectBox>
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }}>
             <span className="muted" style={{ fontSize: "0.75rem" }}>Ano</span>
-            <select value={selYear} onChange={(e) => setSelYear(e.target.value)}>
+            <SelectBox value={selYear} onChange={(e) => setSelYear(e.target.value)}>
               <option value="">Todos</option>
               {years.map((y) => (
                 <option key={y} value={y}>
                   {y}
                 </option>
               ))}
-            </select>
+            </SelectBox>
           </label>
           <button
             style={{ background: "var(--border)" }}

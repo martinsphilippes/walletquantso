@@ -18,6 +18,7 @@ import { countReferences } from "@/lib/references/usage";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import type { Bill, Contact, ContactKind, Transaction } from "@/types";
+import { SelectBox } from "@/components/SelectBox";
 
 const KIND_LABELS: Record<ContactKind, string> = {
   person: "Pessoa",
@@ -277,7 +278,7 @@ function Contacts() {
                           />
                         </td>
                         <td>
-                          <select
+                          <SelectBox
                             value={draft.kind}
                             onChange={(e) =>
                               setDraft({ ...draft, kind: e.target.value as ContactKind })
@@ -288,7 +289,7 @@ function Contacts() {
                                 {KIND_LABELS[k]}
                               </option>
                             ))}
-                          </select>
+                          </SelectBox>
                         </td>
                         <td>
                           <input
@@ -322,7 +323,7 @@ function Contacts() {
                         <td style={{ whiteSpace: "nowrap" }}>
                           {merging ? (
                             <>
-                              <select
+                              <SelectBox
                                 value={mergeTarget}
                                 onChange={(e) => setMergeTarget(e.target.value)}
                               >
@@ -332,7 +333,7 @@ function Contacts() {
                                     {o.name}
                                   </option>
                                 ))}
-                              </select>{" "}
+                              </SelectBox>{" "}
                               <button
                                 disabled={busy || !mergeTarget}
                                 onClick={() => doMerge(c.id!)}
@@ -420,7 +421,7 @@ function Contacts() {
             required
             style={{ ...fieldStyle, minWidth: 220 }}
           />
-          <select
+          <SelectBox
             value={creating.kind}
             onChange={(e) => setCreating({ ...creating, kind: e.target.value as ContactKind })}
           >
@@ -429,7 +430,7 @@ function Contacts() {
                 {KIND_LABELS[k]}
               </option>
             ))}
-          </select>
+          </SelectBox>
           <input
             placeholder="CPF/CNPJ (opcional)"
             value={creating.document}

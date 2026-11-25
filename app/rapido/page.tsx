@@ -34,6 +34,7 @@ import { onListsChange } from "@/services/live-store";
 import { DatePicker } from "@/components/DatePicker";
 import { FEE_AUTO, FeeFields, resolveFee, type FeeState } from "@/components/FeeFields";
 import type { Account, Bill, Category, CostCenter, Transaction } from "@/types";
+import { SelectBox } from "@/components/SelectBox";
 
 
 
@@ -428,31 +429,31 @@ function Rapido() {
           {costCenters.length > 0 && (
             <label style={col}>
               <span className="muted" style={{ fontSize: "0.8rem" }}>Centro de custo</span>
-              <select value={costCenterId} onChange={(e) => pickCenter(e.target.value)} style={field}>
+              <SelectBox value={costCenterId} onChange={(e) => pickCenter(e.target.value)} style={field}>
                 <option value="">— nenhum —</option>
                 {costCenters.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </SelectBox>
             </label>
           )}
           <label style={col}>
             <span className="muted" style={{ fontSize: "0.8rem" }}>Categoria</span>
-            <select value={categoryId} onChange={(e) => pickCategory(e.target.value)} style={field}>
+            <SelectBox value={categoryId} onChange={(e) => pickCategory(e.target.value)} style={field}>
               <option value="">— nenhuma —</option>
               {mains.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-            </select>
+            </SelectBox>
           </label>
           {subs.length > 0 && (
             <label style={col}>
               <span className="muted" style={{ fontSize: "0.8rem" }}>Subcategoria</span>
-              <select
+              <SelectBox
                 value={subcategoryId}
                 onChange={(e) => setSubcategoryId(e.target.value)}
                 style={field}
@@ -463,7 +464,7 @@ function Rapido() {
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </SelectBox>
             </label>
           )}
         </div>

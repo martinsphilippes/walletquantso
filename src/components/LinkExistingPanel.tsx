@@ -19,6 +19,7 @@ import { defaultLinkPeriod, linkCandidates, linkSummary } from "@/lib/bills/link
 import { listTransactions } from "@/services/firestore";
 import { DatePicker } from "@/components/DatePicker";
 import type { Account, Bill, Category, Transaction } from "@/types";
+import { SelectBox } from "@/components/SelectBox";
 
 const brDate = (iso: string) => iso.split("-").reverse().join("/");
 
@@ -134,14 +135,14 @@ export function LinkExistingPanel({
           <DatePicker value={to} onChange={setTo} allowEmpty placeholder="Sem limite" ariaLabel="Data final" />
         </MiniField>
         <MiniField label="Conta">
-          <select value={accountId} onChange={(e) => setAccountId(e.target.value)} style={field}>
+          <SelectBox value={accountId} onChange={(e) => setAccountId(e.target.value)} style={field}>
             <option value="">Todas</option>
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
             ))}
-          </select>
+          </SelectBox>
         </MiniField>
         <MiniField label="Buscar">
           <input

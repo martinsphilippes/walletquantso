@@ -25,6 +25,7 @@ import {
   type CommitReport,
 } from "@/services/import";
 import Link from "next/link";
+import { SelectBox } from "@/components/SelectBox";
 
 type ImportMode = "transactions" | "bills";
 
@@ -232,7 +233,7 @@ function Importer() {
                 <tr key={h}>
                   <td>{h}</td>
                   <td>
-                    <select
+                    <SelectBox
                       value={mapping[h] ?? ""}
                       onChange={(e) =>
                         setColumn(h, (e.target.value || null) as CanonicalField | null)
@@ -244,7 +245,7 @@ function Importer() {
                           {FIELD_LABELS[f]}
                         </option>
                       ))}
-                    </select>
+                    </SelectBox>
                   </td>
                 </tr>
               ))}

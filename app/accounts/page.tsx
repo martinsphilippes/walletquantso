@@ -23,6 +23,7 @@ import { computeBalances } from "@/lib/dashboard/balances";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import type { Account, AccountFee, AccountType, Bill, Category, CostCenter, LinkedFee, Transaction } from "@/types";
+import { SelectBox } from "@/components/SelectBox";
 
 const TYPE_LABELS: Record<AccountType, string> = {
   checking: "Conta corrente",
@@ -532,7 +533,7 @@ function Accounts() {
                           />
                         </td>
                         <td>
-                          <select
+                          <SelectBox
                             value={draft.type}
                             onChange={(e) =>
                               setDraft({ ...draft, type: e.target.value as AccountType })
@@ -543,7 +544,7 @@ function Accounts() {
                                 {TYPE_LABELS[t]}
                               </option>
                             ))}
-                          </select>
+                          </SelectBox>
                         </td>
                         <td style={{ textAlign: "right" }}>
                           <input
@@ -696,7 +697,7 @@ function Accounts() {
                             </div>
                             <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
                               <span className="muted" style={{ fontSize: "0.8rem" }}>Centro de custo da taxa</span>
-                              <select
+                              <SelectBox
                                 value={feeDraft.costCenterId}
                                 onChange={(e) => setFeeDraft({ ...feeDraft, costCenterId: e.target.value, categoryId: "" })}
                               >
@@ -704,11 +705,11 @@ function Accounts() {
                                 {costCenters.map((c) => (
                                   <option key={c.id} value={c.id}>{c.name}</option>
                                 ))}
-                              </select>
+                              </SelectBox>
                             </label>
                             <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
                               <span className="muted" style={{ fontSize: "0.8rem" }}>Categoria da taxa</span>
-                              <select
+                              <SelectBox
                                 value={feeDraft.categoryId}
                                 onChange={(e) => setFeeDraft({ ...feeDraft, categoryId: e.target.value })}
                               >
@@ -718,7 +719,7 @@ function Accounts() {
                                   .map((c) => (
                                     <option key={c.id} value={c.id}>{c.name}</option>
                                   ))}
-                              </select>
+                              </SelectBox>
                             </label>
                             <button type="button" style={{ background: "var(--border)" }} disabled={busy} onClick={() => void createFeeCategory(a)}>
                               + Criar “Taxa {a.name}”
@@ -752,12 +753,12 @@ function Accounts() {
                                 >
                                   <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
                                     <span className="muted" style={{ fontSize: "0.8rem" }}>Conta que gasta</span>
-                                    <select value={row.accountId} onChange={(e) => upd({ accountId: e.target.value, categoryId: "" })}>
+                                    <SelectBox value={row.accountId} onChange={(e) => upd({ accountId: e.target.value, categoryId: "" })}>
                                       <option value="">Escolha…</option>
                                       {accounts.filter((x) => x.id !== a.id).map((x) => (
                                         <option key={x.id} value={x.id}>{x.name}</option>
                                       ))}
-                                    </select>
+                                    </SelectBox>
                                   </label>
                                   <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
                                     <span className="muted" style={{ fontSize: "0.8rem" }}>Percentual (%)</span>
@@ -792,23 +793,23 @@ function Accounts() {
                                   </div>
                                   <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
                                     <span className="muted" style={{ fontSize: "0.8rem" }}>Centro de custo</span>
-                                    <select value={row.costCenterId} onChange={(e) => upd({ costCenterId: e.target.value, categoryId: "" })}>
+                                    <SelectBox value={row.costCenterId} onChange={(e) => upd({ costCenterId: e.target.value, categoryId: "" })}>
                                       <option value="">Escolha…</option>
                                       {costCenters.map((c) => (
                                         <option key={c.id} value={c.id}>{c.name}</option>
                                       ))}
-                                    </select>
+                                    </SelectBox>
                                   </label>
                                   <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
                                     <span className="muted" style={{ fontSize: "0.8rem" }}>Categoria</span>
-                                    <select value={row.categoryId} onChange={(e) => upd({ categoryId: e.target.value })}>
+                                    <SelectBox value={row.categoryId} onChange={(e) => upd({ categoryId: e.target.value })}>
                                       <option value="">Escolha…</option>
                                       {expenseMains
                                         .filter((c) => !row.costCenterId || (c.costCenterId ?? "") === row.costCenterId)
                                         .map((c) => (
                                           <option key={c.id} value={c.id}>{c.name}</option>
                                         ))}
-                                    </select>
+                                    </SelectBox>
                                   </label>
                                   <button type="button" style={{ background: "var(--border)", padding: "0.35rem 0.7rem" }} disabled={busy} onClick={() => void createLinkedCategory(row)}>
                                     + Criar categoria
@@ -879,7 +880,7 @@ function Accounts() {
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem", flex: "1 1 160px" }}>
             <span className="muted" style={{ fontSize: "0.8rem" }}>Tipo</span>
-            <select
+            <SelectBox
               value={creating.type}
               onChange={(e) => setCreating({ ...creating, type: e.target.value as AccountType })}
             >
@@ -888,7 +889,7 @@ function Accounts() {
                   {TYPE_LABELS[t]}
                 </option>
               ))}
-            </select>
+            </SelectBox>
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem", flex: "0 1 150px" }}>
             <span className="muted" style={{ fontSize: "0.8rem" }}>Saldo inicial (R$)</span>

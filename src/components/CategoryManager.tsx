@@ -25,6 +25,7 @@ import { effectiveCostCenterId } from "@/lib/categories/tree";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import type { Bill, Category, CostCenter, Transaction, TransactionType } from "@/types";
+import { SelectBox } from "@/components/SelectBox";
 
 const KIND_LABELS: Record<TransactionType, string> = {
   income: "Receita",
@@ -377,14 +378,14 @@ export function CategoryManager({ mode }: { mode: CategoryManagerMode }) {
             ) : (
               <>
                 <span>{isSub ? "Nova categoria:" : "Novo centro de custo:"}</span>
-                <select value={bulkValue} onChange={(e) => setBulkValue(e.target.value)}>
+                <SelectBox value={bulkValue} onChange={(e) => setBulkValue(e.target.value)}>
                   <option value="">— escolha —</option>
                   {(isSub ? mains : centers).map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.name}
                     </option>
                   ))}
-                </select>
+                </SelectBox>
                 <button disabled={busy} onClick={applyBulk}>
                   {busy ? "Aplicando…" : `Aplicar a ${sel.count} selecionada(s)`}
                 </button>
@@ -460,7 +461,7 @@ export function CategoryManager({ mode }: { mode: CategoryManagerMode }) {
                               })()}
                             </span>
                           ) : (
-                            <select
+                            <SelectBox
                               value={draft.costCenterId}
                               onChange={(e) =>
                                 setDraft({ ...draft, costCenterId: e.target.value })
@@ -472,12 +473,12 @@ export function CategoryManager({ mode }: { mode: CategoryManagerMode }) {
                                   {o.name}
                                 </option>
                               ))}
-                            </select>
+                            </SelectBox>
                           )}
                         </td>
                         {isSub && (
                           <td>
-                            <select
+                            <SelectBox
                               value={draft.parentId}
                               onChange={(e) => setDraft({ ...draft, parentId: e.target.value })}
                             >
@@ -487,7 +488,7 @@ export function CategoryManager({ mode }: { mode: CategoryManagerMode }) {
                                   {o.name}
                                 </option>
                               ))}
-                            </select>
+                            </SelectBox>
                           </td>
                         )}
                         <td>
@@ -504,7 +505,7 @@ export function CategoryManager({ mode }: { mode: CategoryManagerMode }) {
                               categoria)
                             </span>
                           ) : (
-                            <select
+                            <SelectBox
                               value={draft.kind}
                               onChange={(e) =>
                                 setDraft({ ...draft, kind: e.target.value as TransactionType })
@@ -515,7 +516,7 @@ export function CategoryManager({ mode }: { mode: CategoryManagerMode }) {
                                   {KIND_LABELS[k]}
                                 </option>
                               ))}
-                            </select>
+                            </SelectBox>
                           )}
                         </td>
                         <td style={{ textAlign: "right" }} className="muted">
@@ -549,7 +550,7 @@ export function CategoryManager({ mode }: { mode: CategoryManagerMode }) {
                         <td style={{ whiteSpace: "nowrap" }}>
                           {merging ? (
                             <>
-                              <select
+                              <SelectBox
                                 value={mergeTarget}
                                 onChange={(e) => setMergeTarget(e.target.value)}
                               >
@@ -559,7 +560,7 @@ export function CategoryManager({ mode }: { mode: CategoryManagerMode }) {
                                     {o.name}
                                   </option>
                                 ))}
-                              </select>{" "}
+                              </SelectBox>{" "}
                               <button disabled={busy || !mergeTarget} onClick={() => doMerge(c.id!)}>
                                 Confirmar
                               </button>{" "}
@@ -646,7 +647,7 @@ export function CategoryManager({ mode }: { mode: CategoryManagerMode }) {
             style={fieldStyle}
           />
           {isSub ? (
-            <select
+            <SelectBox
               value={creating.parentId}
               onChange={(e) => setCreating({ ...creating, parentId: e.target.value })}
               required
@@ -657,10 +658,10 @@ export function CategoryManager({ mode }: { mode: CategoryManagerMode }) {
                   {o.name} ({KIND_LABELS[o.kind]})
                 </option>
               ))}
-            </select>
+            </SelectBox>
           ) : (
             <>
-              <select
+              <SelectBox
                 value={creating.kind}
                 onChange={(e) =>
                   setCreating({ ...creating, kind: e.target.value as TransactionType })
@@ -671,8 +672,8 @@ export function CategoryManager({ mode }: { mode: CategoryManagerMode }) {
                     {KIND_LABELS[k]}
                   </option>
                 ))}
-              </select>
-              <select
+              </SelectBox>
+              <SelectBox
                 value={creating.costCenterId}
                 onChange={(e) => setCreating({ ...creating, costCenterId: e.target.value })}
                 required
@@ -683,7 +684,7 @@ export function CategoryManager({ mode }: { mode: CategoryManagerMode }) {
                     {o.name}
                   </option>
                 ))}
-              </select>
+              </SelectBox>
             </>
           )}
           <button type="submit" disabled={busy}>

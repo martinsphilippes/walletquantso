@@ -9,6 +9,7 @@ import type { TransactionInput } from "@/services/transactions";
 import { todayBr } from "@/lib/br/date";
 import { FEE_AUTO, FeeFields, resolveFee, type FeeState } from "@/components/FeeFields";
 import { DatePicker } from "@/components/DatePicker";
+import { SelectBox } from "@/components/SelectBox";
 
 interface Props {
   accounts: Account[];
@@ -169,11 +170,11 @@ export function TransactionForm({
       <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
         <label style={col}>
           <span className="muted">Tipo</span>
-          <select value={type} onChange={(e) => setType(e.target.value as TransactionType)}>
+          <SelectBox value={type} onChange={(e) => setType(e.target.value as TransactionType)}>
             <option value="expense">Despesa</option>
             <option value="income">Receita</option>
             <option value="transfer">Transferência</option>
-          </select>
+          </SelectBox>
         </label>
         <div style={col}>
           <span className="muted">Data</span>
@@ -252,53 +253,53 @@ export function TransactionForm({
         {costCenters.length > 0 && (
           <label style={col}>
             <span className="muted">Centro de custo</span>
-            <select value={costCenterId ?? ""} onChange={(e) => pickCenter(e.target.value)}>
+            <SelectBox value={costCenterId ?? ""} onChange={(e) => pickCenter(e.target.value)}>
               <option value="">— nenhum —</option>
               {costCenters.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-            </select>
+            </SelectBox>
           </label>
         )}
         {type !== "transfer" && (
           <label style={col}>
             <span className="muted">Categoria</span>
-            <select value={categoryId ?? ""} onChange={(e) => pickCategory(e.target.value)}>
+            <SelectBox value={categoryId ?? ""} onChange={(e) => pickCategory(e.target.value)}>
               <option value="">— nenhuma —</option>
               {mainCategories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-            </select>
+            </SelectBox>
           </label>
         )}
         {type !== "transfer" && subOptions.length > 0 && (
           <label style={col}>
             <span className="muted">Subcategoria</span>
-            <select value={subcategoryId} onChange={(e) => setSubcategoryId(e.target.value)}>
+            <SelectBox value={subcategoryId} onChange={(e) => setSubcategoryId(e.target.value)}>
               <option value="">— nenhuma —</option>
               {subOptions.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-            </select>
+            </SelectBox>
           </label>
         )}
         {contacts.length > 0 && (
           <label style={col}>
             <span className="muted">Pessoa/contato</span>
-            <select value={contactId ?? ""} onChange={(e) => setContactId(e.target.value)}>
+            <SelectBox value={contactId ?? ""} onChange={(e) => setContactId(e.target.value)}>
               <option value="">— nenhum —</option>
               {contacts.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-            </select>
+            </SelectBox>
           </label>
         )}
       </div>

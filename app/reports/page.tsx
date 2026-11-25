@@ -18,6 +18,7 @@ import { DonutChart, CumulativeChart, PALETTE, type DonutItem } from "@/componen
 import { toCsv, brNumber } from "@/lib/export/csv";
 import { downloadText } from "@/lib/export/download";
 import type { Category, Transaction, TransactionType } from "@/types";
+import { SelectBox } from "@/components/SelectBox";
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -206,20 +207,20 @@ function Reports() {
           }}
         >
           <FilterField label="Tipo">
-            <select value={type} onChange={(e) => setType(e.target.value as TransactionType)}>
+            <SelectBox value={type} onChange={(e) => setType(e.target.value as TransactionType)}>
               <option value="expense">Despesas</option>
               <option value="income">Receitas</option>
-            </select>
+            </SelectBox>
           </FilterField>
           <FilterField label="Mês">
-            <select value={month} onChange={(e) => setMonth(e.target.value)}>
+            <SelectBox value={month} onChange={(e) => setMonth(e.target.value)}>
               <option value="">Todos os meses</option>
               {months.map((m) => (
                 <option key={m} value={m}>
                   {monthLabel(m)}
                 </option>
               ))}
-            </select>
+            </SelectBox>
           </FilterField>
           <span className="muted" style={{ alignSelf: "center" }}>
             Total: <strong>{brl(categoryTotal)}</strong>

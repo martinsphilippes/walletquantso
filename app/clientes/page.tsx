@@ -44,6 +44,7 @@ import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
 import { DatePicker } from "@/components/DatePicker";
 import { todayBr } from "@/lib/br/date";
 import type { Account, Category, Client, Contact, CostCenter, DeliveryZone } from "@/types";
+import { SelectBox } from "@/components/SelectBox";
 
 /** Valor em reais para os campos com máscara de centavos ("70" → "70,00"). */
 const fmtMoney = (n: number) =>
@@ -618,7 +619,7 @@ function Clientes() {
             <h3 style={{ marginBottom: "0.25rem" }}>Vínculos do título gerado (opcional)</h3>
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
               <Field label="Cliente (contato)">
-                <select
+                <SelectBox
                   value={draft.contactId}
                   onChange={(e) => setDraft({ ...draft, contactId: e.target.value })}
                 >
@@ -628,10 +629,10 @@ function Clientes() {
                       {c.name}
                     </option>
                   ))}
-                </select>
+                </SelectBox>
               </Field>
               <Field label="Conta">
-                <select
+                <SelectBox
                   value={draft.accountId}
                   onChange={(e) => setDraft({ ...draft, accountId: e.target.value })}
                 >
@@ -641,20 +642,20 @@ function Clientes() {
                       {a.name}
                     </option>
                   ))}
-                </select>
+                </SelectBox>
               </Field>
               <Field label="Categoria (receita)">
-                <select value={draft.categoryId} onChange={(e) => pickCategory(e.target.value)}>
+                <SelectBox value={draft.categoryId} onChange={(e) => pickCategory(e.target.value)}>
                   <option value="">—</option>
                   {mainCategories.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
                   ))}
-                </select>
+                </SelectBox>
               </Field>
               <Field label="Subcategoria">
-                <select
+                <SelectBox
                   value={draft.subcategoryId}
                   onChange={(e) => setDraft({ ...draft, subcategoryId: e.target.value })}
                   disabled={subOptions.length === 0}
@@ -672,10 +673,10 @@ function Clientes() {
                       {c.name}
                     </option>
                   ))}
-                </select>
+                </SelectBox>
               </Field>
               <Field label="Centro de custo">
-                <select
+                <SelectBox
                   value={draft.costCenterId}
                   onChange={(e) => setDraft({ ...draft, costCenterId: e.target.value })}
                 >
@@ -685,7 +686,7 @@ function Clientes() {
                       {c.name}
                     </option>
                   ))}
-                </select>
+                </SelectBox>
               </Field>
             </div>
 

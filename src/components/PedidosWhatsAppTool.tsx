@@ -28,6 +28,7 @@ import { todayBr } from "@/lib/br/date";
 import { maskBrAmount, parseBrCurrency } from "@/lib/br/parse";
 import { DatePicker } from "@/components/DatePicker";
 import type { Category, Client, CostCenter, DeliveryZone } from "@/types";
+import { SelectBox } from "@/components/SelectBox";
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -500,7 +501,7 @@ export function PedidosWhatsAppTool() {
               Converter e gerar Excel
             </button>
             {clients.length > 0 && (
-              <select
+              <SelectBox
                 value={clientId}
                 onChange={(e) => setClientId(e.target.value)}
                 title="Calcula o faturamento automaticamente pelas regras do cliente (tela Clientes)."
@@ -511,7 +512,7 @@ export function PedidosWhatsAppTool() {
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </SelectBox>
             )}
             {status && <span className={statusClassName(status.type)}>{status.msg}</span>}
           </div>
@@ -736,7 +737,7 @@ export function PedidosWhatsAppTool() {
                               fontSize: "0.82rem",
                             }}
                           />
-                          <select
+                          <SelectBox
                             value=""
                             title="Copiar o preço de um bairro já cadastrado no cliente."
                             onChange={(e) => {
@@ -762,7 +763,7 @@ export function PedidosWhatsAppTool() {
                                   {z.name} — {brl(z.price)}
                                 </option>
                               ))}
-                          </select>
+                          </SelectBox>
                           <input
                             value={d.price}
                             onChange={(e) => setD({ price: maskBrAmount(e.target.value) })}

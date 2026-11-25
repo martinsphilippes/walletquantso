@@ -47,6 +47,7 @@ import {
 } from "@/lib/bills/status";
 import type { Account, Bill, BillKind, Category, Contact, CostCenter, Transaction } from "@/types";
 import { todayBr } from "@/lib/br/date";
+import { SelectBox } from "@/components/SelectBox";
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -949,14 +950,14 @@ export function BillsManager({ kind }: { kind: BillKind }) {
             />
           </Field>
           <Field label="Repetição">
-            <select
+            <SelectBox
               value={creating.repeatMode}
               onChange={(e) => setCreating({ ...creating, repeatMode: e.target.value as RepeatMode })}
             >
               <option value="single">Única</option>
               <option value="fixed">Fixa</option>
               <option value="installments">Parcelado</option>
-            </select>
+            </SelectBox>
           </Field>
           {creating.repeatMode !== "single" && (
             <Field label={creating.repeatMode === "installments" ? "Parcelas" : "Repetições"}>
@@ -979,7 +980,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                   onChange={(e) => setCreating({ ...creating, repeatEveryN: e.target.value })}
                   style={{ ...fieldStyle, width: 64 }}
                 />
-                <select
+                <SelectBox
                   value={creating.repeatEveryUnit}
                   onChange={(e) =>
                     setCreating({ ...creating, repeatEveryUnit: e.target.value as RepeatUnit })
@@ -988,7 +989,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                   <option value="days">dia(s)</option>
                   <option value="weeks">semana(s)</option>
                   <option value="months">mês(es)</option>
-                </select>
+                </SelectBox>
               </span>
             </Field>
           )}
@@ -1002,7 +1003,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
             />
           </Field>
           <Field label="Conta">
-            <select
+            <SelectBox
               value={creating.accountId}
               onChange={(e) => setCreating({ ...creating, accountId: e.target.value })}
             >
@@ -1012,10 +1013,10 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                   {a.name}
                 </option>
               ))}
-            </select>
+            </SelectBox>
           </Field>
           <Field label="Centro de custo">
-            <select
+            <SelectBox
               value={creating.costCenterId}
               onChange={(e) => {
                 const id = e.target.value;
@@ -1036,10 +1037,10 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                   {c.name}
                 </option>
               ))}
-            </select>
+            </SelectBox>
           </Field>
           <Field label="Categoria">
-            <select
+            <SelectBox
               value={creating.categoryId}
               onChange={(e) =>
                 setCreating({
@@ -1057,11 +1058,11 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                   {c.name}
                 </option>
               ))}
-            </select>
+            </SelectBox>
           </Field>
           {subsOf(creating.categoryId).length > 0 && (
             <Field label="Subcategoria">
-              <select
+              <SelectBox
                 value={creating.subcategoryId}
                 onChange={(e) => setCreating({ ...creating, subcategoryId: e.target.value })}
               >
@@ -1071,11 +1072,11 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </SelectBox>
             </Field>
           )}
           <Field label={contactLabel}>
-            <select
+            <SelectBox
               value={creating.contactId}
               onChange={(e) => setCreating({ ...creating, contactId: e.target.value })}
             >
@@ -1085,7 +1086,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                   {c.name}
                 </option>
               ))}
-            </select>
+            </SelectBox>
           </Field>
           <Field label="Nº documento (auto)">
             <input
@@ -1123,36 +1124,36 @@ export function BillsManager({ kind }: { kind: BillKind }) {
         <PanelHead id={`filtros-${kind}`} title="Filtros" />
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
           <Field label="Conta">
-            <select value={fAccount} onChange={(e) => setFAccount(e.target.value)}>
+            <SelectBox value={fAccount} onChange={(e) => setFAccount(e.target.value)}>
               <option value="">Todas as contas</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
                 </option>
               ))}
-            </select>
+            </SelectBox>
           </Field>
           <Field label="Status">
-            <select value={fStatus} onChange={(e) => setFStatus(e.target.value as BillStatus | "")}>
+            <SelectBox value={fStatus} onChange={(e) => setFStatus(e.target.value as BillStatus | "")}>
               <option value="">Todos os status</option>
               <option value="open">{STATUS_LABELS.open}</option>
               <option value="overdue">{STATUS_LABELS.overdue}</option>
               <option value="partial">{STATUS_LABELS.partial}</option>
               <option value="paid">{STATUS_LABELS.paid}</option>
-            </select>
+            </SelectBox>
           </Field>
           <Field label={contactLabel}>
-            <select value={fContact} onChange={(e) => setFContact(e.target.value)}>
+            <SelectBox value={fContact} onChange={(e) => setFContact(e.target.value)}>
               <option value="">Todos</option>
               {contacts.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-            </select>
+            </SelectBox>
           </Field>
           <Field label="Categoria">
-            <select
+            <SelectBox
               value={fCategory}
               onChange={(e) => {
                 setFCategory(e.target.value);
@@ -1165,30 +1166,30 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                   {c.name}
                 </option>
               ))}
-            </select>
+            </SelectBox>
           </Field>
           {fCategory && subsOf(fCategory).length > 0 && (
             <Field label="Subcategoria">
-              <select value={fSubcategory} onChange={(e) => setFSubcategory(e.target.value)}>
+              <SelectBox value={fSubcategory} onChange={(e) => setFSubcategory(e.target.value)}>
                 <option value="">Todas</option>
                 {subsOf(fCategory).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </SelectBox>
             </Field>
           )}
           {costCenters.length > 0 && (
             <Field label="Centro">
-              <select value={fCostCenter} onChange={(e) => setFCostCenter(e.target.value)}>
+              <SelectBox value={fCostCenter} onChange={(e) => setFCostCenter(e.target.value)}>
                 <option value="">Todos</option>
                 {costCenters.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </SelectBox>
             </Field>
           )}
           <Field label="Buscar">
@@ -1318,12 +1319,12 @@ export function BillsManager({ kind }: { kind: BillKind }) {
               <span className="muted" style={{ fontSize: "0.8rem" }}>
                 Conta {bulkNeedsAccount ? "(obrigatória: há títulos sem conta)" : "(vazio = conta de cada título)"}
               </span>
-              <select value={bulkAccount} onChange={(e) => setBulkAccount(e.target.value)}>
+              <SelectBox value={bulkAccount} onChange={(e) => setBulkAccount(e.target.value)}>
                 <option value="">{bulkNeedsAccount ? "Escolha…" : "Conta de cada título"}</option>
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
-              </select>
+              </SelectBox>
             </label>
             <button className="btn-primary" disabled={busy} onClick={() => void bulkPay()}>
               Confirmar {settleLabel.toLowerCase()} de {bulkTargets.length}
@@ -1558,7 +1559,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                 style={{ ...fieldStyle, width: 130, textAlign: "right" }}
                               />
                               <DatePicker value={partialDate} onChange={setPartialDate} />
-                              <select
+                              <SelectBox
                                 value={partialAccount}
                                 onChange={(e) => {
                                   setPartialAccount(e.target.value);
@@ -1571,7 +1572,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                     {a.name}
                                   </option>
                                 ))}
-                              </select>
+                              </SelectBox>
                               <button disabled={busy} onClick={() => confirmPartial(b)}>
                                 {busy ? "Processando…" : "Confirmar"}
                               </button>
@@ -1612,21 +1613,21 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                           <td colSpan={11} style={subRowStyle}>
                             <div style={{ ...stickyIn, display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
                               <strong>{settleLabel}:</strong>
-                              <select
+                              <SelectBox
                                 value={payMode}
                                 onChange={(e) => setPayMode(e.target.value as "settle" | "partial")}
                                 title="Quitar fecha o título pelo valor pago; parcial mantém o saldo em aberto."
                               >
                                 <option value="settle">Quitar (total)</option>
                                 <option value="partial">Baixa parcial</option>
-                              </select>
+                              </SelectBox>
                               <input
                                 value={payAmount}
                                 onChange={(e) => setPayAmount(maskBrAmount(e.target.value))}
                                 style={{ ...fieldStyle, width: 110, textAlign: "right" }}
                               />
                               <DatePicker value={payDate} onChange={setPayDate} />
-                              <select
+                              <SelectBox
                                 value={payAccount}
                                 onChange={(e) => {
                                   setPayAccount(e.target.value);
@@ -1639,7 +1640,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                     {a.name}
                                   </option>
                                 ))}
-                              </select>
+                              </SelectBox>
                               <button disabled={busy} onClick={() => confirmPay(b)}>
                                 Confirmar
                               </button>
@@ -1710,7 +1711,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                 />
                               </Field>
                               <Field label={contactLabel}>
-                                <select
+                                <SelectBox
                                   value={draft.contactId}
                                   onChange={(e) => setDraft({ ...draft, contactId: e.target.value })}
                                 >
@@ -1720,10 +1721,10 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                       {c.name}
                                     </option>
                                   ))}
-                                </select>
+                                </SelectBox>
                               </Field>
                               <Field label="Centro de custo">
-                                <select
+                                <SelectBox
                                   value={draft.costCenterId}
                                   onChange={(e) => {
                                     const id = e.target.value;
@@ -1744,10 +1745,10 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                       {c.name}
                                     </option>
                                   ))}
-                                </select>
+                                </SelectBox>
                               </Field>
                               <Field label="Categoria">
-                                <select
+                                <SelectBox
                                   value={draft.categoryId}
                                   onChange={(e) =>
                                     setDraft({
@@ -1766,11 +1767,11 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                       {c.name}
                                     </option>
                                   ))}
-                                </select>
+                                </SelectBox>
                               </Field>
                               {subsOf(draft.categoryId).length > 0 && (
                                 <Field label="Subcategoria">
-                                  <select
+                                  <SelectBox
                                     value={draft.subcategoryId}
                                     onChange={(e) =>
                                       setDraft({ ...draft, subcategoryId: e.target.value })
@@ -1782,7 +1783,7 @@ export function BillsManager({ kind }: { kind: BillKind }) {
                                         {c.name}
                                       </option>
                                     ))}
-                                  </select>
+                                  </SelectBox>
                                 </Field>
                               )}
                               <Field label="Nº documento">

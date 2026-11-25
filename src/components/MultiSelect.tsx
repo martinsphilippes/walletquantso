@@ -63,18 +63,27 @@ export function MultiSelect({
       if (panelRef.current && e.target instanceof Node && panelRef.current.contains(e.target)) return;
       setOpen(false);
     };
+    // Tab segue para o próximo campo e fecha a lista. Esc fecha só a lista:
+    // ouvido antes dos outros (captura) e marcado como já usado, para a
+    // janela sobreposta em volta não fechar junto.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Tab") {
+        if (!panelRef.current?.contains(document.activeElement)) setOpen(false);
+        return;
+      }
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      setOpen(false);
     };
     document.addEventListener("pointerdown", onDown);
     window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", place);
-    document.addEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKey, true);
     return () => {
       document.removeEventListener("pointerdown", onDown);
       window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", place);
-      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("keydown", onKey, true);
     };
   }, [open]);
 

@@ -56,6 +56,7 @@ import type {
   Transaction,
   TransactionType,
 } from "@/types";
+import { SelectBox } from "@/components/SelectBox";
 
 const TYPE_LABELS: Record<TransactionType, string> = {
   income: "Receita",
@@ -974,7 +975,7 @@ function Dashboard() {
             />
           </FilterField>
           <FilterField label="Conta">
-            <select
+            <SelectBox
               value={filters.accountId ?? ""}
               onChange={(e) => set({ accountId: e.target.value || undefined })}
             >
@@ -984,10 +985,10 @@ function Dashboard() {
                   {a.name}
                 </option>
               ))}
-            </select>
+            </SelectBox>
           </FilterField>
           <FilterField label="Tipo">
-            <select
+            <SelectBox
               value={filters.type ?? ""}
               onChange={(e) => set({ type: (e.target.value || "") as TransactionType | "" })}
             >
@@ -995,7 +996,7 @@ function Dashboard() {
               <option value="income">Receita</option>
               <option value="expense">Despesa</option>
               <option value="transfer">Transferência</option>
-            </select>
+            </SelectBox>
           </FilterField>
           <FilterField label="Data inicial (de)">
             <DatePicker value={filters.from ?? ""} allowEmpty onChange={(iso) => set({ from: iso || undefined })} />
@@ -1302,7 +1303,7 @@ function BillListPanel({
                           </div>
                           <label style={mini}>
                             <span className="muted">Conta</span>
-                            <select
+                            <SelectBox
                               value={payAccount}
                               onChange={(e) => {
                                 setPayAccount(e.target.value);
@@ -1316,7 +1317,7 @@ function BillListPanel({
                                   {a.name}
                                 </option>
                               ))}
-                            </select>
+                            </SelectBox>
                           </label>
                           <button className="btn-primary" disabled={busy} onClick={() => void confirmPay(b)}>
                             {busy ? "Salvando…" : `Confirmar ${verb.toLowerCase()}`}

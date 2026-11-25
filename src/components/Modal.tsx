@@ -24,7 +24,9 @@ export function Modal({
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      // Esc já usado para fechar uma lista ou o calendário aberto dentro da
+      // janela não fecha a janela junto.
+      if (e.key === "Escape" && !e.defaultPrevented) onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);

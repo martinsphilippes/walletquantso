@@ -18,6 +18,7 @@ import { DatePicker } from "@/components/DatePicker";
 import type { Account, CoraSyncConfig, Transaction } from "@/types";
 import type { NormalizedEntry } from "@/lib/cora/statement";
 import { daysAgoBr } from "@/lib/br/date";
+import { SelectBox } from "@/components/SelectBox";
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -294,14 +295,14 @@ function CoraSync() {
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
           <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
             <span className="muted" style={{ fontSize: "0.75rem" }}>Conta (destino)</span>
-            <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            <SelectBox value={accountId} onChange={(e) => setAccountId(e.target.value)}>
               <option value="">— selecione —</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
                 </option>
               ))}
-            </select>
+            </SelectBox>
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
             <span className="muted" style={{ fontSize: "0.75rem" }}>De</span>

@@ -18,6 +18,7 @@ import { countReferences } from "@/lib/references/usage";
 import { useColumnFilters, FilterRow, type ColFilterDef } from "@/components/ColumnFilter";
 import { useBulkSelect, SelectAllCheckbox, RowCheckbox, BulkBar } from "@/components/BulkSelect";
 import type { Bill, CostCenter, Transaction } from "@/types";
+import { SelectBox } from "@/components/SelectBox";
 
 export default function CostCentersPage() {
   return (
@@ -263,7 +264,7 @@ function CostCenters() {
                         <td style={{ whiteSpace: "nowrap" }}>
                           {merging ? (
                             <>
-                              <select
+                              <SelectBox
                                 value={mergeTarget}
                                 onChange={(e) => setMergeTarget(e.target.value)}
                               >
@@ -273,7 +274,7 @@ function CostCenters() {
                                     {o.name}
                                   </option>
                                 ))}
-                              </select>{" "}
+                              </SelectBox>{" "}
                               <button
                                 disabled={busy || !mergeTarget}
                                 onClick={() => doMerge(c.id!)}

@@ -48,6 +48,7 @@ import type {
   Transaction,
   TransactionType,
 } from "@/types";
+import { SelectBox } from "@/components/SelectBox";
 
 const TYPE_LABELS: Record<TransactionType, string> = {
   income: "Receita",
@@ -598,7 +599,7 @@ function Lancamentos() {
             />
           </FilterField>
           <FilterField label="Tipo">
-            <select
+            <SelectBox
               value={filters.type ?? ""}
               onChange={(e) =>
                 // Trocar o tipo limpa a categoria (pode não valer para o novo tipo).
@@ -613,7 +614,7 @@ function Lancamentos() {
               <option value="income">Receita</option>
               <option value="expense">Despesa</option>
               <option value="transfer">Transferência</option>
-            </select>
+            </SelectBox>
           </FilterField>
           <FilterField label="Contas">
             <MultiSelect
@@ -626,7 +627,7 @@ function Lancamentos() {
           </FilterField>
           {costCenters.length > 0 && (
             <FilterField label="Centro de custo">
-              <select
+              <SelectBox
                 value={filters.costCenterId ?? ""}
                 onChange={(e) =>
                   // Trocar o centro limpa a categoria (pode não ser dele).
@@ -643,11 +644,11 @@ function Lancamentos() {
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </SelectBox>
             </FilterField>
           )}
           <FilterField label="Categoria">
-            <select
+            <SelectBox
               value={fCatMain}
               onChange={(e) => pickFilterCategory(e.target.value)}
             >
@@ -657,11 +658,11 @@ function Lancamentos() {
                   {c.name}
                 </option>
               ))}
-            </select>
+            </SelectBox>
           </FilterField>
           {fCatMain && subsOf(fCatMain).length > 0 && (
             <FilterField label="Subcategoria">
-              <select
+              <SelectBox
                 value={filters.categoryId ?? ""}
                 onChange={(e) =>
                   e.target.value
@@ -675,12 +676,12 @@ function Lancamentos() {
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </SelectBox>
             </FilterField>
           )}
           {contacts.length > 0 && (
             <FilterField label="Contato">
-              <select
+              <SelectBox
                 value={filters.contactId ?? ""}
                 onChange={(e) => set({ contactId: e.target.value || undefined })}
               >
@@ -690,7 +691,7 @@ function Lancamentos() {
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </SelectBox>
             </FilterField>
           )}
           <FilterField label="Data inicial (de)">
@@ -792,7 +793,7 @@ function Lancamentos() {
             ) : (
               <>
                 <span>Centro de custo:</span>
-                <select
+                <SelectBox
                   value={bulkCenter}
                   onChange={(e) => {
                     const id = e.target.value;
@@ -814,9 +815,9 @@ function Lancamentos() {
                       {c.name}
                     </option>
                   ))}
-                </select>
+                </SelectBox>
                 <span>Categoria:</span>
-                <select
+                <SelectBox
                   value={bulkCat}
                   onChange={(e) => {
                     const id = e.target.value;
@@ -846,18 +847,18 @@ function Lancamentos() {
                         {c.name} ({TYPE_LABELS[c.kind]})
                       </option>
                     ))}
-                </select>
+                </SelectBox>
                 {bulkCat && bulkCat !== "__clear__" && subsOf(bulkCat).length > 0 && (
                   <>
                     <span>Subcategoria:</span>
-                    <select value={bulkSub} onChange={(e) => setBulkSub(e.target.value)}>
+                    <SelectBox value={bulkSub} onChange={(e) => setBulkSub(e.target.value)}>
                       <option value="">— nenhuma —</option>
                       {subsOf(bulkCat).map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name}
                         </option>
                       ))}
-                    </select>
+                    </SelectBox>
                   </>
                 )}
                 <button disabled={bulkBusy} onClick={applyBulkEdit}>
@@ -1016,7 +1017,7 @@ function Lancamentos() {
                             />
                           </InlineField>
                           <InlineField label="Tipo">
-                            <select
+                            <SelectBox
                               value={editDraft.type}
                               onChange={(e) => {
                                 const type = e.target.value as TransactionType;
@@ -1027,7 +1028,7 @@ function Lancamentos() {
                               <option value="expense">Despesa</option>
                               <option value="income">Receita</option>
                               <option value="transfer">Transferência</option>
-                            </select>
+                            </SelectBox>
                           </InlineField>
                           <InlineField label="Valor (R$)">
                             <input
@@ -1038,7 +1039,7 @@ function Lancamentos() {
                             />
                           </InlineField>
                           <InlineField label="Conta">
-                            <select
+                            <SelectBox
                               value={editDraft.accountId}
                               onChange={(e) => setEditDraft({ ...editDraft, accountId: e.target.value })}
                             >
@@ -1046,11 +1047,11 @@ function Lancamentos() {
                               {accounts.map((a) => (
                                 <option key={a.id} value={a.id}>{a.name}</option>
                               ))}
-                            </select>
+                            </SelectBox>
                           </InlineField>
                           {editDraft.type === "transfer" && (
                             <InlineField label="Para a conta">
-                              <select
+                              <SelectBox
                                 value={editDraft.transferAccountId}
                                 onChange={(e) =>
                                   setEditDraft({ ...editDraft, transferAccountId: e.target.value })
@@ -1062,13 +1063,13 @@ function Lancamentos() {
                                   .map((a) => (
                                     <option key={a.id} value={a.id}>{a.name}</option>
                                   ))}
-                              </select>
+                              </SelectBox>
                             </InlineField>
                           )}
                           {editDraft.type !== "transfer" && (
                             <>
                               <InlineField label="Centro de custo">
-                                <select
+                                <SelectBox
                                   value={editDraft.costCenterId}
                                   onChange={(e) => {
                                     const id = e.target.value;
@@ -1090,10 +1091,10 @@ function Lancamentos() {
                                   {costCenters.map((c) => (
                                     <option key={c.id} value={c.id}>{c.name}</option>
                                   ))}
-                                </select>
+                                </SelectBox>
                               </InlineField>
                               <InlineField label="Categoria">
-                                <select
+                                <SelectBox
                                   value={editDraft.categoryId}
                                   onChange={(e) => {
                                     const id = e.target.value;
@@ -1111,11 +1112,11 @@ function Lancamentos() {
                                   {editMains(editDraft).map((c) => (
                                     <option key={c.id} value={c.id}>{c.name}</option>
                                   ))}
-                                </select>
+                                </SelectBox>
                               </InlineField>
                               {subsOf(editDraft.categoryId).length > 0 && (
                                 <InlineField label="Subcategoria">
-                                  <select
+                                  <SelectBox
                                     value={editDraft.subcategoryId}
                                     onChange={(e) =>
                                       setEditDraft({ ...editDraft, subcategoryId: e.target.value })
@@ -1125,13 +1126,13 @@ function Lancamentos() {
                                     {subsOf(editDraft.categoryId).map((c) => (
                                       <option key={c.id} value={c.id}>{c.name}</option>
                                     ))}
-                                  </select>
+                                  </SelectBox>
                                 </InlineField>
                               )}
                             </>
                           )}
                           <InlineField label="Contato">
-                            <select
+                            <SelectBox
                               value={editDraft.contactId}
                               onChange={(e) => setEditDraft({ ...editDraft, contactId: e.target.value })}
                             >
@@ -1139,7 +1140,7 @@ function Lancamentos() {
                               {contacts.map((c) => (
                                 <option key={c.id} value={c.id}>{c.name}</option>
                               ))}
-                            </select>
+                            </SelectBox>
                           </InlineField>
                           <InlineField label="Observações">
                             <input

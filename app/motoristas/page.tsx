@@ -60,6 +60,7 @@ import type {
   RideEntry,
   RideRate,
 } from "@/types";
+import { SelectBox } from "@/components/SelectBox";
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -621,20 +622,20 @@ function Motoristas() {
         ) : (
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
             <Field label="Motorista">
-              <select value={rDriver} onChange={(e) => setRDriver(e.target.value)}>
+              <SelectBox value={rDriver} onChange={(e) => setRDriver(e.target.value)}>
                 <option value="">Escolha…</option>
                 {activeDrivers.map((d) => (
                   <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
-              </select>
+              </SelectBox>
             </Field>
             <Field label="Empresa">
-              <select value={rClient} onChange={(e) => setRClient(e.target.value)}>
+              <SelectBox value={rClient} onChange={(e) => setRClient(e.target.value)}>
                 <option value="">Escolha…</option>
                 {clients.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
-              </select>
+              </SelectBox>
             </Field>
             <Field label="Data">
               <DatePicker value={rDate} onChange={setRDate} />
@@ -1012,7 +1013,7 @@ function Motoristas() {
             </p>
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
               <Field label="Cliente">
-                <select
+                <SelectBox
                   value={rule.clientId}
                   onChange={(e) => {
                     const id = e.target.value;
@@ -1026,16 +1027,16 @@ function Motoristas() {
                       {c.name}{byClient[c.id!] ? " ✓" : ""}
                     </option>
                   ))}
-                </select>
+                </SelectBox>
               </Field>
               <Field label="Vencimento">
-                <select
+                <SelectBox
                   value={rule.payMode}
                   onChange={(e) => setRule({ ...rule, payMode: e.target.value as "monthDay" | "weekday" })}
                 >
                   <option value="weekday">Próximo dia da semana</option>
                   <option value="monthDay">Dia fixo do mês</option>
-                </select>
+                </SelectBox>
               </Field>
               {rule.payMode === "monthDay" ? (
                 <Field label="Dia do mês (1–31)">
@@ -1050,11 +1051,11 @@ function Motoristas() {
                 </Field>
               ) : (
                 <Field label="Dia da semana">
-                  <select value={rule.payWeekday} onChange={(e) => setRule({ ...rule, payWeekday: e.target.value })}>
+                  <SelectBox value={rule.payWeekday} onChange={(e) => setRule({ ...rule, payWeekday: e.target.value })}>
                     {WEEKDAY_NAMES.map((n, i) => (
                       <option key={n} value={i}>{n}</option>
                     ))}
-                  </select>
+                  </SelectBox>
                 </Field>
               )}
               {rule.diarias.map((dt, i) => (
@@ -1144,15 +1145,15 @@ function Motoristas() {
               </button>
 
               <Field label="Conta do título">
-                <select value={rule.accountId} onChange={(e) => setRule({ ...rule, accountId: e.target.value })}>
+                <SelectBox value={rule.accountId} onChange={(e) => setRule({ ...rule, accountId: e.target.value })}>
                   <option value="">—</option>
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>{a.name}</option>
                   ))}
-                </select>
+                </SelectBox>
               </Field>
               <Field label="Centro de custo">
-                <select
+                <SelectBox
                   value={rule.costCenterId}
                   onChange={(e) => setRule({ ...rule, costCenterId: e.target.value, categoryId: "" })}
                 >
@@ -1160,17 +1161,17 @@ function Motoristas() {
                   {costCenters.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
-                </select>
+                </SelectBox>
               </Field>
               <Field label="Categoria (despesa)">
-                <select value={rule.categoryId} onChange={(e) => setRule({ ...rule, categoryId: e.target.value })}>
+                <SelectBox value={rule.categoryId} onChange={(e) => setRule({ ...rule, categoryId: e.target.value })}>
                   <option value="">Escolha…</option>
                   {categories
                     .filter((c) => !rule.costCenterId || (c.costCenterId ?? "") === rule.costCenterId || !!c.parentId)
                     .map((c) => (
                       <option key={c.id} value={c.id}>{c.parentId ? `  ↳ ${c.name}` : c.name}</option>
                     ))}
-                </select>
+                </SelectBox>
               </Field>
             </div>
 
