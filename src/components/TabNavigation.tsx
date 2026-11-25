@@ -1,16 +1,21 @@
 "use client";
 
-// Tab e Shift+Tab passam de um campo para o outro em qualquer tela, também no
-// iPad com teclado físico. O Safari, por padrão, só para nas caixas de texto:
-// pula os botões (o campo de data, as contas em botões, Salvar/Fechar), as
-// caixas de marcar e às vezes as listas de escolha. Aqui a ordem é a da tela
-// (a do documento) e inclui todo controle visível e habilitado. Com uma janela
-// sobreposta aberta (aria-modal), o giro fica dentro dela. Fica de fora o que
-// está escondido ou inerte (menu lateral fechado no celular), os campos só de
-// leitura, os desabilitados e os marcados com tabIndex -1.
+// Tab e Shift+Tab passam de um campo para o outro em qualquer tela, no
+// computador. A ordem é a da tela (a do documento) e inclui todo controle
+// visível e habilitado. Com uma janela sobreposta aberta (aria-modal), o giro
+// fica dentro dela. Fica de fora o que está escondido ou inerte (menu lateral
+// fechado no celular), os campos só de leitura, os desabilitados e os marcados
+// com tabIndex -1.
+//
+// No iPhone e no iPad o app não mexe no TAB: lá o TAB do teclado físico é do
+// próprio Safari, que anda entre os campos de digitar e não entrega a tecla à
+// página quando o foco está num botão. Levar o foco a um botão deixaria o TAB
+// preso nele. As caixas de escolha e de data do app têm por dentro um campo
+// de digitar (sem teclado na tela), então o Safari para nelas também.
 //
 // Entrando numa caixa de texto pelo Tab, o conteúdo fica selecionado, como no
-// Tab do próprio navegador: digitar já substitui.
+// Tab do próprio navegador: digitar já substitui. As caixas de escolha e de
+// data (data-picker) ficam de fora disso: não se digita nelas.
 
 import { useEffect } from "react";
 import { tabTarget } from "@/lib/ui/tab-order";
@@ -28,8 +33,15 @@ function isTabbable(el: HTMLElement): boolean {
   return true;
 }
 
+/** iPhone ou iPad (o iPad se apresenta como Mac, mas tem tela de toque). */
+function isAppleTouch(): boolean {
+  const ua = navigator.userAgent;
+  return /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+}
+
 export function TabNavigation() {
   useEffect(() => {
+    if (isAppleTouch()) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Tab" || e.altKey || e.ctrlKey || e.metaKey || e.defaultPrevented || e.isComposing) return;
       const modals = document.querySelectorAll<HTMLElement>('[aria-modal="true"]');
@@ -49,7 +61,11 @@ export function TabNavigation() {
 
       e.preventDefault();
       target.focus();
-      if (target instanceof HTMLInputElement && SELECT_ON_FOCUS.test(target.type)) {
+      if (
+        target instanceof HTMLInputElement &&
+        SELECT_ON_FOCUS.test(target.type) &&
+        target.dataset.picker === undefined
+      ) {
         try {
           target.select();
         } catch {

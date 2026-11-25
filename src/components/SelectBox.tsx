@@ -2,24 +2,27 @@
 
 // Caixa de escolha do app, no lugar do <select> do navegador em todas as telas.
 //
-// No iPad, o <select> abre a lista do sistema assim que recebe o foco, e o
-// teclado físico fica preso nela: o Tab não passa para o campo seguinte. Esta
-// caixa é um botão: recebe o foco sem abrir nada, então Tab e Shift+Tab passam
-// por ela como por qualquer outro campo.
+// Por que não o <select>: no iPad ele abre a lista do sistema assim que recebe
+// o foco, e o teclado físico fica preso nela.
+//
+// Por que um campo de texto por dentro: no iPad o TAB do teclado físico é do
+// próprio Safari e só para em campos de digitar (e nas caixas do sistema). Com
+// um botão em foco, o TAB nem chega à página. Então a caixa tem por dentro um
+// campo de texto que não abre o teclado da tela (inputMode "none") e não
+// aceita digitação: o TAB do iPad para nela e segue dela como num campo comum.
 //
 // Toque ou clique abre a lista do app. No teclado: Espaço, Enter ou as setas
 // abrem a lista; as setas andam; Enter (ou Espaço) escolhe; Esc fecha sem
-// mudar; Tab escolhe o item marcado e segue para o próximo campo. Letras
-// digitadas acham o item que começa com elas (com a lista fechada já escolhem,
-// como no <select>).
+// mudar. Letras acham o item que começa com elas, sem diferença de acento: com
+// a lista fechada já escolhem, como no <select>. O TAB sai da caixa; se o item
+// marcado na lista aberta foi mudado pelo teclado, fica com ele.
 //
 // Uso igual ao do <select>: value, onChange((e) => e.target.value), disabled,
 // title, style, className e <option> como filhos. `required` só marca a caixa
 // para leitores de tela: quem confere o preenchimento é a própria tela, com a
-// mensagem dela (como já fazem os cadastros). A lista abre num
-// portal em posição fixa (como o calendário): não é cortada pelas tabelas com
-// rolagem, fica acima das janelas sobrepostas e um toque nela não aciona o
-// <label> que envolve a caixa.
+// mensagem dela. A lista abre num portal em posição fixa: não é cortada pelas
+// tabelas com rolagem, fica acima das janelas sobrepostas e acompanha a caixa
+// quando a página rola.
 
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -50,6 +53,14 @@ interface SelectBoxProps {
   "aria-label"?: string;
 }
 
+interface ListPos {
+  left: number;
+  width: number;
+  top?: number;
+  bottom?: number;
+  maxHeight: number;
+}
+
 export function SelectBox({
   value,
   onChange,
@@ -70,10 +81,17 @@ export function SelectBox({
 
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
-  const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number; maxHeight: number } | null>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<ListPos | null>(null);
+  const boxRef = useRef<HTMLSpanElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const typed = useRef({ text: "", at: 0 });
+  /** O item marcado foi mudado pelo teclado desde que a lista abriu. */
+  const movedByKeys = useRef(false);
+  /** Toque ou clique começou dentro da lista (não fecha ao perder o foco). */
+  const pointerInList = useRef(false);
+  /** A tecla já foi usada na busca por letra (o texto que ela digitaria é ignorado). */
+  const keyHandled = useRef(false);
   const listId = useId();
 
   /** Avisa a tela como o <select> faria (só quando o valor muda). */
@@ -84,34 +102,13 @@ export function SelectBox({
     onChange?.({ target, currentTarget: target } as unknown as React.ChangeEvent<HTMLSelectElement>);
   };
 
-  const openList = () => {
-    if (disabled || options.length === 0) return;
-    // Posição calculada já na abertura: a lista aparece no mesmo instante.
-    place();
-    setActive(shownAt);
-    setOpen(true);
-  };
-
-  const closeList = (refocus: boolean) => {
-    setOpen(false);
-    if (refocus) btnRef.current?.focus({ preventScroll: true });
-  };
-
-  /** Junta as letras digitadas em sequência e devolve o item que combina. */
-  const findTyped = (ch: string, from: number) => {
-    const now = Date.now();
-    const t = typed.current;
-    t.text = now - t.at > TYPE_AHEAD_MS ? ch : t.text + ch;
-    t.at = now;
-    return typeAheadIndex(options, t.text, from);
-  };
-  const typing = () => Date.now() - typed.current.at <= TYPE_AHEAD_MS && typed.current.text !== "";
-
-  function place() {
-    const r = btnRef.current?.getBoundingClientRect();
-    if (!r) return;
+  /** Posiciona a lista junto da caixa; false se a caixa saiu da tela. */
+  function place(): boolean {
+    const r = boxRef.current?.getBoundingClientRect();
+    if (!r) return false;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
+    if (r.bottom < 0 || r.top > vh) return false;
     const width = Math.min(Math.max(r.width, LIST_MIN_W), vw - 16);
     const left = Math.max(8, Math.min(r.left, vw - width - 8));
     const below = vh - r.bottom - 10;
@@ -122,28 +119,67 @@ export function SelectBox({
     } else {
       setPos({ left, width, bottom: vh - r.top + 4, maxHeight: Math.min(LIST_MAX_H, above) });
     }
+    return true;
   }
 
+  const focusField = () => inputRef.current?.focus({ preventScroll: true });
+
+  const openList = () => {
+    if (disabled || options.length === 0 || !place()) return;
+    movedByKeys.current = false;
+    setActive(shownAt);
+    setOpen(true);
+  };
+
+  const closeList = (refocus: boolean) => {
+    setOpen(false);
+    if (refocus) focusField();
+  };
+
+  /** Letras digitadas: com a lista aberta marcam o item; fechada, já escolhem. */
+  const typeAhead = (text: string) => {
+    const clean = text.replace(/[^\p{L}\p{N} ]/gu, "");
+    if (!clean) return;
+    const now = Date.now();
+    const t = typed.current;
+    t.text = now - t.at > TYPE_AHEAD_MS ? clean : t.text + clean;
+    t.at = now;
+    const at = typeAheadIndex(options, t.text, open ? active : shownAt);
+    if (at < 0) return;
+    if (open) {
+      movedByKeys.current = true;
+      setActive(at);
+    } else choose(at);
+  };
+  const typing = () => typed.current.text !== "" && Date.now() - typed.current.at <= TYPE_AHEAD_MS;
+
   useEffect(() => {
-    if (!open) return;
-    place();
+    if (!open) {
+      pointerInList.current = false;
+      return;
+    }
     const onDown = (e: PointerEvent) => {
       const t = e.target as Node;
-      if (listRef.current?.contains(t) || btnRef.current?.contains(t)) return;
+      if (listRef.current?.contains(t)) {
+        pointerInList.current = true;
+        return;
+      }
+      if (boxRef.current?.contains(t)) return;
       setOpen(false);
     };
-    const onScroll = (e: Event) => {
-      // Rolar a própria lista não fecha; rolar a página, sim.
+    // A página rolou ou a tela mudou: a lista acompanha a caixa (rolar a
+    // própria lista não mexe em nada).
+    const follow = (e: Event) => {
       if (listRef.current && e.target instanceof Node && listRef.current.contains(e.target)) return;
-      setOpen(false);
+      if (!place()) setOpen(false);
     };
     document.addEventListener("pointerdown", onDown, true);
-    window.addEventListener("scroll", onScroll, true);
-    window.addEventListener("resize", place);
+    window.addEventListener("scroll", follow, true);
+    window.addEventListener("resize", follow);
     return () => {
       document.removeEventListener("pointerdown", onDown, true);
-      window.removeEventListener("scroll", onScroll, true);
-      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", follow, true);
+      window.removeEventListener("resize", follow);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -165,37 +201,38 @@ export function SelectBox({
     if (disabled && open) setOpen(false);
   }, [disabled, open]);
 
-  const onKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
-    if (disabled) return;
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (disabled || e.nativeEvent.isComposing) return;
     const k = e.key;
     if (e.altKey && (k === "ArrowDown" || k === "ArrowUp")) {
       e.preventDefault();
-      if (open) {
+      if (!open) openList();
+      else {
         choose(active);
         closeList(true);
-      } else openList();
+      }
       return;
     }
+    // Atalhos (copiar etc.) seguem normais.
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    const printable = k.length === 1 && (k !== " " || typing());
+    // Nada se digita no campo: ele só mostra o item escolhido.
+    if (k === "Backspace" || k === "Delete") {
+      e.preventDefault();
+      return;
+    }
+    if (k.length === 1 && (k !== " " || typing())) {
+      e.preventDefault();
+      keyHandled.current = true;
+      typeAhead(k);
+      return;
+    }
 
     if (!open) {
       if (k === "ArrowDown" || k === "ArrowUp" || k === "Enter" || k === " ") {
         e.preventDefault();
-        if (k === " " && typing()) {
-          const at = findTyped(k, shownAt);
-          if (at >= 0) choose(at);
-          return;
-        }
         openList();
-        return;
       }
-      if (printable) {
-        e.preventDefault();
-        const at = findTyped(k, shownAt);
-        if (at >= 0) choose(at);
-      }
-      // Tab e o resto seguem o caminho normal (o Tab passa para o próximo campo).
+      // TAB e o resto seguem o caminho normal (o TAB vai para o próximo campo).
       return;
     }
 
@@ -206,15 +243,18 @@ export function SelectBox({
       case "PageUp": {
         e.preventDefault();
         const delta = k === "ArrowDown" ? 1 : k === "ArrowUp" ? -1 : k === "PageDown" ? 8 : -8;
+        movedByKeys.current = true;
         setActive((a) => stepIndex(options, a, delta));
         return;
       }
       case "Home":
       case "End":
         e.preventDefault();
+        movedByKeys.current = true;
         setActive(edgeIndex(options, k === "Home" ? 1 : -1));
         return;
       case "Enter":
+      case " ":
         e.preventDefault();
         choose(active);
         closeList(true);
@@ -229,70 +269,98 @@ export function SelectBox({
         closeList(true);
         return;
       case "Tab":
-        // Escolhe o item marcado e deixa o Tab seguir para o próximo campo.
-        choose(active);
+        // Sai da caixa: fica com o item marcado pelo teclado e o TAB segue.
+        if (movedByKeys.current) choose(active);
         setOpen(false);
         return;
     }
-    if (k === " " && !printable) {
-      e.preventDefault();
-      choose(active);
-      closeList(true);
-      return;
-    }
-    if (printable) {
-      e.preventDefault();
-      const at = findTyped(k, active);
-      if (at >= 0) setActive(at);
-    }
+  };
+
+  // Texto que escapou das teclas (letra com acento montada em duas teclas,
+  // por exemplo): vira busca por letra. O campo volta sozinho a mostrar o
+  // item escolhido, porque o valor dele é controlado.
+  const onInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (keyHandled.current) return;
+    const data = (e.nativeEvent as InputEvent).data;
+    if (data) typeAhead(data);
+  };
+
+  const onBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    if (!open) return;
+    const to = e.relatedTarget as Node | null;
+    if (to && listRef.current?.contains(to)) return;
+    if (!to && pointerInList.current) return;
+    // Saiu pelo TAB do iPad (que não passa pela página) ou o foco foi para
+    // outro lugar: fecha, ficando com o item que o teclado marcou.
+    if (movedByKeys.current) choose(active);
+    setOpen(false);
   };
 
   const sizers = widestLabels(options);
 
   return (
     <>
-      <button
-        ref={btnRef}
-        type="button"
-        id={id}
-        role="combobox"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={open ? listId : undefined}
-        aria-activedescendant={open && active >= 0 ? `${listId}-${active}` : undefined}
-        aria-label={ariaLabel}
-        aria-required={required || undefined}
-        title={title}
-        disabled={disabled}
-        className={className ? `select-box ${className}` : "select-box"}
+      <span
+        ref={boxRef}
+        className={`select-box${open ? " is-open" : ""}${disabled ? " is-disabled" : ""}${className ? ` ${className}` : ""}`}
         style={style}
-        onClick={() => {
+        title={title}
+        // Clique na moldura não tira o foco do campo nem seleciona texto.
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={(e) => {
+          // Cancela o clique repetido que o <label> em volta faria no campo.
+          e.preventDefault();
+          if (disabled) return;
           if (open) {
             closeList(true);
             return;
           }
-          // O Safari não dá foco a botões tocados: dá aqui, para o Tab seguir dela.
-          btnRef.current?.focus({ preventScroll: true });
+          focusField();
           openList();
-        }}
-        onKeyDown={onKeyDown}
-        // O Espaço já foi tratado ao descer a tecla; ao soltar, não "clica" de novo.
-        onKeyUp={(e) => {
-          if (e.key === " ") e.preventDefault();
         }}
       >
         <span className="select-box-text">
-          <span className="select-box-value">{shown?.label || "​"}</span>
-          {sizers.map((s, i) => (
+          {(sizers.length > 0 ? sizers : [""]).map((s, i) => (
             <span key={i} className="select-box-sizer" aria-hidden>
-              {s}
+              {s || "​"}
             </span>
           ))}
+          <input
+            ref={inputRef}
+            id={id}
+            type="text"
+            inputMode="none"
+            className="select-box-input"
+            data-picker=""
+            role="combobox"
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            aria-controls={open ? listId : undefined}
+            aria-activedescendant={open && active >= 0 ? `${listId}-${active}` : undefined}
+            aria-autocomplete="none"
+            aria-label={ariaLabel}
+            aria-required={required || undefined}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            disabled={disabled}
+            value={shown?.label ?? ""}
+            onChange={onInput}
+            onKeyDown={onKeyDown}
+            onKeyUp={() => {
+              keyHandled.current = false;
+            }}
+            onBlur={onBlur}
+            onPaste={(e) => e.preventDefault()}
+            onCut={(e) => e.preventDefault()}
+            onDrop={(e) => e.preventDefault()}
+          />
         </span>
         <span className="select-box-arrow" aria-hidden>
           ▾
         </span>
-      </button>
+      </span>
       {open &&
         pos &&
         typeof document !== "undefined" &&
@@ -303,7 +371,7 @@ export function SelectBox({
             role="listbox"
             className="select-box-list"
             style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, maxHeight: pos.maxHeight }}
-            // Tocar na lista não tira o foco da caixa.
+            // Tocar na lista não tira o foco do campo.
             onMouseDown={(e) => e.preventDefault()}
           >
             {options.map((o, i) => (

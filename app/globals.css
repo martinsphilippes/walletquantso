@@ -300,10 +300,12 @@ input:focus, select:focus, textarea:focus {
 }
 label { font-size: 0.9rem; }
 
-/* ---------- Caixa de escolha (SelectBox) ----------
-   Botão com cara de campo no lugar do <select>: no iPad o <select> abre a
-   lista do sistema ao receber o foco e o Tab fica preso nela. A largura é a
-   do maior item (os textos "sizer", invisíveis, ocupam o mesmo lugar). */
+/* ---------- Caixa de escolha (SelectBox) e campo de data (DatePicker) ----------
+   Moldura com cara de campo e, por dentro, um campo de texto que não abre o
+   teclado da tela nem aceita digitação: no iPad o TAB do teclado físico só
+   para em campos de digitar, e assim para também nas caixas e nas datas. O
+   campo de texto fica por cima dos textos "sizer" (invisíveis), que dão à
+   caixa a largura do maior item, como no <select>. */
 .select-box {
   display: inline-flex;
   align-items: center;
@@ -319,19 +321,51 @@ label { font-size: 0.9rem; }
   line-height: normal;
   text-align: left;
   cursor: pointer;
-  transition: none;
 }
-.select-box:hover { background: var(--bg); border-color: #3a3f49; }
-.select-box:focus, .select-box[aria-expanded="true"] {
-  outline: none;
+.select-box:hover { border-color: #3a3f49; }
+.select-box:focus-within, .select-box.is-open {
   border-color: var(--focus);
   box-shadow: 0 0 0 3px rgba(110, 168, 254, 0.2);
 }
-.select-box:disabled { opacity: 0.5; }
-.select-box:disabled:hover { border-color: var(--border); }
-.select-box-text { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1 1 auto; min-width: 0; }
-.select-box-text > span { grid-area: 1 / 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.select-box-sizer { visibility: hidden; }
+.select-box.is-disabled { opacity: 0.5; cursor: not-allowed; }
+.select-box.is-disabled:hover { border-color: var(--border); }
+.select-box-text {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.select-box-sizer { grid-area: 1 / 1; visibility: hidden; overflow: hidden; white-space: nowrap; }
+.select-box .select-box-input {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+  color: inherit;
+  -webkit-text-fill-color: currentColor;
+  opacity: 1;
+  font: inherit;
+  letter-spacing: inherit;
+  caret-color: transparent;
+  text-overflow: ellipsis;
+  cursor: inherit;
+  /* Toques vão para a moldura (que abre a lista), não para o texto: sem
+     cursor de texto, lupa ou menu de copiar e colar no iPhone/iPad. */
+  pointer-events: none;
+}
+.select-box .select-box-input::placeholder { color: var(--muted); -webkit-text-fill-color: var(--muted); opacity: 1; }
+.select-box .select-box-input::selection { background: transparent; }
 .select-box-arrow { flex: none; opacity: 0.6; font-size: 0.72em; line-height: 1; }
 td .select-box { padding: 0.3rem 0.45rem; font-size: 0.8rem; border-radius: 6px; }
 table.dense td .select-box { padding: 0.25rem 0.4rem; font-size: 0.74rem; }
