@@ -105,6 +105,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading, restricted } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  // No celular o menu lateral fica fora da tela quando fechado: inerte, para
+  // o Tab não levar o foco para lá (e leitores de tela não o lerem).
+  const [isPhone, setIsPhone] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 860px)");
+    const update = () => setIsPhone(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
   const [open, setOpen] = useState<Record<string, boolean>>({ dia: true });
   useEffect(() => {
     setOpen(loadOpen());
@@ -175,6 +185,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <aside
         className={`sidebar${collapsed ? " collapsed" : ""}${mobileOpen ? " mobile-open" : ""}`}
+        inert={isPhone && !mobileOpen}
       >
         <div className="sidebar-brand">
           {/* Official Quantso logo — used as-is, not modified. */}
