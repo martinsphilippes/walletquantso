@@ -10,6 +10,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/services/auth-context";
 import { signOut } from "@/services/auth";
 import { UpdateButton } from "@/components/UpdateButton";
+import { KEY_DEBUG_TOGGLE } from "@/components/KeyDebug";
 
 interface NavEntry {
   label: string;
@@ -222,8 +223,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
         <div
           className="label muted"
-          style={{ padding: "0.5rem 1rem", fontSize: "0.7rem", marginTop: "auto" }}
-          title="Versão do app em execução (build publicado)"
+          style={{ padding: "0.5rem 1rem", fontSize: "0.7rem", marginTop: "auto", cursor: "pointer" }}
+          title="Versão do app em execução. Toque para ligar ou desligar o teste do teclado."
+          onClick={() => window.dispatchEvent(new Event(KEY_DEBUG_TOGGLE))}
         >
           Versão {process.env.NEXT_PUBLIC_BUILD_SHA} · {process.env.NEXT_PUBLIC_BUILD_TIME}
         </div>

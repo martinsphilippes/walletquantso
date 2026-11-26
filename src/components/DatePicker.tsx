@@ -8,8 +8,8 @@
 //
 // Por dentro é um campo de texto que não abre o teclado da tela e não aceita
 // digitação, como a caixa de escolha (SelectBox): no iPad o TAB do teclado
-// físico só para em campos de digitar, e assim para também na data e segue
-// dela. No teclado: Enter, Espaço ou a seta para baixo abrem o calendário; as
+// físico só chega à página com o foco num campo de digitar, e assim ele para
+// também na data e segue dela. No teclado: Enter, Espaço ou a seta para baixo abrem o calendário; as
 // setas andam pelos dias (para os lados um dia, para cima e para baixo uma
 // semana); Page Up e Page Down trocam o mês; Home volta para hoje; Enter
 // escolhe; Esc fecha sem mudar. Nos filtros, Delete limpa a data.
@@ -254,8 +254,9 @@ export function DatePicker({
     const to = e.relatedTarget as Node | null;
     if (to && panelRef.current?.contains(to)) return;
     if (!to && pointerInPanel.current) return;
-    // Saiu pelo TAB do iPad (que não passa pela página) ou o foco foi para
-    // outro lugar: fecha, ficando com o dia que o teclado marcou.
+    // O foco saiu sem passar pelo TAB tratado aqui (o próprio navegador
+    // mudou o foco, por exemplo): fecha, ficando com o dia que o teclado
+    // marcou.
     if (cursor) onChange(cursor);
     setOpen(false);
   };

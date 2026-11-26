@@ -3,6 +3,7 @@ import "./globals.css";
 import { AuthProvider } from "@/services/auth-context";
 import { AppShell } from "@/components/AppShell";
 import { TabNavigation } from "@/components/TabNavigation";
+import { KeyDebug } from "@/components/KeyDebug";
 
 export const metadata: Metadata = {
   title: "WalletQuantso",
@@ -35,6 +36,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         {/* Tab / Shift+Tab entre os campos em qualquer tela (inclusive no iPad). */}
         <TabNavigation />
+        {/* Teste do teclado: liga tocando na versão, no rodapé do menu. */}
+        <KeyDebug />
         <AuthProvider>
           <AppShell>{children}</AppShell>
         </AuthProvider>

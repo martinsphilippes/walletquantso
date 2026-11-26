@@ -5,11 +5,11 @@
 // Por que não o <select>: no iPad ele abre a lista do sistema assim que recebe
 // o foco, e o teclado físico fica preso nela.
 //
-// Por que um campo de texto por dentro: no iPad o TAB do teclado físico é do
-// próprio Safari e só para em campos de digitar (e nas caixas do sistema). Com
-// um botão em foco, o TAB nem chega à página. Então a caixa tem por dentro um
-// campo de texto que não abre o teclado da tela (inputMode "none") e não
-// aceita digitação: o TAB do iPad para nela e segue dela como num campo comum.
+// Por que um campo de texto por dentro: no iPad o TAB do teclado físico só
+// chega à página quando o foco está num campo de digitar; com um botão em
+// foco, a tecla nem chega. Então a caixa tem por dentro um campo de texto que
+// não abre o teclado da tela (inputMode "none") e não aceita digitação: o TAB
+// do iPad, levado pelo TabNavigation, para nela e segue dela.
 //
 // Toque ou clique abre a lista do app. No teclado: Espaço, Enter ou as setas
 // abrem a lista; as setas andam; Enter (ou Espaço) escolhe; Esc fecha sem
@@ -290,8 +290,9 @@ export function SelectBox({
     const to = e.relatedTarget as Node | null;
     if (to && listRef.current?.contains(to)) return;
     if (!to && pointerInList.current) return;
-    // Saiu pelo TAB do iPad (que não passa pela página) ou o foco foi para
-    // outro lugar: fecha, ficando com o item que o teclado marcou.
+    // O foco saiu sem passar pelo TAB tratado aqui (o próprio navegador
+    // mudou o foco, por exemplo): fecha, ficando com o item que o teclado
+    // marcou.
     if (movedByKeys.current) choose(active);
     setOpen(false);
   };
